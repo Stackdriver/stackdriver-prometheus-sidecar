@@ -925,40 +925,60 @@
 			"versionExact": "release-2.1"
 		},
 		{
-			"checksumSHA1": "C72p7MMwA94LrpqYD3dMcQEKHzY=",
+			"checksumSHA1": "CFOo4HdyqJ6hM+uZxZYOZ5XKd9I=",
 			"path": "github.com/prometheus/tsdb",
-			"revision": "07ef80820ef1250db82f9544f3fcf7f0f63ccee0",
-			"revisionTime": "2017-12-22T14:44:41Z"
+			"revision": "4a5744b30fe4d0bdca6838d6a451aac6cc3ea97b",
+			"revisionTime": "2018-05-29T15:46:06Z",
+			"version": "newwal",
+			"versionExact": "newwal"
 		},
 		{
-			"checksumSHA1": "XTirmk6Pq5TBGIZEaN5VL4k3i1s=",
+			"checksumSHA1": "QI0UME2olSr4kH6Z8UkpffM59Mc=",
 			"path": "github.com/prometheus/tsdb/chunkenc",
-			"revision": "07ef80820ef1250db82f9544f3fcf7f0f63ccee0",
-			"revisionTime": "2017-12-22T14:44:41Z"
+			"revision": "4a5744b30fe4d0bdca6838d6a451aac6cc3ea97b",
+			"revisionTime": "2018-05-29T15:46:06Z",
+			"version": "newwal",
+			"versionExact": "newwal"
 		},
 		{
-			"checksumSHA1": "+zsn1i8cqwgZXL8Bg6jDy32xjAo=",
+			"checksumSHA1": "746Mjy2y6wdsGjY/FcGhc8tI4w8=",
 			"path": "github.com/prometheus/tsdb/chunks",
-			"revision": "07ef80820ef1250db82f9544f3fcf7f0f63ccee0",
-			"revisionTime": "2017-12-22T14:44:41Z"
+			"revision": "4a5744b30fe4d0bdca6838d6a451aac6cc3ea97b",
+			"revisionTime": "2018-05-29T15:46:06Z",
+			"version": "newwal",
+			"versionExact": "newwal"
 		},
 		{
-			"checksumSHA1": "h49AAcJ5+iRBwCgbfQf+2T1E1ZE=",
+			"checksumSHA1": "VnwT1S3uVmdomEnPCEaH3z0wNms=",
 			"path": "github.com/prometheus/tsdb/fileutil",
-			"revision": "07ef80820ef1250db82f9544f3fcf7f0f63ccee0",
-			"revisionTime": "2017-12-22T14:44:41Z"
+			"revision": "4a5744b30fe4d0bdca6838d6a451aac6cc3ea97b",
+			"revisionTime": "2018-05-29T15:46:06Z",
+			"version": "newwal",
+			"versionExact": "newwal"
 		},
 		{
-			"checksumSHA1": "y3lUn43gcc3HtYd20UDujyybGq4=",
+			"checksumSHA1": "A2uIFwIgeHmXGBzOpna95kM80RY=",
 			"path": "github.com/prometheus/tsdb/index",
-			"revision": "07ef80820ef1250db82f9544f3fcf7f0f63ccee0",
-			"revisionTime": "2017-12-22T14:44:41Z"
+			"revision": "4a5744b30fe4d0bdca6838d6a451aac6cc3ea97b",
+			"revisionTime": "2018-05-29T15:46:06Z",
+			"version": "newwal",
+			"versionExact": "newwal"
 		},
 		{
 			"checksumSHA1": "Va8HWvOFTwFeewZFadMAOzNGDps=",
 			"path": "github.com/prometheus/tsdb/labels",
-			"revision": "07ef80820ef1250db82f9544f3fcf7f0f63ccee0",
-			"revisionTime": "2017-12-22T14:44:41Z"
+			"revision": "4a5744b30fe4d0bdca6838d6a451aac6cc3ea97b",
+			"revisionTime": "2018-05-29T15:46:06Z",
+			"version": "newwal",
+			"versionExact": "newwal"
+		},
+		{
+			"checksumSHA1": "aKpOlu7QsbIGpb5z4Gg83oZDoGY=",
+			"path": "github.com/prometheus/tsdb/wal",
+			"revision": "4a5744b30fe4d0bdca6838d6a451aac6cc3ea97b",
+			"revisionTime": "2018-05-29T15:46:06Z",
+			"version": "newwal",
+			"versionExact": "newwal"
 		},
 		{
 			"checksumSHA1": "5SYLEhADhdBVZAGPVHWggQl7H8k=",

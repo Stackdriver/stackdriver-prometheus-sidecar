@@ -151,6 +151,9 @@ type BlockMeta struct {
 
 	// Information on compactions the block was created from.
 	Compaction BlockMetaCompaction `json:"compaction"`
+
+	// Version of the index format.
+	Version int `json:"version"`
 }
 
 // BlockStats contains stats about contents of a block.
@@ -176,12 +179,6 @@ const (
 	flagStd  = 1
 )
 
-type blockMeta struct {
-	Version int `json:"version"`
-
-	*BlockMeta
-}
-
 const indexFilename = "index"
 const metaFilename = "meta.json"
 
@@ -193,7 +190,7 @@ func readMetaFile(dir string) (*BlockMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-	var m blockMeta
+	var m BlockMeta
 
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
@@ -202,10 +199,12 @@ func readMetaFile(dir string) (*BlockMeta, error) {
 		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
 	}
 
-	return m.BlockMeta, nil
+	return &m, nil
 }
 
 func writeMetaFile(dir string, meta *BlockMeta) error {
+	meta.Version = 1
+
 	// Make any changes to the file appear atomic.
 	path := filepath.Join(dir, metaFilename)
 	tmp := path + ".tmp"
@@ -219,7 +218,8 @@ func writeMetaFile(dir string, meta *BlockMeta) error {
 	enc.SetIndent("", "\t")
 
 	var merr MultiError
-	if merr.Add(enc.Encode(&blockMeta{Version: 1, BlockMeta: meta})); merr.Err() != nil {
+
+	if merr.Add(enc.Encode(meta)); merr.Err() != nil {
 		merr.Add(f.Close())
 		return merr.Err()
 	}
@@ -321,7 +321,7 @@ func (pb *Block) Index() (IndexReader, error) {
 	if err := pb.startRead(); err != nil {
 		return nil, err
 	}
-	return blockIndexReader{IndexReader: pb.indexr, b: pb}, nil
+	return blockIndexReader{ir: pb.indexr, b: pb}, nil
 }
 
 // Chunks returns a new ChunkReader against the block data.
@@ -346,8 +346,40 @@ func (pb *Block) setCompactionFailed() error {
 }
 
 type blockIndexReader struct {
-	IndexReader
-	b *Block
+	ir IndexReader
+	b  *Block
+}
+
+func (r blockIndexReader) Symbols() (map[string]struct{}, error) {
+	s, err := r.ir.Symbols()
+	return s, errors.Wrapf(err, "block: %s", r.b.Meta().ULID)
+}
+
+func (r blockIndexReader) LabelValues(names ...string) (index.StringTuples, error) {
+	st, err := r.ir.LabelValues(names...)
+	return st, errors.Wrapf(err, "block: %s", r.b.Meta().ULID)
+}
+
+func (r blockIndexReader) Postings(name, value string) (index.Postings, error) {
+	p, err := r.ir.Postings(name, value)
+	return p, errors.Wrapf(err, "block: %s", r.b.Meta().ULID)
+}
+
+func (r blockIndexReader) SortedPostings(p index.Postings) index.Postings {
+	return r.ir.SortedPostings(p)
+}
+
+func (r blockIndexReader) Series(ref uint64, lset *labels.Labels, chks *[]chunks.Meta) error {
+	return errors.Wrapf(
+		r.ir.Series(ref, lset, chks),
+		"block: %s",
+		r.b.Meta().ULID,
+	)
+}
+
+func (r blockIndexReader) LabelIndices() ([][]string, error) {
+	ss, err := r.ir.LabelIndices()
+	return ss, errors.Wrapf(err, "block: %s", r.b.Meta().ULID)
 }
 
 func (r blockIndexReader) Close() error {
@@ -406,7 +438,7 @@ Outer:
 
 		for _, chk := range chks {
 			if intervalOverlap(mint, maxt, chk.MinTime, chk.MaxTime) {
-				// Delete only until the current vlaues and not beyond.
+				// Delete only until the current values and not beyond.
 				tmin, tmax := clampInterval(mint, maxt, chks[0].MinTime, chks[len(chks)-1].MaxTime)
 				stones[p.At()] = Intervals{{tmin, tmax}}
 				continue Outer
@@ -442,9 +474,7 @@ func (pb *Block) CleanTombstones(dest string, c Compactor) (bool, error) {
 	numStones := 0
 
 	pb.tombstones.Iter(func(id uint64, ivs Intervals) error {
-		for _ = range ivs {
-			numStones++
-		}
+		numStones += len(ivs)
 
 		return nil
 	})

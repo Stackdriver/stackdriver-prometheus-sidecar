@@ -13,7 +13,7 @@
 
 // The code in this file was largely written by Damian Gryski as part of
 // https://github.com/dgryski/go-tsz and published under the license below.
-// It was modified to accomodate reading from byte slices without modifying
+// It was modified to accommodate reading from byte slices without modifying
 // the underlying bytes, which would panic when reading from mmaped
 // read-only byte slices.
 
@@ -89,7 +89,6 @@ func (c *XORChunk) Appender() (Appender, error) {
 	}
 
 	a := &xorAppender{
-		c:        c,
 		b:        c.b,
 		t:        it.t,
 		v:        it.val,
@@ -119,7 +118,6 @@ func (c *XORChunk) Iterator() Iterator {
 }
 
 type xorAppender struct {
-	c *XORChunk
 	b *bstream
 
 	t      int64
@@ -261,7 +259,7 @@ func (it *xorIterator) Next() bool {
 			it.err = err
 			return false
 		}
-		it.t = int64(t)
+		it.t = t
 		it.val = math.Float64frombits(v)
 
 		it.numRead++
