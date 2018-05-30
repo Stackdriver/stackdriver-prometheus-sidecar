@@ -130,7 +130,7 @@ func main() {
 
 	var (
 		remoteStorage    = stackdriver.NewStorage(log.With(logger, "component", "remote"), &cfg.sdCfg)
-		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), walDirectory, remoteStorage)
+		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), cfg.walDirectory, remoteStorage)
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.
