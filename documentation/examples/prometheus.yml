@@ -7,6 +7,7 @@ global:
     _stackdriver_project_id: 'prometheus-to-sd'
     _kubernetes_cluster_name: 'prom-test-cluster-1'
     _kubernetes_location: 'us-central1-a'
+    __meta_kubernetes_namespace: 'stackdriver'
 
 # Alertmanager configuration
 alerting:
@@ -31,3 +32,28 @@ scrape_configs:
 
     static_configs:
       - targets: ['localhost:9090']
+
+remote_write:
+- url: "https://monitoring.googleapis.com:443/"
+  queue_config:
+    # Capacity should be 2*max_samples_per_send.
+    capacity: 400
+    # TODO(jkohen): uncomment once manager.go supports counters, otherwise partial request failures will cause no points to be written.
+    max_samples_per_send: 1 # 200
+    max_shards: 10000
+  write_relabel_configs:
+  # These labels are generally redundant with the Stackdriver monitored resource labels.
+  - source_labels: [job]
+    target_label: __meta_kubernetes_pod_container_name
+  - source_labels: [instance]
+    target_label: __meta_kubernetes_pod_name
+  - source_labels: [job]
+    target_label: _kubernetes_pod_container_name
+  - source_labels: [instance]
+    target_label: _kubernetes_pod_name
+  - source_labels: [job]
+    target_label: job
+    replacement: ""
+  - source_labels: [instance]
+    target_label: instance
+    replacement: ""
