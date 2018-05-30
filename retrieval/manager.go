@@ -65,7 +65,6 @@ func (r *PrometheusReader) Run() error {
 	}
 	refs := map[uint64]tsdb.RefSeries{}
 	reader := wal.NewReader(segmentsReader)
-	var sampleCount int
 	for reader.Next() {
 		if reader.Err() != nil {
 			return reader.Err()
@@ -93,10 +92,6 @@ func (r *PrometheusReader) Run() error {
 				if !ok {
 					level.Warn(r.logger).Log("msg", "Unknown series ref in sample", "sample", sample)
 					continue
-				}
-				sampleCount++
-				if sampleCount < 10 {
-					level.Info(r.logger).Log("msg", "Sample found", "sampleRef", sample.Ref, "sampleT", sample.T, "sampleV", sample.V, "series", series.Labels)
 				}
 				// TODO(jkohen): Rebuild histograms and summary from individual time series.
 				metricFamily := &dto.MetricFamily{
