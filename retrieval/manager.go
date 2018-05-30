@@ -14,8 +14,9 @@
 package retrieval
 
 import (
-	"sync"
+	"context"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -44,7 +45,6 @@ func NewPrometheusReader(logger log.Logger, walDirectory string, app Appendable)
 		appender:     appender,
 		logger:       logger,
 		walDirectory: walDirectory,
-		graceShut:    make(chan struct{}),
 	}
 }
 
@@ -52,13 +52,14 @@ type PrometheusReader struct {
 	logger       log.Logger
 	walDirectory string
 	appender     Appender
-	mtx          sync.RWMutex
-	graceShut    chan struct{}
+	cancelTail   context.CancelFunc
 }
 
 func (r *PrometheusReader) Run() error {
 	level.Info(r.logger).Log("msg", "Starting Prometheus reader...")
-	segmentsReader, err := wal.NewSegmentsReader(r.walDirectory)
+	var ctx context.Context
+	ctx, r.cancelTail = context.WithCancel(context.Background())
+	segmentsReader, err := tail.Tail(ctx, r.walDirectory)
 	if err != nil {
 		level.Error(r.logger).Log("error", err)
 		return err
@@ -131,22 +132,15 @@ func (r *PrometheusReader) Run() error {
 		}
 	}
 	level.Info(r.logger).Log("msg", "Done processing WAL.")
-	for {
-		select {
-		case <-r.graceShut:
-			return nil
-		}
-	}
+	return nil
 }
 
 // Stop cancels the reader and blocks until it has exited.
 func (r *PrometheusReader) Stop() {
-	close(r.graceShut)
+	r.cancelTail()
 }
 
 // ApplyConfig resets the manager's target providers and job configurations as defined by the new cfg.
 func (r *PrometheusReader) ApplyConfig(cfg *config.Config) error {
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
 	return nil
 }
