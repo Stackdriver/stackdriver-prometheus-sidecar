@@ -28,23 +28,6 @@ const (
 // TODO(jkohen): ensure these are sorted from more specific to less specific.
 var DefaultResourceMappings = []ResourceMap{
 	{
-		// This is just for testing, until the Kubernetes resource types are public.
-		Type: "gke_container",
-		LabelMap: map[string]string{
-			ProjectIdLabel:                   "project_id",
-			"_kubernetes_location":           "zone",
-			"_kubernetes_cluster_name":       "cluster_name",
-			"_kubernetes_namespace":          "namespace_id",
-			"_kubernetes_pod_name":           "pod_id",
-			"_kubernetes_pod_node_name":      "instance_id",
-			"_kubernetes_pod_container_name": "container_name",
-		},
-	},
-}
-
-// TODO(jkohen): ensure these are sorted from more specific to less specific.
-var K8sResourceMappings = []ResourceMap{
-	{
 		Type: "k8s_container",
 		LabelMap: map[string]string{
 			ProjectIdLabel:                         "project_id",

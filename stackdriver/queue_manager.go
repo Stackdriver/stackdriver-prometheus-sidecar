@@ -172,10 +172,6 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, externalLabelSet
 		logger = log.NewNopLogger()
 	}
 	resourceMappings := DefaultResourceMappings
-	if sdCfg.K8sResourceTypes {
-		resourceMappings = K8sResourceMappings
-	}
-
 	externalLabels := make(map[string]*string, len(externalLabelSet))
 	for ln, lv := range externalLabelSet {
 		externalLabels[string(ln)] = proto.String(string(lv))
