@@ -15,6 +15,7 @@ package retrieval
 import (
 	"fmt"
 	"hash/fnv"
+	"sync"
 	"time"
 
 	dto "github.com/prometheus/client_model/go"
@@ -73,7 +74,12 @@ func NewResetPointKey(metricName string, metricLabels labels.Labels, metricType 
 	return ResetPointKey(h.Sum64())
 }
 
-func (t *Target) GetResetPoint(key ResetPointKey) (point *Point) {
+type resetPointMap struct {
+	mtx         sync.RWMutex
+	resetPoints map[ResetPointKey]Point
+}
+
+func (t *resetPointMap) GetResetPoint(key ResetPointKey) (point *Point) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -83,14 +89,14 @@ func (t *Target) GetResetPoint(key ResetPointKey) (point *Point) {
 	return nil
 }
 
-func (t *Target) AddResetPoint(key ResetPointKey, point Point) {
+func (t *resetPointMap) AddResetPoint(key ResetPointKey, point Point) {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
 	t.resetPoints[key] = point
 }
 
-func (t *Target) HasResetPoints() bool {
+func (t *resetPointMap) HasResetPoints() bool {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
