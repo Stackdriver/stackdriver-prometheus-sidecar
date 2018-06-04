@@ -805,14 +805,6 @@
 			"versionExact": "release-2.1"
 		},
 		{
-			"checksumSHA1": "PhZjYX0DJYv1MaWal0DLTWfqeag=",
-			"path": "github.com/prometheus/prometheus/pkg/relabel",
-			"revision": "85f23d82a045d103ea7f3c89a91fba4a93e6367a",
-			"revisionTime": "2018-01-19T11:54:28Z",
-			"version": "release-2.1",
-			"versionExact": "release-2.1"
-		},
-		{
 			"checksumSHA1": "14cxfHETVNR6PUCOrGsPVP33v3w=",
 			"path": "github.com/prometheus/prometheus/pkg/rulefmt",
 			"revision": "85f23d82a045d103ea7f3c89a91fba4a93e6367a",
