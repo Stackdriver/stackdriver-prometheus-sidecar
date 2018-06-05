@@ -57,7 +57,7 @@ func TestResetPointKey(t *testing.T) {
 
 func TestTargetResetPoint(t *testing.T) {
 	lbls := labels.FromStrings("x", "123")
-	var m resetPointMap
+	m := newResetPointMap()
 	if m.HasResetPoints() {
 		t.Fatal("expected HasResetPoints() to be false")
 	}

@@ -79,6 +79,10 @@ type resetPointMap struct {
 	resetPoints map[ResetPointKey]Point
 }
 
+func newResetPointMap() resetPointMap {
+	return resetPointMap{resetPoints: make(map[ResetPointKey]Point)}
+}
+
 func (t *resetPointMap) GetResetPoint(key ResetPointKey) (point *Point) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
