@@ -57,37 +57,35 @@ func TestResetPointKey(t *testing.T) {
 
 func TestTargetResetPoint(t *testing.T) {
 	lbls := labels.FromStrings("x", "123")
-	target := newTestTarget("example.com:80", 0, labels.FromStrings(
-		"label", "0",
-	))
-	if target.HasResetPoints() {
+	var m resetPointMap
+	if m.HasResetPoints() {
 		t.Fatal("expected HasResetPoints() to be false")
 	}
 	key := NewResetPointKey("foo", lbls, dto.MetricType_COUNTER)
 	{
-		result := target.GetResetPoint(key)
+		result := m.GetResetPoint(key)
 		if result != nil {
 			t.Fatalf("expected nil, got %v", result)
 		}
 	}
 	timestamp := time.Now()
 	point := Point{Timestamp: timestamp, ResetValue: &PointValue{Counter: 123}}
-	target.AddResetPoint(key, point)
+	m.AddResetPoint(key, point)
 	{
-		result := target.GetResetPoint(key)
+		result := m.GetResetPoint(key)
 		if result == nil {
 			t.Fatalf("expected %v, got nil", point)
 		}
 		if point != *result {
 			t.Fatalf("expected %v, got %v", point, result)
 		}
-		if !target.HasResetPoints() {
+		if !m.HasResetPoints() {
 			t.Fatal("expected HasResetPoints() to be true")
 		}
 	}
 	{
 		key2 := NewResetPointKey("bar", lbls, dto.MetricType_COUNTER)
-		result := target.GetResetPoint(key2)
+		result := m.GetResetPoint(key2)
 		if result != nil {
 			t.Fatalf("expected nil, got %v", result)
 		}
