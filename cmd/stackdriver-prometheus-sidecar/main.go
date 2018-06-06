@@ -17,7 +17,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	_ "net/http/pprof" // Comment this line to disable pprof endpoint.
 	"net/url"
@@ -25,7 +24,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -40,26 +38,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
+	"github.com/prometheus/prometheus/config"
 	k8s_runtime "k8s.io/apimachinery/pkg/util/runtime"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
 	"github.com/prometheus/common/promlog"
 	promlogflag "github.com/prometheus/common/promlog/flag"
-	"github.com/prometheus/prometheus/config"
-)
-
-var (
-	configSuccess = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "prometheus",
-		Name:      "config_last_reload_successful",
-		Help:      "Whether the last configuration reload attempt was successful.",
-	})
-	configSuccessTime = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "prometheus",
-		Name:      "config_last_reload_success_timestamp_seconds",
-		Help:      "Timestamp of the last successful configuration reload.",
-	})
 )
 
 func init() {
@@ -73,17 +58,15 @@ func main() {
 	}
 
 	cfg := struct {
-		configFile string
-
-		walDirectory      string
-		prometheusAddress string
-		listenAddress     string
-		sdCfg             stackdriver.StackdriverConfig
+		projectIdResource  string
+		globalLabels       map[string]string
+		stackdriverAddress *url.URL
+		walDirectory       string
+		prometheusAddress  string
+		listenAddress      string
 
 		logLevel promlog.AllowedLevel
-	}{
-		sdCfg: stackdriver.DefaultStackdriverConfig,
-	}
+	}{}
 
 	a := kingpin.New(filepath.Base(os.Args[0]), "The Prometheus monitoring server")
 
@@ -91,8 +74,16 @@ func main() {
 
 	a.HelpFlag.Short('h')
 
-	a.Flag("config.file", "Configuration file path.").
-		Default("stackdriver-prometheus.yml").StringVar(&cfg.configFile)
+	projectId := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
+		Required().
+		String()
+
+	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
+		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
+
+	// TODO(jkohen): Document this flag better.
+	a.Flag("stackdriver.global-labels", "Global labels used for the Stackdriver MonitoredResource.").
+		StringMapVar(&cfg.globalLabels)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -113,6 +104,7 @@ func main() {
 	}
 
 	logger := promlog.New(cfg.logLevel)
+	cfg.projectIdResource = fmt.Sprintf("projects/%v", projectId)
 
 	// XXX(fabxc): Kubernetes does background logging which we can only customize by modifying
 	// a global variable.
@@ -129,8 +121,19 @@ func main() {
 	level.Info(logger).Log("fd_limits", FdLimits())
 
 	var (
-		remoteStorage    = stackdriver.NewStorage(log.With(logger, "component", "remote"), &cfg.sdCfg)
-		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), cfg.walDirectory, remoteStorage)
+		queueManager = stackdriver.NewQueueManager(
+			log.With(logger, "component", "queue_manager"),
+			config.DefaultQueueConfig,
+			cfg.globalLabels,
+			[]*config.RelabelConfig{}, // TODO(jkohen): for testing, copy the config from https://github.com/Stackdriver/stackdriver-prometheus-sidecar/blob/eafef042318c9a850983244ba2cf1f76ffdee361/documentation/examples/prometheus.yml
+			&clientFactory{
+				logger:            log.With(logger, "component", "storage"),
+				projectIdResource: cfg.projectIdResource,
+				url:               cfg.stackdriverAddress,
+				timeout:           10 * time.Second,
+			},
+		)
+		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), cfg.walDirectory, queueManager)
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.
@@ -147,31 +150,13 @@ func main() {
 		conntrack.DialWithTracing(),
 	)
 
-	// TODO(jkohen): replace with a config file specific to the sidecar.
-	reloaders := []func(cfg *config.Config) error{
-		remoteStorage.ApplyConfig,
-		prometheusReader.ApplyConfig,
-	}
-
-	prometheus.MustRegister(configSuccess)
-	prometheus.MustRegister(configSuccessTime)
-
 	http.Handle("/metrics", promhttp.Handler())
 
-	// sync.Once is used to make sure we can close the channel at different execution stages(SIGTERM or when the config is loaded).
+	// sync.Once is used to make sure we can close the channel at different execution stages(SIGTERM).
 	type closeOnce struct {
 		C     chan struct{}
 		once  sync.Once
 		Close func()
-	}
-	// Wait until the server is ready to handle reloading.
-	reloadReady := &closeOnce{
-		C: make(chan struct{}),
-	}
-	reloadReady.Close = func() {
-		reloadReady.once.Do(func() {
-			close(reloadReady.C)
-		})
 	}
 
 	var g group.Group
@@ -185,9 +170,7 @@ func main() {
 				select {
 				case <-term:
 					level.Warn(logger).Log("msg", "Received SIGTERM, exiting gracefully...")
-					reloadReady.Close()
 				case <-cancel:
-					reloadReady.Close()
 					break
 				}
 				return nil
@@ -200,13 +183,6 @@ func main() {
 	{
 		g.Add(
 			func() error {
-				// When the Prometheus reader receives a new targets list
-				// it needs to read a valid config for each job.
-				select {
-				case <-reloadReady.C:
-					break
-				}
-
 				err := prometheusReader.Run()
 				level.Info(logger).Log("msg", "Prometheus reader stopped")
 				return err
@@ -220,67 +196,19 @@ func main() {
 		)
 	}
 	{
-		// Make sure that sighup handler is registered with a redirect to the channel before the potentially
-		// long and synchronous tsdb init.
-		hup := make(chan os.Signal)
-		signal.Notify(hup, syscall.SIGHUP)
 		cancel := make(chan struct{})
 		g.Add(
 			func() error {
-				<-reloadReady.C
-
-				for {
-					select {
-					case <-hup:
-						if err := reloadConfig(cfg.configFile, logger, reloaders...); err != nil {
-							level.Error(logger).Log("msg", "Error reloading config", "err", err)
-						}
-					case <-cancel:
-						return nil
-					}
+				if err := queueManager.Start(); err != nil {
+					return err
 				}
-
-			},
-			func(err error) {
-				close(cancel)
-			},
-		)
-	}
-	{
-		cancel := make(chan struct{})
-		g.Add(
-			func() error {
-				if err := reloadConfig(cfg.configFile, logger, reloaders...); err != nil {
-					return fmt.Errorf("Error loading config %s", err)
-				}
-
-				reloadReady.Close()
-				level.Info(logger).Log("msg", "Server is ready to receive requests.")
-				<-cancel
-				return nil
-			},
-			func(err error) {
-				close(cancel)
-			},
-		)
-	}
-	{
-		cancel := make(chan struct{})
-		g.Add(
-			func() error {
-				select {
-				case <-reloadReady.C:
-					break
-				}
-
-				// Any Stackdriver client initialization goes here.
 				level.Info(logger).Log("msg", "Stackdriver client started")
 				<-cancel
 				return nil
 			},
 			func(err error) {
-				if err := remoteStorage.Close(); err != nil {
-					level.Error(logger).Log("msg", "Error stopping Stackdriver client", "err", err)
+				if err := queueManager.Stop(); err != nil {
+					level.Error(logger).Log("msg", "Error stopping Stackdriver writer", "err", err)
 				}
 				close(cancel)
 			},
@@ -315,70 +243,22 @@ func main() {
 	level.Info(logger).Log("msg", "See you next time!")
 }
 
-func reloadConfig(filename string, logger log.Logger, rls ...func(*config.Config) error) (err error) {
-	level.Info(logger).Log("msg", "Loading configuration file", "filename", filename)
-
-	defer func() {
-		if err == nil {
-			configSuccess.Set(1)
-			configSuccessTime.Set(float64(time.Now().Unix()))
-		} else {
-			configSuccess.Set(0)
-		}
-	}()
-
-	conf, err := config.LoadFile(filename)
-	if err != nil {
-		return fmt.Errorf("couldn't load configuration (--config.file=%s): %v", filename, err)
-	}
-
-	failed := false
-	for _, rl := range rls {
-		if err := rl(conf); err != nil {
-			level.Error(logger).Log("msg", "Failed to apply configuration", "err", err)
-			failed = true
-		}
-	}
-	if failed {
-		return fmt.Errorf("one or more errors occurred while applying the new configuration (--config.file=%s)", filename)
-	}
-	return nil
+type clientFactory struct {
+	logger            log.Logger
+	projectIdResource string
+	url               *url.URL
+	timeout           time.Duration
 }
 
-func startsOrEndsWithQuote(s string) bool {
-	return strings.HasPrefix(s, "\"") || strings.HasPrefix(s, "'") ||
-		strings.HasSuffix(s, "\"") || strings.HasSuffix(s, "'")
+func (f *clientFactory) New() stackdriver.StorageClient {
+	return stackdriver.NewClient(&stackdriver.ClientConfig{
+		Logger:    f.logger,
+		ProjectId: f.projectIdResource,
+		URL:       f.url,
+		Timeout:   f.timeout,
+	})
 }
 
-// computeExternalURL computes a sanitized external URL from a raw input. It infers unset
-// URL parts from the OS and the given listen address.
-func computeExternalURL(u, listenAddr string) (*url.URL, error) {
-	if u == "" {
-		hostname, err := os.Hostname()
-		if err != nil {
-			return nil, err
-		}
-		_, port, err := net.SplitHostPort(listenAddr)
-		if err != nil {
-			return nil, err
-		}
-		u = fmt.Sprintf("http://%s:%s/", hostname, port)
-	}
-
-	if startsOrEndsWithQuote(u) {
-		return nil, fmt.Errorf("URL must not begin or end with quotes")
-	}
-
-	eu, err := url.Parse(u)
-	if err != nil {
-		return nil, err
-	}
-
-	ppref := strings.TrimRight(eu.Path, "/")
-	if ppref != "" && !strings.HasPrefix(ppref, "/") {
-		ppref = "/" + ppref
-	}
-	eu.Path = ppref
-
-	return eu, nil
+func (f *clientFactory) Name() string {
+	return f.url.String()
 }

@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package retrieval
 
 import (
@@ -123,5 +124,5 @@ func (f *MetricFamily) Fingerprint() uint64 {
 }
 
 type Appender interface {
-	Add(metricFamily *MetricFamily) error
+	Append(metricFamily *MetricFamily) error
 }

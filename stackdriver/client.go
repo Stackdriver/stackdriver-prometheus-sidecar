@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -31,10 +32,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
-
-	config_util "github.com/prometheus/common/config"
 )
 
 const (
@@ -47,10 +45,9 @@ const (
 // implementation may hit a single backend, so the application should create a
 // number of these clients.
 type Client struct {
-	index     int // Used to differentiate clients in metrics.
 	logger    log.Logger
 	projectId string
-	url       *config_util.URL
+	url       *url.URL
 	timeout   time.Duration
 
 	conn *grpc.ClientConn
@@ -60,22 +57,21 @@ type Client struct {
 type ClientConfig struct {
 	Logger    log.Logger
 	ProjectId string // The Stackdriver project id in "projects/name-or-number" format.
-	URL       *config_util.URL
-	Timeout   model.Duration
+	URL       *url.URL
+	Timeout   time.Duration
 }
 
 // NewClient creates a new Client.
-func NewClient(index int, conf *ClientConfig) *Client {
+func NewClient(conf *ClientConfig) *Client {
 	logger := conf.Logger
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Client{
-		index:     index,
 		logger:    logger,
 		projectId: conf.ProjectId,
 		url:       conf.URL,
-		timeout:   time.Duration(conf.Timeout),
+		timeout:   conf.Timeout,
 	}
 }
 
@@ -187,11 +183,6 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 		return err
 	}
 	return nil
-}
-
-// Name identifies the client.
-func (c Client) Name() string {
-	return fmt.Sprintf("%d:%s", c.index, c.url)
 }
 
 func (c Client) Close() error {
