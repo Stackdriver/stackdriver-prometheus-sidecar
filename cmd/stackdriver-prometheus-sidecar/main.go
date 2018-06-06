@@ -37,6 +37,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/config"
 	k8s_runtime "k8s.io/apimachinery/pkg/util/runtime"
@@ -66,7 +67,9 @@ func main() {
 		listenAddress      string
 
 		logLevel promlog.AllowedLevel
-	}{}
+	}{
+		globalLabels: make(map[string]string),
+	}
 
 	a := kingpin.New(filepath.Base(os.Args[0]), "The Prometheus monitoring server")
 
@@ -82,7 +85,7 @@ func main() {
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
 
 	// TODO(jkohen): Document this flag better.
-	a.Flag("stackdriver.global-labels", "Global labels used for the Stackdriver MonitoredResource.").
+	a.Flag("stackdriver.global-label", "Global labels used for the Stackdriver MonitoredResource.").
 		StringMapVar(&cfg.globalLabels)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
@@ -104,7 +107,8 @@ func main() {
 	}
 
 	logger := promlog.New(cfg.logLevel)
-	cfg.projectIdResource = fmt.Sprintf("projects/%v", projectId)
+	cfg.globalLabels["_stackdriver_project_id"] = *projectId
+	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
 
 	// XXX(fabxc): Kubernetes does background logging which we can only customize by modifying
 	// a global variable.
@@ -120,12 +124,61 @@ func main() {
 	level.Info(logger).Log("host_details", Uname())
 	level.Info(logger).Log("fd_limits", FdLimits())
 
+	// TODO(jkohen): Remove once we have proper translation of all metric
+	// types. Currently Stackdriver fails the entire request if you attempt
+	// to write to the different metric type, which we do fairly often at
+	// this point, so lots of writes fail, and most writes fail.
+	config.DefaultQueueConfig.MaxSamplesPerSend = 1
 	var (
 		queueManager = stackdriver.NewQueueManager(
 			log.With(logger, "component", "queue_manager"),
 			config.DefaultQueueConfig,
 			cfg.globalLabels,
-			[]*config.RelabelConfig{}, // TODO(jkohen): for testing, copy the config from https://github.com/Stackdriver/stackdriver-prometheus-sidecar/blob/eafef042318c9a850983244ba2cf1f76ffdee361/documentation/examples/prometheus.yml
+			// TODO(jkohen): remove this configuration once we have proper metadata integration.
+			[]*config.RelabelConfig{
+				{
+					SourceLabels: []model.LabelName{"job"},
+					TargetLabel:  "__meta_kubernetes_pod_container_name",
+					Action:       "replace",
+					Regex:        config.MustNewRegexp("(.*)"),
+					Replacement:  "$1",
+				},
+				{
+					SourceLabels: []model.LabelName{"instance"},
+					TargetLabel:  "__meta_kubernetes_pod_name",
+					Action:       "replace",
+					Regex:        config.MustNewRegexp("(.*)"),
+					Replacement:  "$1",
+				},
+				{
+					SourceLabels: []model.LabelName{"job"},
+					TargetLabel:  "_kubernetes_pod_container_name",
+					Action:       "replace",
+					Regex:        config.MustNewRegexp("(.*)"),
+					Replacement:  "$1",
+				},
+				{
+					SourceLabels: []model.LabelName{"instance"},
+					TargetLabel:  "_kubernetes_pod_name",
+					Action:       "replace",
+					Regex:        config.MustNewRegexp("(.*)"),
+					Replacement:  "$1",
+				},
+				{
+					SourceLabels: []model.LabelName{"job"},
+					TargetLabel:  "job",
+					Action:       "replace",
+					Regex:        config.MustNewRegexp("(.*)"),
+					Replacement:  "",
+				},
+				{
+					SourceLabels: []model.LabelName{"instance"},
+					TargetLabel:  "instance",
+					Action:       "replace",
+					Regex:        config.MustNewRegexp("(.*)"),
+					Replacement:  "",
+				},
+			},
 			&clientFactory{
 				logger:            log.With(logger, "component", "storage"),
 				projectIdResource: cfg.projectIdResource,

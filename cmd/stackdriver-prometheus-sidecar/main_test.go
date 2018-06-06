@@ -61,7 +61,7 @@ func TestStartupInterrupt(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	prom := exec.Command(promPath, "--stackdriver.project-id=1234")
+	prom := exec.Command(promPath, "--stackdriver.project-id=1234", "--prometheus.wal-directory=testdata/wal")
 	var bout, berr bytes.Buffer
 	prom.Stdout = &bout
 	prom.Stderr = &berr
