@@ -17,15 +17,9 @@ import (
 	"sort"
 )
 
-type nopAppendable struct{}
-
-func (a nopAppendable) Appender() (Appender, error) {
-	return nopAppender{}, nil
-}
-
 type nopAppender struct{}
 
-func (a nopAppender) Add(metricFamily *MetricFamily) error { return nil }
+func (a nopAppender) Append(metricFamily *MetricFamily) error { return nil }
 
 // collectResultAppender records all samples that were added through the appender.
 // It can be used as its zero value or be backed by another appender it writes samples through.
@@ -34,12 +28,12 @@ type collectResultAppender struct {
 	result []*MetricFamily
 }
 
-func (a *collectResultAppender) Add(metricFamily *MetricFamily) error {
+func (a *collectResultAppender) Append(metricFamily *MetricFamily) error {
 	a.result = append(a.result, metricFamily)
 	if a.next == nil {
 		return nil
 	}
-	return a.next.Add(metricFamily)
+	return a.next.Append(metricFamily)
 }
 
 // ByName implements sort.Interface for []*MetricFamily based on the Name

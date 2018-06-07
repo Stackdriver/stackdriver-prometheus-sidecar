@@ -26,7 +26,6 @@ import (
 )
 
 var promPath string
-var promConfig = filepath.Join("..", "..", "documentation", "examples", "prometheus.yml")
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -62,7 +61,7 @@ func TestStartupInterrupt(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	prom := exec.Command(promPath, "--config.file="+promConfig)
+	prom := exec.Command(promPath, "--stackdriver.project-id=1234", "--prometheus.wal-directory=testdata/wal")
 	var bout, berr bytes.Buffer
 	prom.Stdout = &bout
 	prom.Stderr = &berr

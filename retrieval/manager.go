@@ -29,18 +29,8 @@ import (
 	"github.com/prometheus/tsdb/wal"
 )
 
-// Appendable returns an Appender.
-type Appendable interface {
-	Appender() (Appender, error)
-}
-
 // NewPrometheusReader is the PrometheusReader constructor
-func NewPrometheusReader(logger log.Logger, walDirectory string, app Appendable) *PrometheusReader {
-	// TODO(jkohen): change the input to an Appender
-	appender, err := app.Appender()
-	if err != nil {
-		panic(err)
-	}
+func NewPrometheusReader(logger log.Logger, walDirectory string, appender Appender) *PrometheusReader {
 	return &PrometheusReader{
 		appender:     appender,
 		logger:       logger,
@@ -126,7 +116,7 @@ func (r *PrometheusReader) Run() error {
 					level.Warn(r.logger).Log("msg", "Cannot construct MetricFamily", "err", err)
 					continue
 				}
-				r.appender.Add(f)
+				r.appender.Append(f)
 			}
 		case tsdb.RecordTombstones:
 		}

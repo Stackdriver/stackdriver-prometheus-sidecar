@@ -25,7 +25,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	"golang.org/x/time/rate"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -132,8 +131,6 @@ func init() {
 type StorageClient interface {
 	// Store stores the given metric families in the remote storage.
 	Store(*monitoring.CreateTimeSeriesRequest) error
-	// Name identifies the remote storage implementation.
-	Name() string
 	// Release the resources allocated by the client.
 	Close() error
 }
@@ -167,14 +164,14 @@ type QueueManager struct {
 }
 
 // NewQueueManager builds a new QueueManager.
-func NewQueueManager(logger log.Logger, cfg config.QueueConfig, externalLabelSet model.LabelSet, relabelConfigs []*config.RelabelConfig, clientFactory StorageClientFactory, sdCfg *StackdriverConfig) *QueueManager {
+func NewQueueManager(logger log.Logger, cfg config.QueueConfig, globalLabels map[string]string, relabelConfigs []*config.RelabelConfig, clientFactory StorageClientFactory) *QueueManager {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	resourceMappings := DefaultResourceMappings
-	externalLabels := make(map[string]*string, len(externalLabelSet))
-	for ln, lv := range externalLabelSet {
-		externalLabels[string(ln)] = proto.String(string(lv))
+	externalLabels := make(map[string]*string, len(globalLabels))
+	for lk, lv := range globalLabels {
+		externalLabels[lk] = proto.String(lv)
 	}
 	t := &QueueManager{
 		logger:           logger,
@@ -232,7 +229,7 @@ func (t *QueueManager) Append(metricFamily *retrieval.MetricFamily) error {
 
 // Start the queue manager sending samples to the remote storage.
 // Does not block.
-func (t *QueueManager) Start() {
+func (t *QueueManager) Start() error {
 	t.wg.Add(2)
 	go t.updateShardsLoop()
 	go t.reshardLoop()
@@ -240,11 +237,13 @@ func (t *QueueManager) Start() {
 	t.shardsMtx.Lock()
 	defer t.shardsMtx.Unlock()
 	t.shards.start()
+
+	return nil
 }
 
 // Stop stops sending samples to the remote storage and waits for pending
 // sends to complete.
-func (t *QueueManager) Stop() {
+func (t *QueueManager) Stop() error {
 	level.Info(t.logger).Log("msg", "Stopping remote storage...")
 	close(t.quit)
 	t.wg.Wait()
@@ -254,6 +253,7 @@ func (t *QueueManager) Stop() {
 	t.shards.stop()
 
 	level.Info(t.logger).Log("msg", "Remote storage stopped.")
+	return nil
 }
 
 func (t *QueueManager) updateShardsLoop() {

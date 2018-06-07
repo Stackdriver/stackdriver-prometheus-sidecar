@@ -21,8 +21,6 @@ import (
 	"testing"
 	"time"
 
-	config_util "github.com/prometheus/common/config"
-	"github.com/prometheus/common/model"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -73,9 +71,9 @@ func TestStoreErrorHandling(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			c := NewClient(0, &ClientConfig{
-				URL:     &config_util.URL{URL: serverURL},
-				Timeout: model.Duration(time.Second),
+			c := NewClient(&ClientConfig{
+				URL:     serverURL,
+				Timeout: time.Second,
 			})
 
 			err = c.Store(&monitoring.CreateTimeSeriesRequest{
@@ -109,9 +107,9 @@ func TestEmptyRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewClient(0, &ClientConfig{
-		URL:     &config_util.URL{URL: serverURL},
-		Timeout: model.Duration(time.Second),
+	c := NewClient(&ClientConfig{
+		URL:     serverURL,
+		Timeout: time.Second,
 	})
 	if err := c.Store(&monitoring.CreateTimeSeriesRequest{}); err != nil {
 		t.Fatal(err)
