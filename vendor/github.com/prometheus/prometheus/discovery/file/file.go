@@ -31,8 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
-	yaml_util "github.com/prometheus/prometheus/util/yaml"
-	"gopkg.in/fsnotify.v1"
+	"gopkg.in/fsnotify/fsnotify.v1"
 	"gopkg.in/yaml.v2"
 )
 
@@ -49,9 +48,6 @@ var (
 type SDConfig struct {
 	Files           []string       `yaml:"files"`
 	RefreshInterval model.Duration `yaml:"refresh_interval,omitempty"`
-
-	// Catches all undefined fields and must be empty after parsing.
-	XXX map[string]interface{} `yaml:",inline"`
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
@@ -60,9 +56,6 @@ func (c *SDConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	type plain SDConfig
 	err := unmarshal((*plain)(c))
 	if err != nil {
-		return err
-	}
-	if err := yaml_util.CheckOverflow(c.XXX, "file_sd_config"); err != nil {
 		return err
 	}
 	if len(c.Files) == 0 {
@@ -96,9 +89,11 @@ func (t *TimestampCollector) Collect(ch chan<- prometheus.Metric) {
 	uniqueFiles := make(map[string]float64)
 	t.lock.RLock()
 	for fileSD := range t.discoverers {
+		fileSD.lock.RLock()
 		for filename, timestamp := range fileSD.timestamps {
 			uniqueFiles[filename] = timestamp
 		}
+		fileSD.lock.RUnlock()
 	}
 	t.lock.RUnlock()
 	for filename, timestamp := range uniqueFiles {
@@ -127,7 +122,7 @@ func (t *TimestampCollector) removeDiscoverer(disc *Discovery) {
 func NewTimestampCollector() *TimestampCollector {
 	return &TimestampCollector{
 		Description: prometheus.NewDesc(
-			"prometheus_sd_file_timestamp",
+			"prometheus_sd_file_mtime_seconds",
 			"Timestamp (mtime) of files read by FileSD. Timestamp is set at read time.",
 			[]string{"filename"},
 			nil,
@@ -383,11 +378,11 @@ func (d *Discovery) readFile(filename string) ([]*targetgroup.Group, error) {
 			return nil, err
 		}
 	case ".yml", ".yaml":
-		if err := yaml.Unmarshal(content, &targetGroups); err != nil {
+		if err := yaml.UnmarshalStrict(content, &targetGroups); err != nil {
 			return nil, err
 		}
 	default:
-		panic(fmt.Errorf("retrieval.FileDiscovery.readFile: unhandled file extension %q", ext))
+		panic(fmt.Errorf("discovery.File.readFile: unhandled file extension %q", ext))
 	}
 
 	for i, tg := range targetGroups {
