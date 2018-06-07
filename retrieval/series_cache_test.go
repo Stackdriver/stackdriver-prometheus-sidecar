@@ -51,7 +51,7 @@ func TestScrapeCache(t *testing.T) {
 			t.Fatalf("label set with ref %d not found", i)
 		}
 		if !lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
-			t.Fatalf("unexpecte3d label set for ref %d: %s", i, lset)
+			t.Fatalf("unexpected label set for ref %d: %s", i, lset)
 		}
 	}
 
@@ -93,7 +93,7 @@ func TestScrapeCache(t *testing.T) {
 				t.Fatalf("label set with ref %d not found", i)
 			}
 			if !lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
-				t.Fatalf("unexpecte3d label set for ref %d: %s", i, lset)
+				t.Fatalf("unexpected label set for ref %d: %s", i, lset)
 			}
 		}
 	}
@@ -135,7 +135,7 @@ func TestScrapeCache(t *testing.T) {
 			t.Fatalf("label set with ref %d not found", i)
 		}
 		if !lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
-			t.Fatalf("unexpecte3d label set for ref %d: %s", i, lset)
+			t.Fatalf("unexpected label set for ref %d: %s", i, lset)
 		}
 	}
 }
