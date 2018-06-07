@@ -151,20 +151,6 @@ func main() {
 				},
 				{
 					SourceLabels: []model.LabelName{"job"},
-					TargetLabel:  "_kubernetes_pod_container_name",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "$1",
-				},
-				{
-					SourceLabels: []model.LabelName{"instance"},
-					TargetLabel:  "_kubernetes_pod_name",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "$1",
-				},
-				{
-					SourceLabels: []model.LabelName{"job"},
 					TargetLabel:  "job",
 					Action:       "replace",
 					Regex:        config.MustNewRegexp("(.*)"),
