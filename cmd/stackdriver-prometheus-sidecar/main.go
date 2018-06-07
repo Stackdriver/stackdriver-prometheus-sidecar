@@ -24,7 +24,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"syscall"
 	"time"
 
@@ -204,13 +203,6 @@ func main() {
 	)
 
 	http.Handle("/metrics", promhttp.Handler())
-
-	// sync.Once is used to make sure we can close the channel at different execution stages(SIGTERM).
-	type closeOnce struct {
-		C     chan struct{}
-		once  sync.Once
-		Close func()
-	}
 
 	var g group.Group
 	{
