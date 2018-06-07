@@ -163,4 +163,17 @@ func TestCache_Get(t *testing.T) {
 	if md != nil {
 		t.Fatalf("expected nil metadata but got %q", md)
 	}
+
+	// Test matcher escaping.
+	handler = func(qMetric, qMatch string) *apiResponse {
+		if qMatch != `{job="prometheus\nwith_newline",instance="localhost:9090"}` {
+			t.Fatalf("matcher not escaped properly: %s", qMatch)
+		}
+		return nil
+	}
+	_, err = c.Get(ctx, "prometheus\nwith_newline", "localhost:9090", "metric")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 }

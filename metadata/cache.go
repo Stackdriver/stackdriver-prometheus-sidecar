@@ -283,15 +283,12 @@ type apiMetadata struct {
 }
 
 var lvalReplacer = strings.NewReplacer(
-	`\"`, "\"",
-	`\\`, "\\",
-	`\n`, "\n",
+	"\"", `\"`,
+	"\\", `\\`,
+	"\n", `\n`,
 )
 
 // escapeLval escapes a label value.
 func escapeLval(s string) string {
-	if strings.IndexByte(s, byte('\\')) >= 0 {
-		return lvalReplacer.Replace(s)
-	}
-	return s
+	return lvalReplacer.Replace(s)
 }
