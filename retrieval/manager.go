@@ -22,7 +22,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	dto "github.com/prometheus/client_model/go"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/tsdb"
@@ -59,13 +58,19 @@ func (r *PrometheusReader) Run() error {
 	level.Info(r.logger).Log("msg", "Starting Prometheus reader...")
 	var ctx context.Context
 	ctx, r.cancelTail = context.WithCancel(context.Background())
-	segmentsReader, err := tail.Tail(ctx, r.walDirectory)
+	tailer, err := tail.Tail(ctx, r.walDirectory)
 	if err != nil {
 		level.Error(r.logger).Log("error", err)
 		return err
 	}
-	refs := map[uint64]tsdb.RefSeries{}
-	reader := wal.NewReader(segmentsReader)
+	seriesCache := newSeriesCache(r.logger, r.walDirectory)
+	go seriesCache.run(ctx)
+
+	// NOTE(fabxc): wrap the tailer into a buffered reader once we become concerned
+	// with performance. The WAL reader will do a lot of tiny reads otherwise.
+	// This is also the reason for the series cache dealing with "maxSegment" hints
+	// for series rather than precise ones.
+	reader := wal.NewReader(tailer)
 	for reader.Next() {
 		if reader.Err() != nil {
 			return reader.Err()
@@ -80,7 +85,7 @@ func (r *PrometheusReader) Run() error {
 				continue
 			}
 			for _, series := range recordSeries {
-				refs[series.Ref] = series
+				seriesCache.set(series.Ref, series.Labels, tailer.CurrentSegment())
 			}
 		case tsdb.RecordSamples:
 			recordSamples, err := decoder.Samples(record, nil)
@@ -89,7 +94,7 @@ func (r *PrometheusReader) Run() error {
 				continue
 			}
 			for _, sample := range recordSamples {
-				series, ok := refs[sample.Ref]
+				lset, ok := seriesCache.get(sample.Ref)
 				if !ok {
 					level.Warn(r.logger).Log("msg", "Unknown series ref in sample", "sample", sample)
 					continue
@@ -99,15 +104,16 @@ func (r *PrometheusReader) Run() error {
 					Metric: []*dto.Metric{{}},
 				}
 				metric := metricFamily.Metric[0]
-				metric.Label = make([]*dto.LabelPair, len(series.Labels))
-				for i := range series.Labels {
-					if series.Labels[i].Name == model.MetricNameLabel {
-						metricFamily.Name = proto.String(series.Labels[i].Value)
+				metric.Label = make([]*dto.LabelPair, 0, len(lset)-1)
+				for _, l := range lset {
+					if l.Name == labels.MetricName {
+						metricFamily.Name = proto.String(l.Value)
+						continue
 					}
-					metric.Label[i] = &dto.LabelPair{
-						Name:  proto.String(series.Labels[i].Name),
-						Value: proto.String(series.Labels[i].Value),
-					}
+					metric.Label = append(metric.Label, &dto.LabelPair{
+						Name:  proto.String(l.Name),
+						Value: proto.String(l.Value),
+					})
 				}
 				// TODO(jkohen): Support all metric types and populate Help metadata.
 				metricFamily.Type = dto.MetricType_UNTYPED.Enum()
@@ -116,10 +122,9 @@ func (r *PrometheusReader) Run() error {
 				// TODO(jkohen): track reset timestamps.
 				metricResetTimestampMs := []int64{NoTimestamp}
 				// TODO(jkohen): fill in the discovered labels from the Targets API.
-				targetLabels := make(labels.Labels, len(series.Labels))
-				for i := range series.Labels {
-					targetLabels[i] =
-						labels.Label{series.Labels[i].Name, series.Labels[i].Value}
+				targetLabels := make(labels.Labels, 0, len(lset))
+				for _, l := range lset {
+					targetLabels = append(targetLabels, labels.Label(l))
 				}
 				f, err := NewMetricFamily(metricFamily, metricResetTimestampMs, targetLabels)
 				if err != nil {
