@@ -27,7 +27,7 @@ import (
 	"github.com/prometheus/tsdb/wal"
 )
 
-// seriesCache holds a mapping from series refernce to label set.
+// seriesCache holds a mapping from series reference to label set.
 // It can garbage collect obsolete entries based on the most recent WAL checkpoint.
 type seriesCache struct {
 	logger         log.Logger
