@@ -30,15 +30,25 @@ import (
 // seriesCache holds a mapping from series reference to label set.
 // It can garbage collect obsolete entries based on the most recent WAL checkpoint.
 type seriesCache struct {
-	logger         log.Logger
-	dir            string
+	logger log.Logger
+	dir    string
+
+	// lastCheckpoint holds the index of the last checkpoint we garbage collected for.
+	// We don't have to redo garbage collection until a higher checkpoint appears.
 	lastCheckpoint int
 	mtx            sync.Mutex
 	lsets          map[uint64]seriesCacheEntry
 }
 
 type seriesCacheEntry struct {
-	lset       labels.Labels
+	lset labels.Labels
+	// maxSegment indicates the maximum WAL segment index in which
+	// the series was first logged.
+	// By providing it as an upper bound, we can safely delete a series entry
+	// if the reference no longer appears in a checkpoint with an index at or above
+	// this segment index.
+	// We don't require a precise number since the caller may not be able to provide
+	// it when retrieving records through a buffered reader.
 	maxSegment int
 }
 
@@ -117,9 +127,9 @@ func (c *seriesCache) garbageCollect() error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	for r, e := range c.lsets {
-		if _, ok := exists[r]; !ok && e.maxSegment <= cpNum {
-			delete(c.lsets, r)
+	for ref, entry := range c.lsets {
+		if _, ok := exists[ref]; !ok && entry.maxSegment <= cpNum {
+			delete(c.lsets, ref)
 		}
 	}
 	c.lastCheckpoint = cpNum
