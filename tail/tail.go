@@ -29,7 +29,8 @@ import (
 	"github.com/prometheus/tsdb/wal"
 )
 
-type tailer struct {
+// Tailer tails a write ahead log in a given directory.
+type Tailer struct {
 	ctx         context.Context
 	dir         string
 	cur         io.ReadCloser
@@ -40,8 +41,8 @@ type tailer struct {
 // are read before reading any WAL segments.
 // Tailing may fail if we are racing with the DB itself in deleting obsolete checkpoints
 // and segments. The caller should implement relevant logic to retry in those cases.
-func Tail(ctx context.Context, dir string) (io.ReadCloser, error) {
-	t := &tailer{
+func Tail(ctx context.Context, dir string) (*Tailer, error) {
+	t := &Tailer{
 		ctx: ctx,
 		dir: dir,
 	}
@@ -64,11 +65,18 @@ func Tail(ctx context.Context, dir string) (io.ReadCloser, error) {
 	return t, nil
 }
 
-func (t *tailer) Close() error {
+// Close all underlying resources of the tailer.
+func (t *Tailer) Close() error {
 	return t.cur.Close()
 }
 
-func (t *tailer) Read(b []byte) (int, error) {
+// CurrentSegment returns the index of the currently read segment.
+// If no successful read has been performed yet, it may be negative.
+func (t *Tailer) CurrentSegment() int {
+	return t.nextSegment - 1
+}
+
+func (t *Tailer) Read(b []byte) (int, error) {
 	const maxBackoff = 3 * time.Second
 	backoff := 10 * time.Millisecond
 
