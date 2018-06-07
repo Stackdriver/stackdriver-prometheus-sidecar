@@ -21,12 +21,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"testing"
 
-	"github.com/prometheus/prometheus/scrape"
-
 	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/scrape"
 )
 
 func TestCache_Get(t *testing.T) {
@@ -60,10 +60,12 @@ func TestCache_Get(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c, err := NewCache(nil, nil, ts.URL)
+	u, err := url.Parse(ts.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
+	c := NewCache(nil, nil, u)
+
 	// First get for the job, we expect an initial batch request.
 	handler = func(qMetric, qMatch string) *apiResponse {
 		if qMetric != "" {

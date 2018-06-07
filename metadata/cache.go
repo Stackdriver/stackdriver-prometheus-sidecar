@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -53,19 +54,12 @@ const DefaultEndpointPath = "/api/v1/targets/metadata"
 // NewCache returns a new cache that gets populated by the metadata endpoint
 // at the given URL.
 // It uses the default endpoint path if no specific path is provided.
-func NewCache(reg prometheus.Registerer, client *http.Client, promURL string) (*Cache, error) {
+func NewCache(reg prometheus.Registerer, client *http.Client, promURL *url.URL) *Cache {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	u, err := url.Parse(promURL)
-	if err != nil {
-		return nil, err
-	}
-	if u.Path == "" {
-		u.Path = DefaultEndpointPath
-	}
 	c := &Cache{
-		promURL:  u,
+		promURL:  promURL,
 		client:   client,
 		metadata: map[string]*metadataEntry{},
 		seenJobs: map[string]struct{}{},
@@ -89,24 +83,25 @@ func NewCache(reg prometheus.Registerer, client *http.Client, promURL string) (*
 	if reg != nil {
 		reg.MustRegister(c.requests, c.errors, c.latency)
 	}
-	return c, nil
+	return c
 }
 
 const retryInterval = 30 * time.Second
 
 type metadataEntry struct {
 	scrape.MetricMetadata
-	notFound  bool
+	found     bool
 	lastFetch time.Time
 }
 
 func (e *metadataEntry) shouldRefetch() bool {
 	// TODO(fabxc): how often does this happen? Do we need an exponential backoff?
-	return e.notFound && time.Since(e.lastFetch) > retryInterval
+	return !e.found && time.Since(e.lastFetch) > retryInterval
 }
 
 // Get returns metadata for the given metric and job. If the metadata
 // is not in the cache, it blocks until we have retrieved it from the Prometheus server.
+// If the metadata cannot be found, nil is returned.
 func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error) {
 	md, ok := c.metadata[metric]
 	if !ok || md.shouldRefetch() {
@@ -118,8 +113,9 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.
 				return nil, errors.Wrapf(err, "fetch metadata for job %q", job)
 			}
 			for _, md := range mds {
-				// Only set if we haven't seen the metric before. Stackdriver cannot
-				// generally update the metadata anyway.
+				// Only set if we haven't seen the metric before. Changes to metadata
+				// may need special handling in Stackdriver, which we do not provide
+				// yet anyway.
 				if _, ok := c.metadata[md.Metric]; !ok {
 					c.metadata[md.Metric] = md
 				}
@@ -134,8 +130,7 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.
 		}
 		md = c.metadata[metric]
 	}
-	if md == nil || md.notFound {
-		// TODO(fabxc): do we want to return untyped and empty help in this case?
+	if md == nil || !md.found {
 		return nil, nil
 	}
 	return &md.MetricMetadata, nil
@@ -177,8 +172,10 @@ const apiErrorNotFound = "not_found"
 // fetchMetric fetches metadata for the given job, instance, and metric combination.
 // It returns a not-found entry if the fetch is successful but returns no data.
 func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (*metadataEntry, error) {
+	job, instance = escapeLval(job), escapeLval(instance)
+
 	apiResp, err := c.fetch(ctx, "metric", url.Values{
-		"match_target": []string{fmt.Sprintf("{job=%q,instance=%q}", job, instance)},
+		"match_target": []string{fmt.Sprintf("{job=\"%s\",instance=\"%s\"}", job, instance)},
 		"metric":       []string{metric},
 	})
 	if err != nil {
@@ -190,7 +187,7 @@ func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (
 		return nil, errors.Wrap(errors.New(apiResp.Error), "lookup failed")
 	}
 	if len(apiResp.Data) == 0 {
-		return &metadataEntry{notFound: true, lastFetch: now}, nil
+		return &metadataEntry{lastFetch: now}, nil
 	}
 	d := apiResp.Data[0]
 
@@ -201,6 +198,7 @@ func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (
 			Help:   d.Help,
 		},
 		lastFetch: now,
+		found:     true,
 	}, nil
 }
 
@@ -209,8 +207,10 @@ func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (
 // In a well-configured setup it is unlikely that instances for the same job have any notable
 // difference in their exposed metrics.
 func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[string]*metadataEntry, error) {
+	job, instance = escapeLval(job), escapeLval(instance)
+
 	apiResp, err := c.fetch(ctx, "batch", url.Values{
-		"match_target": []string{fmt.Sprintf("{job=%q,instance=%q}", job, instance)},
+		"match_target": []string{fmt.Sprintf("{job=\"%s\",instance=\"%s\"}", job, instance)},
 	})
 	if err != nil {
 		return nil, err
@@ -234,12 +234,13 @@ func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[strin
 				Help:   md.Help,
 			},
 			lastFetch: now,
+			found:     true,
 		}
 	}
 	// Prometheus's scraping layer writes a few internal metrics, which we won't get
 	// metadata for via the API. We populate hardcoded metadata for them.
 	for _, md := range internalMetrics {
-		result[md.Metric] = &metadataEntry{MetricMetadata: md, lastFetch: now}
+		result[md.Metric] = &metadataEntry{MetricMetadata: md, lastFetch: now, found: true}
 	}
 	return result, nil
 }
@@ -279,4 +280,18 @@ type apiMetadata struct {
 	Metric string               `json:"metric"`
 	Help   string               `json:"help"`
 	Type   textparse.MetricType `json:"type"`
+}
+
+var lvalReplacer = strings.NewReplacer(
+	`\"`, "\"",
+	`\\`, "\\",
+	`\n`, "\n",
+)
+
+// escapeLval escapes a label value.
+func escapeLval(s string) string {
+	if strings.IndexByte(s, byte('\\')) >= 0 {
+		return lvalReplacer.Replace(s)
+	}
+	return s
 }
