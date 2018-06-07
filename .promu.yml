@@ -4,8 +4,6 @@ build:
     binaries:
         - name: stackdriver-prometheus-sidecar
           path: ./cmd/stackdriver-prometheus-sidecar
-        - name: promtool
-          path: ./cmd/promtool
     flags: -a -tags netgo
     ldflags: |
         -X {{repoPath}}/vendor/github.com/prometheus/common/version.Version={{.Version}}
