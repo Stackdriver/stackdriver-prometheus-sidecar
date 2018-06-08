@@ -15,6 +15,7 @@ package retrieval
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/go-kit/kit/log"
@@ -83,44 +84,12 @@ func (r *PrometheusReader) Run() error {
 				continue
 			}
 			for _, sample := range recordSamples {
-				lset, ok := seriesCache.get(sample.Ref)
-				if !ok {
-					level.Warn(r.logger).Log("msg", "Unknown series ref in sample", "sample", sample)
-					continue
-				}
-				// TODO(jkohen): Rebuild histograms and summary from individual time series.
-				metricFamily := &dto.MetricFamily{
-					Metric: []*dto.Metric{{}},
-				}
-				metric := metricFamily.Metric[0]
-				metric.Label = make([]*dto.LabelPair, 0, len(lset)-1)
-				for _, l := range lset {
-					if l.Name == labels.MetricName {
-						metricFamily.Name = proto.String(l.Value)
-						continue
-					}
-					metric.Label = append(metric.Label, &dto.LabelPair{
-						Name:  proto.String(l.Name),
-						Value: proto.String(l.Value),
-					})
-				}
-				// TODO(jkohen): Support all metric types and populate Help metadata.
-				metricFamily.Type = dto.MetricType_UNTYPED.Enum()
-				metric.Untyped = &dto.Untyped{Value: proto.Float64(sample.V)}
-				metric.TimestampMs = proto.Int64(sample.T)
-				// TODO(jkohen): track reset timestamps.
-				metricResetTimestampMs := []int64{NoTimestamp}
-				// TODO(jkohen): fill in the discovered labels from the Targets API.
-				targetLabels := make(labels.Labels, 0, len(lset))
-				for _, l := range lset {
-					targetLabels = append(targetLabels, labels.Label(l))
-				}
-				f, err := NewMetricFamily(metricFamily, metricResetTimestampMs, targetLabels)
+				outputSample, err := buildSample(seriesCache, sample)
 				if err != nil {
-					level.Warn(r.logger).Log("msg", "Cannot construct MetricFamily", "err", err)
+					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
 				}
-				r.appender.Append(f)
+				r.appender.Append(outputSample)
 			}
 		case tsdb.RecordTombstones:
 		}
@@ -132,4 +101,39 @@ func (r *PrometheusReader) Run() error {
 // Stop cancels the reader and blocks until it has exited.
 func (r *PrometheusReader) Stop() {
 	r.cancelTail()
+}
+
+func buildSample(seriesCache *seriesCache, sample tsdb.RefSample) (*MetricFamily, error) {
+	lset, ok := seriesCache.get(sample.Ref)
+	if !ok {
+		return nil, fmt.Errorf("sample=%v", sample)
+	}
+	// TODO(jkohen): Rebuild histograms and summary from individual time series.
+	metricFamily := &dto.MetricFamily{
+		Metric: []*dto.Metric{{}},
+	}
+	metric := metricFamily.Metric[0]
+	metric.Label = make([]*dto.LabelPair, 0, len(lset)-1)
+	for _, l := range lset {
+		if l.Name == labels.MetricName {
+			metricFamily.Name = proto.String(l.Value)
+			continue
+		}
+		metric.Label = append(metric.Label, &dto.LabelPair{
+			Name:  proto.String(l.Name),
+			Value: proto.String(l.Value),
+		})
+	}
+	// TODO(jkohen): Support all metric types and populate Help metadata.
+	metricFamily.Type = dto.MetricType_UNTYPED.Enum()
+	metric.Untyped = &dto.Untyped{Value: proto.Float64(sample.V)}
+	metric.TimestampMs = proto.Int64(sample.T)
+	// TODO(jkohen): track reset timestamps.
+	metricResetTimestampMs := []int64{NoTimestamp}
+	// TODO(jkohen): fill in the discovered labels from the Targets API.
+	targetLabels := make(labels.Labels, 0, len(lset))
+	for _, l := range lset {
+		targetLabels = append(targetLabels, labels.Label(l))
+	}
+	return NewMetricFamily(metricFamily, metricResetTimestampMs, targetLabels)
 }
