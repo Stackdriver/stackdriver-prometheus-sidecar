@@ -140,7 +140,7 @@ func buildSample(seriesGetter seriesGetter, sample tsdb.RefSample) (*MetricFamil
 		targetLabels = append(targetLabels, labels.Label(l))
 	}
 	// labels.Labels expects the contents to be sorted. We could move to an
-	// interface that doesn't require order to save some cycles.
+	// interface that doesn't require order, to save some cycles.
 	sort.Sort(targetLabels)
 	return NewMetricFamily(metricFamily, metricResetTimestampMs, targetLabels)
 }
