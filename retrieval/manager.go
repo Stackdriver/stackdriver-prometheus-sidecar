@@ -22,7 +22,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	dto "github.com/prometheus/client_model/go"
-	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/wal"
@@ -133,9 +132,4 @@ func (r *PrometheusReader) Run() error {
 // Stop cancels the reader and blocks until it has exited.
 func (r *PrometheusReader) Stop() {
 	r.cancelTail()
-}
-
-// ApplyConfig resets the manager's target providers and job configurations as defined by the new cfg.
-func (r *PrometheusReader) ApplyConfig(cfg *config.Config) error {
-	return nil
 }
