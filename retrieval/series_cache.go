@@ -27,8 +27,14 @@ import (
 	"github.com/prometheus/tsdb/wal"
 )
 
+type seriesGetter interface {
+	// Same interface as the standard map getter.
+	get(ref uint64) (labels.Labels, bool)
+}
+
 // seriesCache holds a mapping from series reference to label set.
 // It can garbage collect obsolete entries based on the most recent WAL checkpoint.
+// Implements seriesGetter.
 type seriesCache struct {
 	logger log.Logger
 	dir    string

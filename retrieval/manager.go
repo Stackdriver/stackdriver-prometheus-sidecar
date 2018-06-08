@@ -16,6 +16,7 @@ package retrieval
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/go-kit/kit/log"
@@ -103,8 +104,8 @@ func (r *PrometheusReader) Stop() {
 	r.cancelTail()
 }
 
-func buildSample(seriesCache *seriesCache, sample tsdb.RefSample) (*MetricFamily, error) {
-	lset, ok := seriesCache.get(sample.Ref)
+func buildSample(seriesGetter seriesGetter, sample tsdb.RefSample) (*MetricFamily, error) {
+	lset, ok := seriesGetter.get(sample.Ref)
 	if !ok {
 		return nil, fmt.Errorf("sample=%v", sample)
 	}
@@ -133,7 +134,13 @@ func buildSample(seriesCache *seriesCache, sample tsdb.RefSample) (*MetricFamily
 	// TODO(jkohen): fill in the discovered labels from the Targets API.
 	targetLabels := make(labels.Labels, 0, len(lset))
 	for _, l := range lset {
+		if l.Name == labels.MetricName {
+			continue
+		}
 		targetLabels = append(targetLabels, labels.Label(l))
 	}
+	// labels.Labels expects the contents to be sorted. We could move to an
+	// interface that doesn't require order to save some cycles.
+	sort.Sort(targetLabels)
 	return NewMetricFamily(metricFamily, metricResetTimestampMs, targetLabels)
 }
