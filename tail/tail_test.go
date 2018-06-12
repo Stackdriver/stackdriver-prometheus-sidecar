@@ -58,10 +58,10 @@ func TestTailFuzz(t *testing.T) {
 			}
 			rec := make([]byte, rand.Intn(5337))
 			if _, err := rand.Read(rec); err != nil {
-				t.Fatal(err)
+				panic(err)
 			}
 			if err := w.Log(rec); err != nil {
-				t.Fatal(err)
+				panic(err)
 			}
 			written = append(written, rec)
 		}
@@ -118,7 +118,7 @@ func BenchmarkTailFuzz(t *testing.B) {
 		go func() {
 			for i := 0; i < count/4; i++ {
 				if err := w.Log(rec[:rand.Intn(4000)]); err != nil {
-					t.Fatal(err)
+					panic(err)
 				}
 			}
 		}()
