@@ -25,7 +25,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-func TestTagetCache_Error(t *testing.T) {
+func TestTargetCache_Error(t *testing.T) {
 	var handler http.HandlerFunc
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
