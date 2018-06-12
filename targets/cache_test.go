@@ -19,16 +19,78 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"testing"
 
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-func TestTargetCache(t *testing.T) {
+func TestTagetCache_Error(t *testing.T) {
+	var handler http.HandlerFunc
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler(w, r)
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewCache(ctx, nil, nil, u)
+
+	expectedTarget := &Target{
+		Labels: labels.FromStrings("job", "a", "instance", "c"),
+	}
+	// Initialize cache with expected target.
+	c.targets[cacheKey("a", "c")] = []*Target{expectedTarget}
+
+	for i, hf := range []http.HandlerFunc{
+		// Return HTTP error.
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		},
+		// Malformed JSON.
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"`))
+		},
+		// Application error,
+		func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(apiResponse{
+				Status:    "error",
+				ErrorType: "bad_data",
+				Error:     "some data is bad",
+			})
+		},
+	} {
+		handler = hf
+
+		target, err := c.Get(ctx, labels.FromStrings("job", "a", "instance", "b"))
+		if target != nil {
+			t.Fatalf("%d: unexpected target %s", i, target.Labels)
+		}
+		if err == nil {
+			t.Fatalf("%d: expected error but got none", i)
+		}
+		// Basic check that cache entries don't get purged during errors.
+		target, err = c.Get(ctx, labels.FromStrings("job", "a", "instance", "c"))
+		if err != nil {
+			t.Fatalf("%d: unexpected error: %s", i, err)
+		}
+		if !reflect.DeepEqual(target, expectedTarget) {
+			t.Fatalf("%d: unexepected target %s", i, target)
+		}
+	}
+}
+
+func TestTargetCache_Success(t *testing.T) {
 	var handler func() []*Target
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var resp apiResponse
+		resp.Status = "success"
 		resp.Data.ActiveTargets = handler()
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			t.Fatal(err)

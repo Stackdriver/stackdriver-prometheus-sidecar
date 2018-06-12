@@ -90,11 +90,14 @@ func (c *Cache) refresh(ctx context.Context) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode/100 != 2 {
+		return errors.Errorf("unexpected response status: %s", resp.Status)
+	}
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 		return errors.Wrap(err, "decode response")
 	}
-	if apiResp.Status == "error" {
+	if apiResp.Status != "success" {
 		return errors.Wrap(errors.New(apiResp.Error), "request failed")
 	}
 
@@ -121,8 +124,12 @@ func (c *Cache) refresh(ctx context.Context) error {
 	return nil
 }
 
-// Get returns the target that is the closest match to the given label set. If no target
-// is found, nil is returned.
+// Get returns a target that matches the job/instance combination of the input labels
+// and has the same labels values for other labels keys they have in common.
+// If multiple targets satisfy this property, it is undefined which one is returned. This
+// is generally a non-issue if the additional label keys are consistently set across all targets
+// for the job/instance combination.
+// If no target is found, nil is returned.
 func (c *Cache) Get(ctx context.Context, lset labels.Labels) (*Target, error) {
 	key := cacheKey(lset.Get("job"), lset.Get("instance"))
 
@@ -136,10 +143,11 @@ func (c *Cache) Get(ctx context.Context, lset labels.Labels) (*Target, error) {
 	// no targets until a refresh triggered by another lookup or the background routine populates it.
 	if !ok {
 		c.mtx.RUnlock()
-		if err := c.refresh(ctx); err != nil {
+		err := c.refresh(ctx)
+		c.mtx.RLock()
+		if err != nil {
 			return nil, errors.Wrap(err, "target refresh failed")
 		}
-		c.mtx.RLock()
 		if ts, ok = c.targets[key]; !ok {
 			// Set empty value so we don't refresh next time.
 			c.targets[key] = nil
