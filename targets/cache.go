@@ -27,7 +27,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-const DefaultTargetsEndpoint = "/api/v1/targets"
+type Getter interface {
+	Get(ctx context.Context, lset labels.Labels) (*Target, error)
+}
+
+const DefaultApiEndpoint = "/api/v1/targets"
 
 func cacheKey(job, instance string) string {
 	return job + "\xff" + instance
@@ -38,6 +42,7 @@ func cacheKey(job, instance string) string {
 // unique by job and instance label and an optional but consistent set of additional labels.
 // It only provides best effort matching for configurations where targets are identified
 // by a varying set of labels within a job and instance combination.
+// Implements TargetGetter.
 type Cache struct {
 	logger log.Logger
 	client *http.Client
@@ -48,7 +53,7 @@ type Cache struct {
 	targets map[string][]*Target
 }
 
-func NewCache(ctx context.Context, logger log.Logger, client *http.Client, promURL *url.URL) *Cache {
+func NewCache(logger log.Logger, client *http.Client, promURL *url.URL) *Cache {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -56,6 +61,7 @@ func NewCache(ctx context.Context, logger log.Logger, client *http.Client, promU
 		logger = log.NewNopLogger()
 	}
 	return &Cache{
+		logger:  logger,
 		client:  client,
 		url:     promURL,
 		targets: map[string][]*Target{},
