@@ -41,17 +41,28 @@ func TestBuildSample(t *testing.T) {
 	timestamp := int64(1234)
 	value := 2.1
 
-	sample, err := buildSample(&seriesMap, tsdb.RefSample{Ref: /*unknown*/ 999, T: timestamp, V: value})
+	recordSamples := []tsdb.RefSample{
+		{Ref: /*unknown*/ 999, T: timestamp, V: value},
+		{Ref: /*unknown*/ 999, T: timestamp, V: value},
+	}
+	sample, recordSamples, err := buildSample(&seriesMap, recordSamples)
 	if err == nil {
 		t.Errorf("Expected error, got sample %v", sample)
+	}
+	if len(recordSamples) != 1 {
+		t.Errorf("Expected one leftover sample, got samples %v", recordSamples)
 	}
 
 	ref := uint64(0)
 	seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}}
 	seriesMap.m[ref] = seriesLabels
-	sample, err = buildSample(&seriesMap, tsdb.RefSample{Ref: ref, T: timestamp, V: value})
+	recordSamples = []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
+	sample, recordSamples, err = buildSample(&seriesMap, recordSamples)
 	if err != nil {
 		t.Error(err)
+	}
+	if len(recordSamples) != 0 {
+		t.Errorf("Expected all samples to be consumed, got samples %v", recordSamples)
 	}
 	if sample == nil {
 		t.Error("Unexpected nil sample")

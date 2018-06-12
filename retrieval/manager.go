@@ -84,8 +84,9 @@ func (r *PrometheusReader) Run() error {
 				level.Error(r.logger).Log("error", err)
 				continue
 			}
-			for _, sample := range recordSamples {
-				outputSample, err := buildSample(seriesCache, sample)
+			for len(recordSamples) > 0 {
+				var outputSample *MetricFamily
+				outputSample, recordSamples, err = buildSample(seriesCache, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
@@ -104,10 +105,14 @@ func (r *PrometheusReader) Stop() {
 	r.cancelTail()
 }
 
-func buildSample(seriesGetter seriesGetter, sample tsdb.RefSample) (*MetricFamily, error) {
+// Creates a MetricFamily instance from the head of recordSamples, or error if
+// that fails. In either case, this function returns the recordSamples items
+// that weren't consumed.
+func buildSample(seriesGetter seriesGetter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
+	sample := recordSamples[0]
 	lset, ok := seriesGetter.get(sample.Ref)
 	if !ok {
-		return nil, fmt.Errorf("sample=%v", sample)
+		return nil, recordSamples[1:], fmt.Errorf("sample=%v", sample)
 	}
 	// TODO(jkohen): Rebuild histograms and summary from individual time series.
 	metricFamily := &dto.MetricFamily{
@@ -142,5 +147,6 @@ func buildSample(seriesGetter seriesGetter, sample tsdb.RefSample) (*MetricFamil
 	// labels.Labels expects the contents to be sorted. We could move to an
 	// interface that doesn't require order, to save some cycles.
 	sort.Sort(targetLabels)
-	return NewMetricFamily(metricFamily, metricResetTimestampMs, targetLabels)
+	m, err := NewMetricFamily(metricFamily, metricResetTimestampMs, targetLabels)
+	return m, recordSamples[1:], err
 }
