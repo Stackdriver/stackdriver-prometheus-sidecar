@@ -97,7 +97,14 @@ func TestBuildSample(t *testing.T) {
 		ref := uint64(0)
 		seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}}
 		seriesMap.m[ref] = seriesLabels
-		targetMap.m[seriesLabels[0].Value] = targets.Target{DiscoveredLabels: promlabels.Labels{{"dkey", "dvalue"}}}
+		// The discovered labels include a label "job" and no "instance"
+		// label, which will cause the metric labels to include
+		// "instance", but not "job".
+		targetMap.m[seriesLabels[0].Value] = targets.Target{
+			DiscoveredLabels: promlabels.Labels{
+				{"dkey", "dvalue"},
+				{"job", "job1"},
+			}}
 		recordSamples := []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
 		sample, recordSamples, err := buildSample(ctx, &seriesMap, &targetMap, recordSamples)
 		if err != nil {
@@ -118,9 +125,13 @@ func TestBuildSample(t *testing.T) {
 		if sample.Metric[0].Untyped.GetValue() != value {
 			t.Errorf("Expected value '%v', got %v", value, sample.Metric[0].Untyped.GetValue())
 		}
-		targetLabels := promlabels.FromStrings("dkey", "dvalue")
+		targetLabels := promlabels.FromStrings("dkey", "dvalue", "job", "job1")
 		if !promlabels.Equal(sample.TargetLabels, targetLabels) {
 			t.Errorf("Expected target labels '%v', got %v", targetLabels, sample.TargetLabels)
+		}
+		metricLabels := promlabels.FromStrings("instance", "i1")
+		if !promlabels.Equal(LabelPairsToLabels(sample.Metric[0].Label), metricLabels) {
+			t.Errorf("Expected metric labels '%v', got %v", metricLabels, sample.Metric[0].Label)
 		}
 	})
 }

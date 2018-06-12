@@ -118,18 +118,24 @@ func (r *PrometheusReader) Stop() {
 // that weren't consumed.
 func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter targets.Getter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
 	sample := recordSamples[0]
-	lset, ok := seriesGetter.get(sample.Ref)
+	tsdblset, ok := seriesGetter.get(sample.Ref)
 	if !ok {
 		return nil, recordSamples[1:], fmt.Errorf("sample=%v", sample)
 	}
+	lset := pkgLabels(tsdblset)
+	// Fill in the discovered labels from the Targets API.
+	target, err := targetGetter.Get(ctx, lset)
+	if err != nil {
+		return nil, recordSamples[1:], err
+	}
+	metricLabels := targets.DropTargetLabels(lset, target.DiscoveredLabels)
 	// TODO(jkohen): Rebuild histograms and summary from individual time series.
 	metricFamily := &dto.MetricFamily{
 		Metric: []*dto.Metric{{}},
 	}
 	metric := metricFamily.Metric[0]
-	metric.Label = make([]*dto.LabelPair, 0, len(lset)-1)
-	// TODO(jkohen): filter `lset` with targets.DropTargetLabels.
-	for _, l := range lset {
+	metric.Label = make([]*dto.LabelPair, 0, len(metricLabels)-1)
+	for _, l := range metricLabels {
 		if l.Name == labels.MetricName {
 			metricFamily.Name = proto.String(l.Value)
 			continue
@@ -145,22 +151,8 @@ func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter ta
 	metric.TimestampMs = proto.Int64(sample.T)
 	// TODO(jkohen): track reset timestamps.
 	metricResetTimestampMs := []int64{NoTimestamp}
-	// Fill in the discovered labels from the Targets API.
-	target, err := targetGetter.Get(ctx, pkgLabels(lset))
-	if err != nil {
-		return nil, recordSamples[1:], err
-	}
 	m, err := NewMetricFamily(metricFamily, metricResetTimestampMs, target.DiscoveredLabels)
 	return m, recordSamples[1:], err
-}
-
-// TODO(jkohen): We should be able to avoid this conversion.
-func tsdbLabels(input labels.Labels) tsdblabels.Labels {
-	output := make(tsdblabels.Labels, 0, len(input))
-	for _, l := range input {
-		output = append(output, tsdblabels.Label(l))
-	}
-	return output
 }
 
 // TODO(jkohen): We should be able to avoid this conversion.
