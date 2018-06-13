@@ -27,11 +27,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-type Getter interface {
-	Get(ctx context.Context, lset labels.Labels) (*Target, error)
-}
-
-const DefaultApiEndpoint = "/api/v1/targets"
+const DefaultAPIEndpoint = "/api/v1/targets"
 
 func cacheKey(job, instance string) string {
 	return job + "\xff" + instance

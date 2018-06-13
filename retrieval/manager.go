@@ -17,13 +17,13 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"sort"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -113,20 +113,24 @@ func (r *PrometheusReader) Stop() {
 	r.cancelTail()
 }
 
+type Getter interface {
+	Get(ctx context.Context, lset labels.Labels) (*targets.Target, error)
+}
+
 // Creates a MetricFamily instance from the head of recordSamples, or error if
 // that fails. In either case, this function returns the recordSamples items
 // that weren't consumed.
-func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter targets.Getter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
+func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter Getter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
 	sample := recordSamples[0]
 	tsdblset, ok := seriesGetter.get(sample.Ref)
 	if !ok {
-		return nil, recordSamples[1:], fmt.Errorf("sample=%v", sample)
+		return nil, recordSamples[1:], fmt.Errorf("No series matched sample by ref %v", sample)
 	}
 	lset := pkgLabels(tsdblset)
 	// Fill in the discovered labels from the Targets API.
 	target, err := targetGetter.Get(ctx, lset)
 	if err != nil {
-		return nil, recordSamples[1:], err
+		return nil, recordSamples[1:], errors.Wrapf(err, "No target matched labels %v", lset)
 	}
 	metricLabels := targets.DropTargetLabels(lset, target.DiscoveredLabels)
 	// TODO(jkohen): Rebuild histograms and summary from individual time series.
@@ -161,8 +165,5 @@ func pkgLabels(input tsdblabels.Labels) labels.Labels {
 	for _, l := range input {
 		output = append(output, labels.Label(l))
 	}
-	// labels.Labels expects the contents to be sorted. We could move to an
-	// interface that doesn't require order, to save some cycles.
-	sort.Sort(output)
 	return output
 }

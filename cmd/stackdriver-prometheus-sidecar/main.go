@@ -124,7 +124,7 @@ func main() {
 
 	cfg.globalLabels["_stackdriver_project_id"] = *projectId
 	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
-	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultApiEndpoint)
+	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {
 		panic(err)
 	}
