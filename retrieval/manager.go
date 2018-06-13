@@ -132,7 +132,7 @@ func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter Ge
 	if err != nil {
 		return nil, recordSamples[1:], errors.Wrapf(err, "No target matched labels %v", lset)
 	}
-	metricLabels := targets.DropTargetLabels(lset, target.DiscoveredLabels)
+	metricLabels := targets.DropTargetLabels(lset, target.Labels)
 	// TODO(jkohen): Rebuild histograms and summary from individual time series.
 	metricFamily := &dto.MetricFamily{
 		Metric: []*dto.Metric{{}},

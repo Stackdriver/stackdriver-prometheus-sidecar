@@ -95,16 +95,15 @@ func TestBuildSample(t *testing.T) {
 
 	t.Run("Successful", func(t *testing.T) {
 		ref := uint64(0)
-		seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}}
+		seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}, {"mkey", "mvalue"}}
 		seriesMap.m[ref] = seriesLabels
 		// The discovered labels include a label "job" and no "instance"
 		// label, which will cause the metric labels to include
 		// "instance", but not "job".
 		targetMap.m[seriesLabels[0].Value] = targets.Target{
-			DiscoveredLabels: promlabels.Labels{
-				{"dkey", "dvalue"},
-				{"job", "job1"},
-			}}
+			DiscoveredLabels: promlabels.Labels{{"dkey", "dvalue"}},
+			Labels:           promlabels.Labels{{"job", "job1"}},
+		}
 		recordSamples := []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
 		sample, recordSamples, err := buildSample(ctx, &seriesMap, &targetMap, recordSamples)
 		if err != nil {
@@ -114,7 +113,10 @@ func TestBuildSample(t *testing.T) {
 			t.Errorf("Expected all samples to be consumed, got samples %v", recordSamples)
 		}
 		if sample == nil {
-			t.Error("Unexpected nil sample")
+			t.Fatal("Unexpected nil sample")
+		}
+		if sample.MetricFamily == nil {
+			t.Fatalf("Unexpected nil MetricFamily %v", sample)
 		}
 		if sample.GetName() != "my_metric" {
 			t.Errorf("Expected name 'my_metric', got %v", sample.GetName())
@@ -125,11 +127,11 @@ func TestBuildSample(t *testing.T) {
 		if sample.Metric[0].Untyped.GetValue() != value {
 			t.Errorf("Expected value '%v', got %v", value, sample.Metric[0].Untyped.GetValue())
 		}
-		targetLabels := promlabels.FromStrings("dkey", "dvalue", "job", "job1")
+		targetLabels := promlabels.FromStrings("dkey", "dvalue")
 		if !promlabels.Equal(sample.TargetLabels, targetLabels) {
 			t.Errorf("Expected target labels '%v', got %v", targetLabels, sample.TargetLabels)
 		}
-		metricLabels := promlabels.FromStrings("instance", "i1")
+		metricLabels := promlabels.FromStrings("instance", "i1", "mkey", "mvalue")
 		if !promlabels.Equal(LabelPairsToLabels(sample.Metric[0].Label), metricLabels) {
 			t.Errorf("Expected metric labels '%v', got %v", metricLabels, sample.Metric[0].Label)
 		}
