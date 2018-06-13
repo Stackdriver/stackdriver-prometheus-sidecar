@@ -16,7 +16,6 @@ package retrieval
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
@@ -32,20 +31,24 @@ import (
 	"github.com/prometheus/tsdb/wal"
 )
 
+type TargetGetter interface {
+	Get(ctx context.Context, lset labels.Labels) (*targets.Target, error)
+}
+
 // NewPrometheusReader is the PrometheusReader constructor
-func NewPrometheusReader(logger log.Logger, walDirectory string, promURL *url.URL, appender Appender) *PrometheusReader {
+func NewPrometheusReader(logger log.Logger, walDirectory string, targetGetter TargetGetter, appender Appender) *PrometheusReader {
 	return &PrometheusReader{
 		appender:     appender,
 		logger:       logger,
 		walDirectory: walDirectory,
-		promURL:      promURL,
+		targetGetter: targetGetter,
 	}
 }
 
 type PrometheusReader struct {
 	logger       log.Logger
 	walDirectory string
-	promURL      *url.URL
+	targetGetter TargetGetter
 	appender     Appender
 	cancelTail   context.CancelFunc
 }
@@ -61,9 +64,6 @@ func (r *PrometheusReader) Run() error {
 	}
 	seriesCache := newSeriesCache(r.logger, r.walDirectory)
 	go seriesCache.run(ctx)
-
-	targetCache := targets.NewCache(r.logger, nil, r.promURL)
-	go targetCache.Run(ctx)
 
 	// NOTE(fabxc): wrap the tailer into a buffered reader once we become concerned
 	// with performance. The WAL reader will do a lot of tiny reads otherwise.
@@ -94,7 +94,7 @@ func (r *PrometheusReader) Run() error {
 			}
 			for len(recordSamples) > 0 {
 				var outputSample *MetricFamily
-				outputSample, recordSamples, err = buildSample(ctx, seriesCache, targetCache, recordSamples)
+				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
@@ -113,14 +113,10 @@ func (r *PrometheusReader) Stop() {
 	r.cancelTail()
 }
 
-type Getter interface {
-	Get(ctx context.Context, lset labels.Labels) (*targets.Target, error)
-}
-
 // Creates a MetricFamily instance from the head of recordSamples, or error if
 // that fails. In either case, this function returns the recordSamples items
 // that weren't consumed.
-func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter Getter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
+func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter TargetGetter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
 	sample := recordSamples[0]
 	tsdblset, ok := seriesGetter.get(sample.Ref)
 	if !ok {

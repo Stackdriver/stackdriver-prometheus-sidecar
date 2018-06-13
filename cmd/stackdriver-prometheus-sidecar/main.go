@@ -128,6 +128,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	targetCache := targets.NewCache(logger, nil, targetsURL)
+	go targetCache.Run(context.Background())
 
 	// TODO(jkohen): Remove once we have proper translation of all metric
 	// types. Currently Stackdriver fails the entire request if you attempt
@@ -177,7 +179,7 @@ func main() {
 				timeout:           10 * time.Second,
 			},
 		)
-		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), cfg.walDirectory, targetsURL, queueManager)
+		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), cfg.walDirectory, targetCache, queueManager)
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.
