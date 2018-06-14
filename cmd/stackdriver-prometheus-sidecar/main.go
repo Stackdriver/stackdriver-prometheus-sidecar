@@ -36,9 +36,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/config"
+	"github.com/prometheus/prometheus/pkg/labels"
 	k8s_runtime "k8s.io/apimachinery/pkg/util/runtime"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
@@ -146,38 +146,6 @@ func main() {
 		queueManager = stackdriver.NewQueueManager(
 			log.With(logger, "component", "queue_manager"),
 			config.DefaultQueueConfig,
-			cfg.globalLabels,
-			// TODO(jkohen): remove this configuration once we have proper metadata integration.
-			[]*config.RelabelConfig{
-				{
-					SourceLabels: []model.LabelName{"job"},
-					TargetLabel:  "__meta_kubernetes_pod_container_name",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "$1",
-				},
-				{
-					SourceLabels: []model.LabelName{"instance"},
-					TargetLabel:  "__meta_kubernetes_pod_name",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "$1",
-				},
-				{
-					SourceLabels: []model.LabelName{"job"},
-					TargetLabel:  "job",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "",
-				},
-				{
-					SourceLabels: []model.LabelName{"instance"},
-					TargetLabel:  "instance",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "",
-				},
-			},
 			&clientFactory{
 				logger:            log.With(logger, "component", "storage"),
 				projectIdResource: cfg.projectIdResource,
@@ -188,7 +156,7 @@ func main() {
 		prometheusReader = retrieval.NewPrometheusReader(
 			log.With(logger, "component", "Prometheus reader"),
 			cfg.walDirectory,
-			targetCache,
+			retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(cfg.globalLabels)),
 			metadataCache,
 			queueManager,
 		)
