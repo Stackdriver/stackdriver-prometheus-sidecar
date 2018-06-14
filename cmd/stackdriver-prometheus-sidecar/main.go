@@ -39,7 +39,6 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
-	k8s_runtime "k8s.io/apimachinery/pkg/util/runtime"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
@@ -108,15 +107,6 @@ func main() {
 	}
 
 	logger := promlog.New(cfg.logLevel)
-
-	// XXX(fabxc): Kubernetes does background logging which we can only customize by modifying
-	// a global variable.
-	// Ultimately, here is the best place to set it.
-	k8s_runtime.ErrorHandlers = []func(error){
-		func(err error) {
-			level.Error(log.With(logger, "component", "k8s_client_runtime")).Log("err", err)
-		},
-	}
 
 	level.Info(logger).Log("msg", "Starting Stackdriver Prometheus sidecar", "version", version.Info())
 	level.Info(logger).Log("build_context", version.BuildContext())
