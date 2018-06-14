@@ -129,7 +129,6 @@ func main() {
 		panic(err)
 	}
 	targetCache := targets.NewCache(logger, nil, targetsURL)
-	go targetCache.Run(context.Background())
 
 	// TODO(jkohen): Remove once we have proper translation of all metric
 	// types. Currently Stackdriver fails the entire request if you attempt
@@ -199,6 +198,15 @@ func main() {
 	http.Handle("/metrics", promhttp.Handler())
 
 	var g group.Group
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			targetCache.Run(ctx)
+			return nil
+		}, func(error) {
+			cancel()
+		})
+	}
 	{
 		term := make(chan os.Signal)
 		signal.Notify(term, os.Interrupt, syscall.SIGTERM)
