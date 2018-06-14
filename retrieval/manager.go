@@ -16,31 +16,39 @@ package retrieval
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/tsdb"
+	tsdblabels "github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
 )
 
+type TargetGetter interface {
+	Get(ctx context.Context, lset labels.Labels) (*targets.Target, error)
+}
+
 // NewPrometheusReader is the PrometheusReader constructor
-func NewPrometheusReader(logger log.Logger, walDirectory string, appender Appender) *PrometheusReader {
+func NewPrometheusReader(logger log.Logger, walDirectory string, targetGetter TargetGetter, appender Appender) *PrometheusReader {
 	return &PrometheusReader{
 		appender:     appender,
 		logger:       logger,
 		walDirectory: walDirectory,
+		targetGetter: targetGetter,
 	}
 }
 
 type PrometheusReader struct {
 	logger       log.Logger
 	walDirectory string
+	targetGetter TargetGetter
 	appender     Appender
 	cancelTail   context.CancelFunc
 }
@@ -86,7 +94,7 @@ func (r *PrometheusReader) Run() error {
 			}
 			for len(recordSamples) > 0 {
 				var outputSample *MetricFamily
-				outputSample, recordSamples, err = buildSample(seriesCache, recordSamples)
+				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
@@ -108,19 +116,26 @@ func (r *PrometheusReader) Stop() {
 // Creates a MetricFamily instance from the head of recordSamples, or error if
 // that fails. In either case, this function returns the recordSamples items
 // that weren't consumed.
-func buildSample(seriesGetter seriesGetter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
+func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter TargetGetter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
 	sample := recordSamples[0]
-	lset, ok := seriesGetter.get(sample.Ref)
+	tsdblset, ok := seriesGetter.get(sample.Ref)
 	if !ok {
-		return nil, recordSamples[1:], fmt.Errorf("sample=%v", sample)
+		return nil, recordSamples[1:], fmt.Errorf("No series matched sample by ref %v", sample)
 	}
+	lset := pkgLabels(tsdblset)
+	// Fill in the discovered labels from the Targets API.
+	target, err := targetGetter.Get(ctx, lset)
+	if err != nil {
+		return nil, recordSamples[1:], errors.Wrapf(err, "No target matched labels %v", lset)
+	}
+	metricLabels := targets.DropTargetLabels(lset, target.Labels)
 	// TODO(jkohen): Rebuild histograms and summary from individual time series.
 	metricFamily := &dto.MetricFamily{
 		Metric: []*dto.Metric{{}},
 	}
 	metric := metricFamily.Metric[0]
-	metric.Label = make([]*dto.LabelPair, 0, len(lset)-1)
-	for _, l := range lset {
+	metric.Label = make([]*dto.LabelPair, 0, len(metricLabels)-1)
+	for _, l := range metricLabels {
 		if l.Name == labels.MetricName {
 			metricFamily.Name = proto.String(l.Value)
 			continue
@@ -136,17 +151,15 @@ func buildSample(seriesGetter seriesGetter, recordSamples []tsdb.RefSample) (*Me
 	metric.TimestampMs = proto.Int64(sample.T)
 	// TODO(jkohen): track reset timestamps.
 	metricResetTimestampMs := []int64{NoTimestamp}
-	// TODO(jkohen): fill in the discovered labels from the Targets API.
-	targetLabels := make(labels.Labels, 0, len(lset))
-	for _, l := range lset {
-		if l.Name == labels.MetricName {
-			continue
-		}
-		targetLabels = append(targetLabels, labels.Label(l))
-	}
-	// labels.Labels expects the contents to be sorted. We could move to an
-	// interface that doesn't require order, to save some cycles.
-	sort.Sort(targetLabels)
-	m, err := NewMetricFamily(metricFamily, metricResetTimestampMs, targetLabels)
+	m, err := NewMetricFamily(metricFamily, metricResetTimestampMs, target.DiscoveredLabels)
 	return m, recordSamples[1:], err
+}
+
+// TODO(jkohen): We should be able to avoid this conversion.
+func pkgLabels(input tsdblabels.Labels) labels.Labels {
+	output := make(labels.Labels, 0, len(input))
+	for _, l := range input {
+		output = append(output, labels.Label(l))
+	}
+	return output
 }

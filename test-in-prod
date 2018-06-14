@@ -3,4 +3,5 @@ exec ./stackdriver-prometheus-sidecar \
      --stackdriver.project-id=prometheus-to-sd \
      --stackdriver.global-label=_kubernetes_cluster_name=prom-test-cluster-1 \
      --stackdriver.global-label=_kubernetes_location=us-central1-a \
-     --stackdriver.global-label=__meta_kubernetes_namespace=stackdriver
+     --stackdriver.global-label=__meta_kubernetes_namespace=stackdriver \
+     "$@"

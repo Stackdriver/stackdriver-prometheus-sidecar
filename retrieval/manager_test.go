@@ -14,8 +14,11 @@ limitations under the License.
 package retrieval
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
@@ -35,49 +38,102 @@ func (g *seriesMap) get(ref uint64) (labels.Labels, bool) {
 	return ls, ok
 }
 
+// Implements TargetGetter.
+// The map key is the value of the first label in the lset given as an input to Get.
+type targetMap struct {
+	m map[string]targets.Target
+}
+
+func newTargetMap() targetMap {
+	return targetMap{m: make(map[string]targets.Target)}
+}
+
+func (g *targetMap) Get(ctx context.Context, lset promlabels.Labels) (*targets.Target, error) {
+	key := lset[0].Value
+	t, ok := g.m[key]
+	if !ok {
+		return nil, fmt.Errorf("no target match for label %v", lset[0])
+	}
+	return &t, nil
+}
+
 func TestBuildSample(t *testing.T) {
+	ctx := context.Background()
 	seriesMap := newSeriesMap()
+	targetMap := newTargetMap()
 
 	timestamp := int64(1234)
 	value := 2.1
 
-	recordSamples := []tsdb.RefSample{
-		{Ref: /*unknown*/ 999, T: timestamp, V: value},
-		{Ref: /*unknown*/ 999, T: timestamp, V: value},
-	}
-	sample, recordSamples, err := buildSample(&seriesMap, recordSamples)
-	if err == nil {
-		t.Errorf("Expected error, got sample %v", sample)
-	}
-	if len(recordSamples) != 1 {
-		t.Errorf("Expected one leftover sample, got samples %v", recordSamples)
-	}
+	t.Run("NoSeries", func(t *testing.T) {
+		recordSamples := []tsdb.RefSample{
+			{Ref: /*unknown*/ 999, T: timestamp, V: value},
+			{Ref: /*unknown*/ 999, T: timestamp, V: value},
+		}
+		sample, recordSamples, err := buildSample(ctx, &seriesMap, &targetMap, recordSamples)
+		if err == nil {
+			t.Errorf("Expected error, got sample %v", sample)
+		}
+		if len(recordSamples) != 1 {
+			t.Errorf("Expected one leftover sample, got samples %v", recordSamples)
+		}
+	})
 
-	ref := uint64(0)
-	seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}}
-	seriesMap.m[ref] = seriesLabels
-	recordSamples = []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
-	sample, recordSamples, err = buildSample(&seriesMap, recordSamples)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(recordSamples) != 0 {
-		t.Errorf("Expected all samples to be consumed, got samples %v", recordSamples)
-	}
-	if sample == nil {
-		t.Error("Unexpected nil sample")
-	}
-	if sample.GetName() != "my_metric" {
-		t.Errorf("Expected name 'my_metric', got %v", sample.GetName())
-	}
-	if sample.Metric[0].GetTimestampMs() != timestamp {
-		t.Errorf("Expected timestamp '%v', got %v", timestamp, sample.Metric[0].GetTimestampMs())
-	}
-	if sample.Metric[0].Untyped.GetValue() != value {
-		t.Errorf("Expected value '%v', got %v", value, sample.Metric[0].Untyped.GetValue())
-	}
-	targetLabels := promlabels.FromStrings("job", "job1", "instance", "i1")
-	if !promlabels.Equal(sample.TargetLabels, targetLabels) {
-		t.Errorf("Expected target labels '%v', got %v", targetLabels, sample.TargetLabels)
-	}
+	t.Run("NoTarget", func(t *testing.T) {
+		ref := uint64(0)
+		seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}}
+		seriesMap.m[ref] = seriesLabels
+		recordSamples := []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
+		sample, recordSamples, err := buildSample(ctx, &seriesMap, &targetMap, recordSamples)
+		if err == nil {
+			t.Errorf("Expected error, got sample %v", sample)
+		}
+		if len(recordSamples) != 0 {
+			t.Errorf("Expected all samples to be consumed, got samples %v", recordSamples)
+		}
+	})
+
+	t.Run("Successful", func(t *testing.T) {
+		ref := uint64(0)
+		seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}, {"mkey", "mvalue"}}
+		seriesMap.m[ref] = seriesLabels
+		// The discovered labels include a label "job" and no "instance"
+		// label, which will cause the metric labels to include
+		// "instance", but not "job".
+		targetMap.m[seriesLabels[0].Value] = targets.Target{
+			DiscoveredLabels: promlabels.Labels{{"dkey", "dvalue"}},
+			Labels:           promlabels.Labels{{"job", "job1"}},
+		}
+		recordSamples := []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
+		sample, recordSamples, err := buildSample(ctx, &seriesMap, &targetMap, recordSamples)
+		if err != nil {
+			t.Error(err)
+		}
+		if len(recordSamples) != 0 {
+			t.Errorf("Expected all samples to be consumed, got samples %v", recordSamples)
+		}
+		if sample == nil {
+			t.Fatal("Unexpected nil sample")
+		}
+		if sample.MetricFamily == nil {
+			t.Fatalf("Unexpected nil MetricFamily %v", sample)
+		}
+		if sample.GetName() != "my_metric" {
+			t.Errorf("Expected name 'my_metric', got %v", sample.GetName())
+		}
+		if sample.Metric[0].GetTimestampMs() != timestamp {
+			t.Errorf("Expected timestamp '%v', got %v", timestamp, sample.Metric[0].GetTimestampMs())
+		}
+		if sample.Metric[0].Untyped.GetValue() != value {
+			t.Errorf("Expected value '%v', got %v", value, sample.Metric[0].Untyped.GetValue())
+		}
+		targetLabels := promlabels.FromStrings("dkey", "dvalue")
+		if !promlabels.Equal(sample.TargetLabels, targetLabels) {
+			t.Errorf("Expected target labels '%v', got %v", targetLabels, sample.TargetLabels)
+		}
+		metricLabels := promlabels.FromStrings("instance", "i1", "mkey", "mvalue")
+		if !promlabels.Equal(LabelPairsToLabels(sample.Metric[0].Label), metricLabels) {
+			t.Errorf("Expected metric labels '%v', got %v", metricLabels, sample.Metric[0].Label)
+		}
+	})
 }

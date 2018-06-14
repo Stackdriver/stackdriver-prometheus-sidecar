@@ -43,6 +43,7 @@ import (
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/prometheus/common/promlog"
 	promlogflag "github.com/prometheus/common/promlog/flag"
 )
@@ -62,7 +63,7 @@ func main() {
 		globalLabels       map[string]string
 		stackdriverAddress *url.URL
 		walDirectory       string
-		prometheusAddress  string
+		prometheusURL      *url.URL
 		listenAddress      string
 
 		logLevel promlog.AllowedLevel
@@ -91,7 +92,7 @@ func main() {
 		Default("data/wal").StringVar(&cfg.walDirectory)
 
 	a.Flag("prometheus.api-address", "Address to listen on for UI, API, and telemetry.").
-		Default("0.0.0.0:9090").StringVar(&cfg.prometheusAddress)
+		Default("http://127.0.0.1:9090/").URLVar(&cfg.prometheusURL)
 
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry.").
 		Default("0.0.0.0:9091").StringVar(&cfg.listenAddress)
@@ -106,8 +107,6 @@ func main() {
 	}
 
 	logger := promlog.New(cfg.logLevel)
-	cfg.globalLabels["_stackdriver_project_id"] = *projectId
-	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
 
 	// XXX(fabxc): Kubernetes does background logging which we can only customize by modifying
 	// a global variable.
@@ -122,6 +121,14 @@ func main() {
 	level.Info(logger).Log("build_context", version.BuildContext())
 	level.Info(logger).Log("host_details", Uname())
 	level.Info(logger).Log("fd_limits", FdLimits())
+
+	cfg.globalLabels["_stackdriver_project_id"] = *projectId
+	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
+	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
+	if err != nil {
+		panic(err)
+	}
+	targetCache := targets.NewCache(logger, nil, targetsURL)
 
 	// TODO(jkohen): Remove once we have proper translation of all metric
 	// types. Currently Stackdriver fails the entire request if you attempt
@@ -171,7 +178,7 @@ func main() {
 				timeout:           10 * time.Second,
 			},
 		)
-		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), cfg.walDirectory, queueManager)
+		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), cfg.walDirectory, targetCache, queueManager)
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.
@@ -191,6 +198,15 @@ func main() {
 	http.Handle("/metrics", promhttp.Handler())
 
 	var g group.Group
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			targetCache.Run(ctx)
+			return nil
+		}, func(error) {
+			cancel()
+		})
+	}
 	{
 		term := make(chan os.Signal)
 		signal.Notify(term, os.Interrupt, syscall.SIGTERM)

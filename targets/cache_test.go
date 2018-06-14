@@ -39,7 +39,7 @@ func TestTargetCache_Error(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewCache(ctx, nil, nil, u)
+	c := NewCache(nil, nil, u)
 
 	expectedTarget := &Target{
 		Labels: labels.FromStrings("job", "a", "instance", "c"),
@@ -104,7 +104,7 @@ func TestTargetCache_Success(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewCache(ctx, nil, nil, u)
+	c := NewCache(nil, nil, u)
 
 	handler = func() []*Target {
 		return []*Target{
