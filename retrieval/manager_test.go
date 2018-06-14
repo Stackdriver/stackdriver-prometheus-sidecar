@@ -16,6 +16,7 @@ package retrieval
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
@@ -23,6 +24,21 @@ import (
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 )
+
+func TestTargetsWithDiscoveredLabels(t *testing.T) {
+	tm := newTargetMap()
+	tm.m["2"] = targets.Target{DiscoveredLabels: promlabels.FromStrings("b", "2")}
+
+	wrapped := TargetsWithDiscoveredLabels(tm, promlabels.FromStrings("a", "1", "c", "3"))
+
+	target, err := wrapped.Get(context.Background(), promlabels.FromStrings("b", "2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(target.DiscoveredLabels, promlabels.FromStrings("a", "1", "b", "2", "c", "3")) {
+		t.Fatalf("unexpected discovered labels %s", target.DiscoveredLabels)
+	}
+}
 
 // Implements seriesGetter.
 type seriesMap struct {
@@ -44,8 +60,8 @@ type targetMap struct {
 	m map[string]targets.Target
 }
 
-func newTargetMap() targetMap {
-	return targetMap{m: make(map[string]targets.Target)}
+func newTargetMap() *targetMap {
+	return &targetMap{m: make(map[string]targets.Target)}
 }
 
 func (g *targetMap) Get(ctx context.Context, lset promlabels.Labels) (*targets.Target, error) {
@@ -70,7 +86,7 @@ func TestBuildSample(t *testing.T) {
 			{Ref: /*unknown*/ 999, T: timestamp, V: value},
 			{Ref: /*unknown*/ 999, T: timestamp, V: value},
 		}
-		sample, recordSamples, err := buildSample(ctx, &seriesMap, &targetMap, recordSamples)
+		sample, recordSamples, err := buildSample(ctx, &seriesMap, targetMap, recordSamples)
 		if err == nil {
 			t.Errorf("Expected error, got sample %v", sample)
 		}
@@ -84,7 +100,7 @@ func TestBuildSample(t *testing.T) {
 		seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}}
 		seriesMap.m[ref] = seriesLabels
 		recordSamples := []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
-		sample, recordSamples, err := buildSample(ctx, &seriesMap, &targetMap, recordSamples)
+		sample, recordSamples, err := buildSample(ctx, &seriesMap, targetMap, recordSamples)
 		if err == nil {
 			t.Errorf("Expected error, got sample %v", sample)
 		}
@@ -105,7 +121,7 @@ func TestBuildSample(t *testing.T) {
 			Labels:           promlabels.Labels{{"job", "job1"}},
 		}
 		recordSamples := []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
-		sample, recordSamples, err := buildSample(ctx, &seriesMap, &targetMap, recordSamples)
+		sample, recordSamples, err := buildSample(ctx, &seriesMap, targetMap, recordSamples)
 		if err != nil {
 			t.Error(err)
 		}

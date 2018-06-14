@@ -129,7 +129,7 @@ func (r *PrometheusReader) Run() error {
 			}
 			for len(recordSamples) > 0 {
 				var outputSample *MetricFamily
-				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, r.metadataGetter, recordSamples)
+				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
@@ -155,7 +155,6 @@ func buildSample(
 	ctx context.Context,
 	seriesGetter seriesGetter,
 	targetGetter TargetGetter,
-	metadataGetter MetadataGetter,
 	recordSamples []tsdb.RefSample,
 ) (*MetricFamily, []tsdb.RefSample, error) {
 	sample := recordSamples[0]

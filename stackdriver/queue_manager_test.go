@@ -201,7 +201,7 @@ func TestSampleDelivery(t *testing.T) {
 	cfg := config.DefaultQueueConfig
 	cfg.Capacity = n
 	cfg.MaxSamplesPerSend = n
-	m := NewQueueManager(nil, cfg, nil, nil, c)
+	m := NewQueueManager(nil, cfg, c)
 
 	// These should be received by the client.
 	for _, s := range samples {
@@ -237,7 +237,7 @@ func TestSampleDeliveryMultiShard(t *testing.T) {
 	// flush after each sample, to avoid blocking the test
 	cfg.MaxSamplesPerSend = 1
 	cfg.MaxShards = numShards
-	m := NewQueueManager(nil, cfg, nil, nil, c)
+	m := NewQueueManager(nil, cfg, c)
 	m.Start()
 	defer m.Stop()
 	m.reshard(numShards) // blocks until resharded
@@ -273,7 +273,7 @@ func TestSampleDeliveryTimeout(t *testing.T) {
 	cfg := config.DefaultQueueConfig
 	cfg.MaxShards = 1
 	cfg.BatchSendDeadline = 100 * time.Millisecond
-	m := NewQueueManager(nil, cfg, nil, nil, c)
+	m := NewQueueManager(nil, cfg, c)
 	m.Start()
 	defer m.Stop()
 
@@ -292,110 +292,6 @@ func TestSampleDeliveryTimeout(t *testing.T) {
 	for _, s := range samples {
 		m.Append(samplesToMetricFamily(s))
 	}
-	c.waitForExpectedSamples(t)
-}
-
-func TestRelabel(t *testing.T) {
-	// This will cause a flush right away.
-	n := config.DefaultQueueConfig.MaxSamplesPerSend
-
-	samples := make([]sample, 0, n)
-	expectedSamples := make([]sample, 0, n)
-	for i := 0; i < n-1; i++ {
-		name := fmt.Sprintf("test_metric_%d", i)
-		samples = append(samples,
-			sample{
-				Name: name,
-				Labels: map[string]string{
-					"drop_label": "x",
-				},
-				Value:          float64(i),
-				ResetTimestamp: 1234567890000,
-				Timestamp:      2234567890000,
-			})
-		expectedSamples = append(expectedSamples,
-			sample{
-				Name: name,
-				Labels: map[string]string{
-					"external_1":        "a",
-					"external_2":        "b",
-					model.InstanceLabel: strconv.Itoa(i),
-				},
-				Value:          float64(i),
-				ResetTimestamp: 1234567890000,
-				Timestamp:      2234567890000,
-			})
-	}
-	i := n - 1
-	// Ensure that the metrics and reset timestamps stay synchronized after
-	// dropping metrics from the family.
-	multiMetricSamples := []sample{
-		{
-			Name: "multi_metric",
-			Labels: map[string]string{
-				"drop_metric": "true",
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890000,
-			Timestamp:      2234567890000,
-		},
-		{
-			Name: "multi_metric",
-			Labels: map[string]string{
-				"keep_metric": "true",
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890001,
-			Timestamp:      2234567890001,
-		},
-	}
-	expectedSamples = append(expectedSamples,
-		sample{
-			Name: "multi_metric",
-			Labels: map[string]string{
-				"keep_metric":       "true",
-				"external_1":        "a",
-				"external_2":        "b",
-				model.InstanceLabel: strconv.Itoa(i),
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890001,
-			Timestamp:      2234567890001,
-		})
-
-	c := NewTestStorageClient(t)
-	if len(expectedSamples) != config.DefaultQueueConfig.MaxSamplesPerSend {
-		// These should be equal, or the test will block waiting for the batch timeout.
-		t.Fatal("bug in test")
-	}
-	c.expectSamples(expectedSamples)
-
-	m := NewQueueManager(nil, config.DefaultQueueConfig,
-		map[string]string{
-			"external_1": "a",
-			"external_2": "b",
-		},
-		[]*config.RelabelConfig{
-			{
-				Action: "labeldrop",
-				Regex:  config.MustNewRegexp("drop_label"),
-			},
-			{
-				SourceLabels: []model.LabelName{"drop_metric"},
-				Action:       "drop",
-				Regex:        config.MustNewRegexp("true"),
-			},
-		},
-		c)
-
-	for _, s := range samples {
-		m.Append(samplesToMetricFamily(s))
-	}
-	m.Append(samplesToMetricFamily(multiMetricSamples...))
-
-	m.Start()
-	defer m.Stop()
-
 	c.waitForExpectedSamples(t)
 }
 
@@ -419,7 +315,7 @@ func TestSampleDeliveryOrder(t *testing.T) {
 
 	c := NewTestStorageClient(t)
 	c.expectSamples(samples)
-	m := NewQueueManager(nil, config.DefaultQueueConfig, nil, nil, c)
+	m := NewQueueManager(nil, config.DefaultQueueConfig, c)
 
 	m.Start()
 	defer m.Stop()
@@ -450,7 +346,7 @@ func TestSampleOutOfOrder(t *testing.T) {
 
 	c := NewTestStorageClient(t)
 	c.expectSamples(samples)
-	m := NewQueueManager(nil, config.DefaultQueueConfig, nil, nil, c)
+	m := NewQueueManager(nil, config.DefaultQueueConfig, c)
 
 	m.Start()
 	defer m.Stop()
@@ -505,7 +401,7 @@ func TestSampleOutOfOrderMultiShard(t *testing.T) {
 	// flush after each sample, to avoid blocking the test
 	cfg.MaxSamplesPerSend = 1
 	cfg.MaxShards = numShards
-	m := NewQueueManager(nil, config.DefaultQueueConfig, nil, nil, c)
+	m := NewQueueManager(nil, config.DefaultQueueConfig, c)
 	m.Start()
 	defer m.Stop()
 
@@ -548,7 +444,7 @@ func TestStoreEmptyRequest(t *testing.T) {
 	}
 
 	c := NewTestStorageClient(t)
-	m := NewQueueManager(nil, config.DefaultQueueConfig, nil, nil, c)
+	m := NewQueueManager(nil, config.DefaultQueueConfig, c)
 
 	// These should be received by the client.
 	for _, s := range samples {
@@ -657,7 +553,7 @@ func TestSpawnNotMoreThanMaxConcurrentSendsGoroutines(t *testing.T) {
 	cfg := config.DefaultQueueConfig
 	cfg.MaxShards = 1
 	cfg.Capacity = n
-	m := NewQueueManager(nil, cfg, nil, nil, c)
+	m := NewQueueManager(nil, cfg, c)
 
 	m.Start()
 
