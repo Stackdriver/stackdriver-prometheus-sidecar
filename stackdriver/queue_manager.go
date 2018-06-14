@@ -18,13 +18,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/config"
 	"golang.org/x/time/rate"
-	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
+	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 // String constants for instrumentation.
@@ -127,7 +126,7 @@ func init() {
 // external timeseries database.
 type StorageClient interface {
 	// Store stores the given metric families in the remote storage.
-	Store(*monitoring.CreateTimeSeriesRequest) error
+	Store(*monitoring_pb.CreateTimeSeriesRequest) error
 	// Release the resources allocated by the client.
 	Close() error
 }
@@ -142,11 +141,10 @@ type StorageClientFactory interface {
 type QueueManager struct {
 	logger log.Logger
 
-	cfg              config.QueueConfig
-	clientFactory    StorageClientFactory
-	queueName        string
-	logLimiter       *rate.Limiter
-	resourceMappings []ResourceMap
+	cfg           config.QueueConfig
+	clientFactory StorageClientFactory
+	queueName     string
+	logLimiter    *rate.Limiter
 
 	shardsMtx   sync.RWMutex
 	shards      *shardCollection
@@ -163,13 +161,11 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory St
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	resourceMappings := DefaultResourceMappings
 	t := &QueueManager{
-		logger:           logger,
-		cfg:              cfg,
-		clientFactory:    clientFactory,
-		queueName:        clientFactory.Name(),
-		resourceMappings: resourceMappings,
+		logger:        logger,
+		cfg:           cfg,
+		clientFactory: clientFactory,
+		queueName:     clientFactory.Name(),
 
 		logLimiter:  rate.NewLimiter(logRateLimit, logBurst),
 		numShards:   1,
@@ -194,23 +190,10 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory St
 // Append queues a sample to be sent to the remote storage. It drops the
 // sample on the floor if the queue is full.
 // Always returns nil.
-func (t *QueueManager) Append(metricFamily *retrieval.MetricFamily) error {
-	// Drop family if we dropped all metrics.
-	if metricFamily.Metric == nil {
-		return nil
-	}
-	if len(metricFamily.Metric) != len(metricFamily.MetricResetTimestampMs) {
-		level.Error(t.logger).Log(
-			"msg", "bug: number of metrics and reset timestamps must match",
-			"metrics", len(metricFamily.Metric),
-			"reset_ts", len(metricFamily.MetricResetTimestampMs))
-	}
-
-	queueLength.WithLabelValues(t.queueName).Add(float64(len(metricFamily.Metric)))
+func (t *QueueManager) Append(hash uint64, sample *monitoring_pb.TimeSeries) error {
+	queueLength.WithLabelValues(t.queueName).Inc()
 	t.shardsMtx.RLock()
-	for i := range metricFamily.Metric {
-		t.shards.enqueue(metricFamily.Slice(i))
-	}
+	t.shards.enqueue(hash, sample)
 	t.shardsMtx.RUnlock()
 	return nil
 }
@@ -346,7 +329,7 @@ func (t *QueueManager) reshard(n int) {
 	// This is a critical section, and growing the map on a large deployment
 	// is slow, so preallocate the map to be near the expected size.
 	for newShardIndex := range newShards.shards {
-		newShards.shards[newShardIndex].youngestSampleIntervals = make(map[uint64]sampleInterval, len(oldShards.shards[0].youngestSampleIntervals))
+		newShards.shards[newShardIndex].youngestSampleIntervals = make(map[uint64]*monitoring_pb.TimeInterval, len(oldShards.shards[0].youngestSampleIntervals))
 	}
 	newShardsModulo := uint64(len(newShards.shards))
 	for oldShardIndex := range oldShards.shards {
@@ -372,30 +355,42 @@ type sampleInterval struct {
 // Stackdriver after the reference interval. This defines an order for value
 // timestamps with equal reset timestamp, and requires that if the reset
 // timestamp moves, it doesn't overlap with the previous interval.
-func (si *sampleInterval) AcceptsInterval(o sampleInterval) bool {
-	return (o.resetTimestamp == si.resetTimestamp && o.timestamp > si.timestamp) ||
-		(o.resetTimestamp > si.resetTimestamp && o.resetTimestamp >= si.timestamp)
+func acceptsInterval(young, current *monitoring_pb.TimeInterval) bool {
+	currentEnd := time.Unix(current.EndTime.Seconds, int64(current.EndTime.Nanos))
+	youngEnd := time.Unix(young.EndTime.Seconds, int64(young.EndTime.Nanos))
+	if current.EndTime == nil {
+		return currentEnd.After(youngEnd)
+	}
+	youngReset := time.Unix(young.StartTime.Seconds, int64(young.StartTime.Nanos))
+	currentReset := time.Unix(current.StartTime.Seconds, int64(current.StartTime.Nanos))
+
+	return currentReset == youngReset && currentEnd.After(youngEnd) ||
+		currentReset.After(youngReset) && !currentReset.Before(youngEnd)
+}
+
+type queueEntry struct {
+	hash   uint64
+	sample *monitoring_pb.TimeSeries
 }
 
 type shard struct {
-	queue                   chan *retrieval.MetricFamily
-	youngestSampleIntervals map[uint64]sampleInterval
+	queue                   chan queueEntry
+	youngestSampleIntervals map[uint64]*monitoring_pb.TimeInterval
 }
 
 func newShard(cfg config.QueueConfig) shard {
 	return shard{
-		queue: make(chan *retrieval.MetricFamily, cfg.Capacity),
-		youngestSampleIntervals: map[uint64]sampleInterval{},
+		queue: make(chan queueEntry, cfg.Capacity),
+		youngestSampleIntervals: map[uint64]*monitoring_pb.TimeInterval{},
 	}
 }
 
 type shardCollection struct {
-	qm         *QueueManager
-	client     StorageClient
-	translator *Translator
-	shards     []shard
-	done       chan struct{}
-	wg         sync.WaitGroup
+	qm     *QueueManager
+	client StorageClient
+	shards []shard
+	done   chan struct{}
+	wg     sync.WaitGroup
 }
 
 func (t *QueueManager) newShardCollection(numShards int) *shardCollection {
@@ -404,10 +399,9 @@ func (t *QueueManager) newShardCollection(numShards int) *shardCollection {
 		shards[i] = newShard(t.cfg)
 	}
 	s := &shardCollection{
-		qm:         t,
-		translator: NewTranslator(t.logger, metricsPrefix, t.resourceMappings),
-		shards:     shards,
-		done:       make(chan struct{}),
+		qm:     t,
+		shards: shards,
+		done:   make(chan struct{}),
 	}
 	s.wg.Add(numShards)
 	return s
@@ -431,12 +425,10 @@ func (s *shardCollection) stop() {
 	level.Debug(s.qm.logger).Log("msg", "Stopped resharding")
 }
 
-func (s *shardCollection) enqueue(sample *retrieval.MetricFamily) {
+func (s *shardCollection) enqueue(hash uint64, sample *monitoring_pb.TimeSeries) {
 	s.qm.samplesIn.incr(1)
-
-	fp := sample.Fingerprint()
-	shardIndex := fp % uint64(len(s.shards))
-	s.shards[shardIndex].queue <- sample
+	shardIndex := hash % uint64(len(s.shards))
+	s.shards[shardIndex].queue <- queueEntry{sample: sample, hash: hash}
 }
 
 func (s *shardCollection) runShard(i int) {
@@ -448,7 +440,7 @@ func (s *shardCollection) runShard(i int) {
 	// Send batches of at most MaxSamplesPerSend samples to the remote storage.
 	// If we have fewer samples than that, flush them out after a deadline
 	// anyways.
-	pendingSamples := make([]*retrieval.MetricFamily, 0, s.qm.cfg.MaxSamplesPerSend)
+	pendingSamples := make([]*monitoring_pb.TimeSeries, 0, s.qm.cfg.MaxSamplesPerSend)
 	// Fingerprint of time series contained in pendingSamples. Gets reset
 	// whenever samples are extracted from pendingSamples.
 	newSeenSamples := func() map[uint64]struct{} {
@@ -469,7 +461,9 @@ func (s *shardCollection) runShard(i int) {
 
 	for {
 		select {
-		case sample, ok := <-shard.queue:
+		case entry, ok := <-shard.queue:
+			fp, sample := entry.hash, entry.sample
+
 			if !ok {
 				if len(pendingSamples) > 0 {
 					level.Debug(s.qm.logger).Log("msg", "Flushing samples to remote storage...", "count", len(pendingSamples))
@@ -488,15 +482,9 @@ func (s *shardCollection) runShard(i int) {
 			// shard. Each shard builds requests for a disjoint set
 			// of time series, so we don't need to track the
 			// intervals across shards.
-			fp := sample.Fingerprint()
-			if len(sample.Metric) != 1 || len(sample.MetricResetTimestampMs) != 1 {
-				panic("expected one metric")
-			}
-			currentSampleInterval := sampleInterval{
-				resetTimestamp: sample.MetricResetTimestampMs[0],
-				timestamp:      sample.Metric[0].GetTimestampMs(),
-			}
-			if youngestSampleInterval, ok := shard.youngestSampleIntervals[fp]; !ok || youngestSampleInterval.AcceptsInterval(currentSampleInterval) {
+			currentSampleInterval := sample.Points[0].Interval
+
+			if youngestSampleInterval, ok := shard.youngestSampleIntervals[fp]; !ok || acceptsInterval(youngestSampleInterval, currentSampleInterval) {
 				shard.youngestSampleIntervals[fp] = currentSampleInterval
 
 				// If pendingSamples contains a point for the
@@ -535,12 +523,11 @@ func (s *shardCollection) runShard(i int) {
 }
 
 // sendSamples to the remote storage with backoff for recoverable errors.
-func (s *shardCollection) sendSamples(client StorageClient, samples []*retrieval.MetricFamily) {
-	req := s.translator.ToCreateTimeSeriesRequest(samples)
+func (s *shardCollection) sendSamples(client StorageClient, samples []*monitoring_pb.TimeSeries) {
 	backoff := s.qm.cfg.MinBackoff
 	for retries := s.qm.cfg.MaxRetries; retries > 0; retries-- {
 		begin := time.Now()
-		err := client.Store(req)
+		err := client.Store(&monitoring_pb.CreateTimeSeriesRequest{TimeSeries: samples})
 
 		sentBatchDuration.WithLabelValues(s.qm.queueName).Observe(time.Since(begin).Seconds())
 		if err == nil {

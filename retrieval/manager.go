@@ -15,17 +15,14 @@ package retrieval
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
+	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 
-	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
@@ -60,6 +57,10 @@ func (tg *targetsWithDiscoveredLabels) Get(ctx context.Context, lset labels.Labe
 
 type MetadataGetter interface {
 	Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error)
+}
+
+type Appender interface {
+	Append(hash uint64, s *monitoring_pb.TimeSeries) error
 }
 
 // NewPrometheusReader is the PrometheusReader constructor
@@ -128,13 +129,17 @@ func (r *PrometheusReader) Run() error {
 				continue
 			}
 			for len(recordSamples) > 0 {
-				var outputSample *MetricFamily
-				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, recordSamples)
+				// Hashing labels is expensive – just use the reference as one.
+				// NOTE(fabxc): may this become an issue if multi-series samples are exposed with
+				// inconsistent orders across scrapes? We could use the lowest one of all involved series then.
+				hash := recordSamples[0].Ref
+				var outputSample *monitoring_pb.TimeSeries
+				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, r.metadataGetter, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
 				}
-				r.appender.Append(outputSample)
+				r.appender.Append(hash, outputSample)
 			}
 		case tsdb.RecordTombstones:
 		}
@@ -146,53 +151,6 @@ func (r *PrometheusReader) Run() error {
 // Stop cancels the reader and blocks until it has exited.
 func (r *PrometheusReader) Stop() {
 	r.cancelTail()
-}
-
-// Creates a MetricFamily instance from the head of recordSamples, or error if
-// that fails. In either case, this function returns the recordSamples items
-// that weren't consumed.
-func buildSample(
-	ctx context.Context,
-	seriesGetter seriesGetter,
-	targetGetter TargetGetter,
-	recordSamples []tsdb.RefSample,
-) (*MetricFamily, []tsdb.RefSample, error) {
-	sample := recordSamples[0]
-	tsdblset, ok := seriesGetter.get(sample.Ref)
-	if !ok {
-		return nil, recordSamples[1:], fmt.Errorf("No series matched sample by ref %v", sample)
-	}
-	lset := pkgLabels(tsdblset)
-	// Fill in the discovered labels from the Targets API.
-	target, err := targetGetter.Get(ctx, lset)
-	if err != nil {
-		return nil, recordSamples[1:], errors.Wrapf(err, "No target matched labels %v", lset)
-	}
-	metricLabels := targets.DropTargetLabels(lset, target.Labels)
-	// TODO(jkohen): Rebuild histograms and summary from individual time series.
-	metricFamily := &dto.MetricFamily{
-		Metric: []*dto.Metric{{}},
-	}
-	metric := metricFamily.Metric[0]
-	metric.Label = make([]*dto.LabelPair, 0, len(metricLabels)-1)
-	for _, l := range metricLabels {
-		if l.Name == labels.MetricName {
-			metricFamily.Name = proto.String(l.Value)
-			continue
-		}
-		metric.Label = append(metric.Label, &dto.LabelPair{
-			Name:  proto.String(l.Name),
-			Value: proto.String(l.Value),
-		})
-	}
-	// TODO(jkohen): Support all metric types and populate Help metadata.
-	metricFamily.Type = dto.MetricType_UNTYPED.Enum()
-	metric.Untyped = &dto.Untyped{Value: proto.Float64(sample.V)}
-	metric.TimestampMs = proto.Int64(sample.T)
-	// TODO(jkohen): track reset timestamps.
-	metricResetTimestampMs := []int64{NoTimestamp}
-	m, err := NewMetricFamily(metricFamily, metricResetTimestampMs, target.DiscoveredLabels)
-	return m, recordSamples[1:], err
 }
 
 // TODO(jkohen): We should be able to avoid this conversion.
