@@ -26,6 +26,7 @@ import (
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
 	tsdblabels "github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
@@ -35,22 +36,34 @@ type TargetGetter interface {
 	Get(ctx context.Context, lset labels.Labels) (*targets.Target, error)
 }
 
+type MetadataGetter interface {
+	Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error)
+}
+
 // NewPrometheusReader is the PrometheusReader constructor
-func NewPrometheusReader(logger log.Logger, walDirectory string, targetGetter TargetGetter, appender Appender) *PrometheusReader {
+func NewPrometheusReader(
+	logger log.Logger,
+	walDirectory string,
+	targetGetter TargetGetter,
+	metadataGetter MetadataGetter,
+	appender Appender,
+) *PrometheusReader {
 	return &PrometheusReader{
-		appender:     appender,
-		logger:       logger,
-		walDirectory: walDirectory,
-		targetGetter: targetGetter,
+		appender:       appender,
+		logger:         logger,
+		walDirectory:   walDirectory,
+		targetGetter:   targetGetter,
+		metadataGetter: metadataGetter,
 	}
 }
 
 type PrometheusReader struct {
-	logger       log.Logger
-	walDirectory string
-	targetGetter TargetGetter
-	appender     Appender
-	cancelTail   context.CancelFunc
+	logger         log.Logger
+	walDirectory   string
+	targetGetter   TargetGetter
+	metadataGetter MetadataGetter
+	appender       Appender
+	cancelTail     context.CancelFunc
 }
 
 func (r *PrometheusReader) Run() error {
@@ -94,7 +107,7 @@ func (r *PrometheusReader) Run() error {
 			}
 			for len(recordSamples) > 0 {
 				var outputSample *MetricFamily
-				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, recordSamples)
+				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, r.metadataGetter, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
@@ -116,7 +129,13 @@ func (r *PrometheusReader) Stop() {
 // Creates a MetricFamily instance from the head of recordSamples, or error if
 // that fails. In either case, this function returns the recordSamples items
 // that weren't consumed.
-func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter TargetGetter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
+func buildSample(
+	ctx context.Context,
+	seriesGetter seriesGetter,
+	targetGetter TargetGetter,
+	metadataGetter MetadataGetter,
+	recordSamples []tsdb.RefSample,
+) (*MetricFamily, []tsdb.RefSample, error) {
 	sample := recordSamples[0]
 	tsdblset, ok := seriesGetter.get(sample.Ref)
 	if !ok {

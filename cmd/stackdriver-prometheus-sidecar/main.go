@@ -41,6 +41,7 @@ import (
 	"github.com/prometheus/prometheus/config"
 	k8s_runtime "k8s.io/apimachinery/pkg/util/runtime"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
@@ -130,6 +131,12 @@ func main() {
 	}
 	targetCache := targets.NewCache(logger, nil, targetsURL)
 
+	metadataURL, err := cfg.prometheusURL.Parse(metadata.DefaultEndpointPath)
+	if err != nil {
+		panic(err)
+	}
+	metadataCache := metadata.NewCache(prometheus.DefaultRegisterer, nil, metadataURL)
+
 	// TODO(jkohen): Remove once we have proper translation of all metric
 	// types. Currently Stackdriver fails the entire request if you attempt
 	// to write to the different metric type, which we do fairly often at
@@ -178,7 +185,13 @@ func main() {
 				timeout:           10 * time.Second,
 			},
 		)
-		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), cfg.walDirectory, targetCache, queueManager)
+		prometheusReader = retrieval.NewPrometheusReader(
+			log.With(logger, "component", "Prometheus reader"),
+			cfg.walDirectory,
+			targetCache,
+			metadataCache,
+			queueManager,
+		)
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.
