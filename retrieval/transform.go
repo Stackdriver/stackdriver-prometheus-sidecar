@@ -53,7 +53,8 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		return nil, samples, errors.Wrap(err, "retrieving target failed")
 	}
 	if target == nil {
-		return nil, samples[1:], errors.Errorf("no target found for series %s", lset)
+		// TODO(fabxc): increment a metric.
+		return nil, samples[1:], nil
 	}
 	// Remove target labels and __name__ label.
 	finalLabels := targets.DropTargetLabels(pkgLabels(lset), target.Labels)
@@ -65,7 +66,8 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	}
 	// Drop series with too many labels.
 	if len(finalLabels) > maxLabelCount {
-		return nil, samples[1:], errors.Errorf("series %s exceeding max label count", lset)
+		// TODO(fabxc): increment a metric
+		return nil, samples[1:], nil
 	}
 
 	resource, ok := b.getResource(target.DiscoveredLabels)
@@ -82,7 +84,8 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		return nil, samples, errors.Wrap(err, "get metadata")
 	}
 	if metadata == nil {
-		return nil, samples[1:], errors.Errorf("no metadata found for series %s", lset)
+		// TODO(fabxc): increment a metric.
+		return nil, samples[1:], nil
 	}
 
 	// TODO(fabxc): complex metric types skipped for now.
@@ -94,7 +97,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	}
 	if getMetricKind(metadata.Type) == metric_pb.MetricDescriptor_CUMULATIVE {
 		// TODO(fabxc): infer the correct reset timestamp.
-		interval.StartTime = getTimestamp(0)
+		interval.StartTime = getTimestamp(1)
 	}
 	point := &monitoring_pb.Point{
 		Interval: interval,

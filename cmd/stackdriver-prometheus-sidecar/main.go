@@ -113,7 +113,7 @@ func main() {
 	level.Info(logger).Log("host_details", Uname())
 	level.Info(logger).Log("fd_limits", FdLimits())
 
-	cfg.globalLabels["_stackdriver_project_id"] = *projectId
+	cfg.globalLabels[retrieval.ProjectIDLabel] = *projectId
 	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
 	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {

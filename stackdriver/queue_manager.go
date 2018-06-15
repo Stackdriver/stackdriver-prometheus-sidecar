@@ -346,11 +346,6 @@ func (t *QueueManager) reshard(n int) {
 	newShards.start()
 }
 
-type sampleInterval struct {
-	resetTimestamp int64
-	timestamp      int64
-}
-
 // AcceptsInterval returns true if the given interval can be written to
 // Stackdriver after the reference interval. This defines an order for value
 // timestamps with equal reset timestamp, and requires that if the reset
@@ -358,14 +353,14 @@ type sampleInterval struct {
 func acceptsInterval(young, current *monitoring_pb.TimeInterval) bool {
 	currentEnd := time.Unix(current.EndTime.Seconds, int64(current.EndTime.Nanos))
 	youngEnd := time.Unix(young.EndTime.Seconds, int64(young.EndTime.Nanos))
-	if current.EndTime == nil {
+	if current.StartTime == nil {
 		return currentEnd.After(youngEnd)
 	}
 	youngReset := time.Unix(young.StartTime.Seconds, int64(young.StartTime.Nanos))
 	currentReset := time.Unix(current.StartTime.Seconds, int64(current.StartTime.Nanos))
 
-	return currentReset == youngReset && currentEnd.After(youngEnd) ||
-		currentReset.After(youngReset) && !currentReset.Before(youngEnd)
+	return (currentReset == youngReset && currentEnd.After(youngEnd)) ||
+		(currentReset.After(youngReset) && !currentReset.Before(youngEnd))
 }
 
 type queueEntry struct {

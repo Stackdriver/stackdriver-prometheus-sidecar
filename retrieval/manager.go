@@ -50,9 +50,10 @@ func (tg *targetsWithDiscoveredLabels) Get(ctx context.Context, lset labels.Labe
 	if err != nil || t == nil {
 		return t, err
 	}
-	t.DiscoveredLabels = append(append(labels.Labels{}, t.DiscoveredLabels...), tg.lset...)
-	sort.Sort(t.DiscoveredLabels)
-	return t, nil
+	repl := *t
+	repl.DiscoveredLabels = append(append(labels.Labels{}, t.DiscoveredLabels...), tg.lset...)
+	sort.Sort(repl.DiscoveredLabels)
+	return &repl, nil
 }
 
 type MetadataGetter interface {
@@ -117,11 +118,13 @@ func (r *PrometheusReader) Run() error {
 	// This is also the reason for the series cache dealing with "maxSegment" hints
 	// for series rather than precise ones.
 	reader := wal.NewReader(tailer)
+Outer:
 	for reader.Next() {
 		if reader.Err() != nil {
 			return reader.Err()
 		}
 		record := reader.Record()
+
 		var decoder tsdb.RecordDecoder
 		switch decoder.Type(record) {
 		case tsdb.RecordSeries:
@@ -140,10 +143,18 @@ func (r *PrometheusReader) Run() error {
 				continue
 			}
 			for len(recordSamples) > 0 {
+				select {
+				case <-ctx.Done():
+					break Outer
+				default:
+				}
 				var outputSample *monitoring_pb.TimeSeries
 				outputSample, recordSamples, err = builder.next(ctx, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
+					continue
+				}
+				if outputSample == nil {
 					continue
 				}
 				r.appender.Append(hashSeries(outputSample), outputSample)
