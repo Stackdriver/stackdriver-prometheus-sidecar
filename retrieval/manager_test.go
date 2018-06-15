@@ -15,19 +15,20 @@ package retrieval
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/labels"
+	metric_pb "google.golang.org/genproto/googleapis/api/metric"
+	monitoredres_pb "google.golang.org/genproto/googleapis/api/monitoredres"
+	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 func TestTargetsWithDiscoveredLabels(t *testing.T) {
-	tm := newTargetMap()
-	tm.m["2"] = targets.Target{DiscoveredLabels: promlabels.FromStrings("b", "2")}
+	tm := targetMap{
+		"/": &targets.Target{DiscoveredLabels: promlabels.FromStrings("b", "2")},
+	}
 
 	wrapped := TargetsWithDiscoveredLabels(tm, promlabels.FromStrings("a", "1", "c", "3"))
 
@@ -40,116 +41,67 @@ func TestTargetsWithDiscoveredLabels(t *testing.T) {
 	}
 }
 
-// Implements seriesGetter.
-type seriesMap struct {
-	m map[uint64]labels.Labels
-}
-
-func newSeriesMap() seriesMap {
-	return seriesMap{m: make(map[uint64]labels.Labels)}
-}
-
-func (g *seriesMap) get(ref uint64) (labels.Labels, bool) {
-	ls, ok := g.m[ref]
-	return ls, ok
-}
-
-// Implements TargetGetter.
-// The map key is the value of the first label in the lset given as an input to Get.
-type targetMap struct {
-	m map[string]targets.Target
-}
-
-func newTargetMap() *targetMap {
-	return &targetMap{m: make(map[string]targets.Target)}
-}
-
-func (g *targetMap) Get(ctx context.Context, lset promlabels.Labels) (*targets.Target, error) {
-	key := lset[0].Value
-	t, ok := g.m[key]
-	if !ok {
-		return nil, fmt.Errorf("no target match for label %v", lset[0])
+func TestHashSeries(t *testing.T) {
+	a := &monitoring_pb.TimeSeries{
+		Resource: &monitoredres_pb.MonitoredResource{
+			Type:   "rtype1",
+			Labels: map[string]string{"l1": "v1", "l2": "v2"},
+		},
+		Metric: &metric_pb.Metric{
+			Type:   "mtype1",
+			Labels: map[string]string{"l3": "v3", "l4": "v4"},
+		},
 	}
-	return &t, nil
-}
+	// Hash a many times and ensure the hash doesn't change. This checks that we don't produce different
+	// hashes by unordered map iteration.
+	hash := hashSeries(a)
+	for i := 0; i < 1000; i++ {
+		if hashSeries(a) != hash {
+			t.Fatalf("hash changed for same series")
+		}
+	}
+	for _, b := range []*monitoring_pb.TimeSeries{
+		{
+			Resource: &monitoredres_pb.MonitoredResource{
+				Type:   "rtype1",
+				Labels: map[string]string{"l1": "v1", "l2": "v2"},
+			},
+			Metric: &metric_pb.Metric{
+				Type:   "mtype2",
+				Labels: map[string]string{"l3": "v3", "l4": "v4"},
+			},
+		}, {
+			Resource: &monitoredres_pb.MonitoredResource{
+				Type:   "rtype2",
+				Labels: map[string]string{"l1": "v1", "l2": "v2"},
+			},
+			Metric: &metric_pb.Metric{
+				Type:   "mtype1",
+				Labels: map[string]string{"l3": "v3", "l4": "v4"},
+			},
+		}, {
+			Resource: &monitoredres_pb.MonitoredResource{
+				Type:   "rtype1",
+				Labels: map[string]string{"l1": "v1", "l2": "v2"},
+			},
+			Metric: &metric_pb.Metric{
+				Type:   "mtype1",
+				Labels: map[string]string{"l3": "v3", "l4": "v4-"},
+			},
+		}, {
+			Resource: &monitoredres_pb.MonitoredResource{
+				Type:   "rtype1",
+				Labels: map[string]string{"l1": "v1-", "l2": "v2"},
+			},
+			Metric: &metric_pb.Metric{
+				Type:   "mtype1",
+				Labels: map[string]string{"l3": "v3", "l4": "v4"},
+			},
+		},
+	} {
+		if hashSeries(b) == hash {
+			t.Fatalf("hash for different series did not change")
+		}
+	}
 
-func TestBuildSample(t *testing.T) {
-	ctx := context.Background()
-	seriesMap := newSeriesMap()
-	targetMap := newTargetMap()
-
-	timestamp := int64(1234)
-	value := 2.1
-
-	t.Run("NoSeries", func(t *testing.T) {
-		recordSamples := []tsdb.RefSample{
-			{Ref: /*unknown*/ 999, T: timestamp, V: value},
-			{Ref: /*unknown*/ 999, T: timestamp, V: value},
-		}
-		sample, recordSamples, err := buildSample(ctx, &seriesMap, targetMap, recordSamples)
-		if err == nil {
-			t.Errorf("Expected error, got sample %v", sample)
-		}
-		if len(recordSamples) != 1 {
-			t.Errorf("Expected one leftover sample, got samples %v", recordSamples)
-		}
-	})
-
-	t.Run("NoTarget", func(t *testing.T) {
-		ref := uint64(0)
-		seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}}
-		seriesMap.m[ref] = seriesLabels
-		recordSamples := []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
-		sample, recordSamples, err := buildSample(ctx, &seriesMap, targetMap, recordSamples)
-		if err == nil {
-			t.Errorf("Expected error, got sample %v", sample)
-		}
-		if len(recordSamples) != 0 {
-			t.Errorf("Expected all samples to be consumed, got samples %v", recordSamples)
-		}
-	})
-
-	t.Run("Successful", func(t *testing.T) {
-		ref := uint64(0)
-		seriesLabels := labels.Labels{{"__name__", "my_metric"}, {"job", "job1"}, {"instance", "i1"}, {"mkey", "mvalue"}}
-		seriesMap.m[ref] = seriesLabels
-		// The discovered labels include a label "job" and no "instance"
-		// label, which will cause the metric labels to include
-		// "instance", but not "job".
-		targetMap.m[seriesLabels[0].Value] = targets.Target{
-			DiscoveredLabels: promlabels.Labels{{"dkey", "dvalue"}},
-			Labels:           promlabels.Labels{{"job", "job1"}},
-		}
-		recordSamples := []tsdb.RefSample{{Ref: ref, T: timestamp, V: value}}
-		sample, recordSamples, err := buildSample(ctx, &seriesMap, targetMap, recordSamples)
-		if err != nil {
-			t.Error(err)
-		}
-		if len(recordSamples) != 0 {
-			t.Errorf("Expected all samples to be consumed, got samples %v", recordSamples)
-		}
-		if sample == nil {
-			t.Fatal("Unexpected nil sample")
-		}
-		if sample.MetricFamily == nil {
-			t.Fatalf("Unexpected nil MetricFamily %v", sample)
-		}
-		if sample.GetName() != "my_metric" {
-			t.Errorf("Expected name 'my_metric', got %v", sample.GetName())
-		}
-		if sample.Metric[0].GetTimestampMs() != timestamp {
-			t.Errorf("Expected timestamp '%v', got %v", timestamp, sample.Metric[0].GetTimestampMs())
-		}
-		if sample.Metric[0].Untyped.GetValue() != value {
-			t.Errorf("Expected value '%v', got %v", value, sample.Metric[0].Untyped.GetValue())
-		}
-		targetLabels := promlabels.FromStrings("dkey", "dvalue")
-		if !promlabels.Equal(sample.TargetLabels, targetLabels) {
-			t.Errorf("Expected target labels '%v', got %v", targetLabels, sample.TargetLabels)
-		}
-		metricLabels := promlabels.FromStrings("instance", "i1", "mkey", "mvalue")
-		if !promlabels.Equal(LabelPairsToLabels(sample.Metric[0].Label), metricLabels) {
-			t.Errorf("Expected metric labels '%v', got %v", metricLabels, sample.Metric[0].Label)
-		}
-	})
 }

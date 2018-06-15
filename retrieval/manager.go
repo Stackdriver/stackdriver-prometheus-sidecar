@@ -59,6 +59,10 @@ type MetadataGetter interface {
 	Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error)
 }
 
+// Appender appends a time series with exactly one data point. A hash for the series
+// (but not the data point) must be provided.
+// The client may cache the computed hash more easily, which is why its part of the call
+// and not done by the Appender's implementation.
 type Appender interface {
 	Append(hash uint64, s *monitoring_pb.TimeSeries) error
 }
@@ -101,6 +105,13 @@ func (r *PrometheusReader) Run() error {
 	seriesCache := newSeriesCache(r.logger, r.walDirectory)
 	go seriesCache.run(ctx)
 
+	builder := &sampleBuilder{
+		resourceMaps: ResourceMappings,
+		series:       seriesCache,
+		targets:      r.targetGetter,
+		metadata:     r.metadataGetter,
+	}
+
 	// NOTE(fabxc): wrap the tailer into a buffered reader once we become concerned
 	// with performance. The WAL reader will do a lot of tiny reads otherwise.
 	// This is also the reason for the series cache dealing with "maxSegment" hints
@@ -129,17 +140,13 @@ func (r *PrometheusReader) Run() error {
 				continue
 			}
 			for len(recordSamples) > 0 {
-				// Hashing labels is expensive – just use the reference as one.
-				// NOTE(fabxc): may this become an issue if multi-series samples are exposed with
-				// inconsistent orders across scrapes? We could use the lowest one of all involved series then.
-				hash := recordSamples[0].Ref
 				var outputSample *monitoring_pb.TimeSeries
-				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, r.metadataGetter, recordSamples)
+				outputSample, recordSamples, err = builder.next(ctx, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
 				}
-				r.appender.Append(hash, outputSample)
+				r.appender.Append(hashSeries(outputSample), outputSample)
 			}
 		case tsdb.RecordTombstones:
 		}
@@ -160,4 +167,29 @@ func pkgLabels(input tsdblabels.Labels) labels.Labels {
 		output = append(output, labels.Label(l))
 	}
 	return output
+}
+
+func hashSeries(s *monitoring_pb.TimeSeries) uint64 {
+	const sep = '\xff'
+	h := hashNew()
+
+	h = hashAdd(h, s.Resource.Type)
+	h = hashAddByte(h, sep)
+	for _, l := range labels.FromMap(s.Resource.Labels) {
+		h = hashAdd(h, l.Name)
+		h = hashAddByte(h, sep)
+		h = hashAdd(h, l.Value)
+		h = hashAddByte(h, sep)
+	}
+	h = hashAddByte(h, sep)
+
+	h = hashAdd(h, s.Metric.Type)
+	h = hashAddByte(h, sep)
+	for _, l := range labels.FromMap(s.Metric.Labels) {
+		h = hashAdd(h, l.Name)
+		h = hashAddByte(h, sep)
+		h = hashAdd(h, l.Value)
+		h = hashAddByte(h, sep)
+	}
+	return h
 }

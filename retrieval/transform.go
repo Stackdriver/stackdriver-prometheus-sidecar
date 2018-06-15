@@ -28,18 +28,18 @@ import (
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
-// Creates a MetricFamily instance from the head of samples, or error if
-// that fails. In either case, this function returns the samples items
-// that weren't consumed.
-func buildSample(
-	ctx context.Context,
-	seriesGetter seriesGetter,
-	targetGetter TargetGetter,
-	metadataGetter MetadataGetter,
-	samples []tsdb.RefSample,
-) (*monitoring_pb.TimeSeries, []tsdb.RefSample, error) {
+type sampleBuilder struct {
+	resourceMaps []ResourceMap
+	series       seriesGetter
+	targets      TargetGetter
+	metadata     MetadataGetter
+}
+
+// next extracts the next sample from the TSDB input sample list and returns
+// the remainder of the input.
+func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, []tsdb.RefSample, error) {
 	sample := samples[0]
-	lset, ok := seriesGetter.get(sample.Ref)
+	lset, ok := b.series.get(sample.Ref)
 	if !ok {
 		return nil, samples[1:], errors.Errorf("No series matched by ref %d", sample.Ref)
 	}
@@ -48,7 +48,7 @@ func buildSample(
 	// They will be used subsequently for all other Prometheus series that map to the same complex
 	// Stackdriver series.
 	// If either of those pieces of data is missing, the series will be skipped.
-	target, err := targetGetter.Get(ctx, pkgLabels(lset))
+	target, err := b.targets.Get(ctx, pkgLabels(lset))
 	if err != nil {
 		return nil, samples, errors.Wrap(err, "retrieving target failed")
 	}
@@ -68,7 +68,7 @@ func buildSample(
 		return nil, samples[1:], errors.Errorf("series %s exceeding max label count", lset)
 	}
 
-	resource, ok := getResource(target.DiscoveredLabels)
+	resource, ok := b.getResource(target.DiscoveredLabels)
 	if !ok {
 		return nil, samples[1:], errors.Errorf("couldn't infer resource for target %s", target.DiscoveredLabels)
 	}
@@ -77,7 +77,7 @@ func buildSample(
 	// However, they all may be used for counters and gauges as well, so we cannot always strip them.
 	// Probably best to just probe for both. Right now we don't do anything since we don't care about
 	// summaries und histograms yet.
-	metadata, err := metadataGetter.Get(ctx, lset.Get("job"), lset.Get("instance"), lset.Get("__name__"))
+	metadata, err := b.metadata.Get(ctx, lset.Get("job"), lset.Get("instance"), lset.Get("__name__"))
 	if err != nil {
 		return nil, samples, errors.Wrap(err, "get metadata")
 	}
@@ -144,8 +144,8 @@ func getTimestamp(t int64) *timestamp_pb.Timestamp {
 	}
 }
 
-func getResource(lset labels.Labels) (*monitoredres_pb.MonitoredResource, bool) {
-	for _, m := range ResourceMappings {
+func (b *sampleBuilder) getResource(lset labels.Labels) (*monitoredres_pb.MonitoredResource, bool) {
+	for _, m := range b.resourceMaps {
 		if lset := m.Translate(lset); lset != nil {
 			return &monitoredres_pb.MonitoredResource{
 				Type:   m.Type,
@@ -154,60 +154,4 @@ func getResource(lset labels.Labels) (*monitoredres_pb.MonitoredResource, bool) 
 		}
 	}
 	return nil, false
-}
-
-const ProjectIDLabel = "_stackdriver_project_id"
-
-type ResourceMap struct {
-	// The name of the Stackdriver MonitoredResource.
-	Type string
-	// Mapping from Prometheus to Stackdriver labels
-	LabelMap map[string]string
-}
-
-// TODO(jkohen): ensure these are sorted from more specific to less specific.
-var ResourceMappings = []ResourceMap{
-	{
-		Type: "k8s_container",
-		LabelMap: map[string]string{
-			ProjectIDLabel:                         "project_id",
-			"_kubernetes_location":                 "location",
-			"_kubernetes_cluster_name":             "cluster_name",
-			"__meta_kubernetes_namespace":          "namespace_name",
-			"__meta_kubernetes_pod_name":           "pod_name",
-			"__meta_kubernetes_pod_container_name": "container_name",
-		},
-	},
-	{
-		Type: "k8s_pod",
-		LabelMap: map[string]string{
-			ProjectIDLabel:                "project_id",
-			"_kubernetes_location":        "location",
-			"_kubernetes_cluster_name":    "cluster_name",
-			"__meta_kubernetes_namespace": "namespace_name",
-			"__meta_kubernetes_pod_name":  "pod_name",
-		},
-	},
-	{
-		Type: "k8s_node",
-		LabelMap: map[string]string{
-			ProjectIDLabel:                "project_id",
-			"_kubernetes_location":        "location",
-			"_kubernetes_cluster_name":    "cluster_name",
-			"__meta_kubernetes_node_name": "node_name",
-		},
-	},
-}
-
-func (m *ResourceMap) Translate(lset labels.Labels) map[string]string {
-	stackdriverLabels := make(map[string]string, len(m.LabelMap))
-	for _, l := range lset {
-		if stackdriverName, ok := m.LabelMap[l.Name]; ok {
-			stackdriverLabels[stackdriverName] = l.Value
-		}
-	}
-	if len(m.LabelMap) == len(stackdriverLabels) {
-		return stackdriverLabels
-	}
-	return nil
 }
