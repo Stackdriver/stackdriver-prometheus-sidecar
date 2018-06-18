@@ -15,17 +15,14 @@ package retrieval
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
+	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 
-	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
@@ -53,13 +50,22 @@ func (tg *targetsWithDiscoveredLabels) Get(ctx context.Context, lset labels.Labe
 	if err != nil || t == nil {
 		return t, err
 	}
-	t.DiscoveredLabels = append(append(labels.Labels{}, t.DiscoveredLabels...), tg.lset...)
-	sort.Sort(t.DiscoveredLabels)
-	return t, nil
+	repl := *t
+	repl.DiscoveredLabels = append(append(labels.Labels{}, t.DiscoveredLabels...), tg.lset...)
+	sort.Sort(repl.DiscoveredLabels)
+	return &repl, nil
 }
 
 type MetadataGetter interface {
 	Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error)
+}
+
+// Appender appends a time series with exactly one data point. A hash for the series
+// (but not the data point) must be provided.
+// The client may cache the computed hash more easily, which is why its part of the call
+// and not done by the Appender's implementation.
+type Appender interface {
+	Append(hash uint64, s *monitoring_pb.TimeSeries) error
 }
 
 // NewPrometheusReader is the PrometheusReader constructor
@@ -100,16 +106,25 @@ func (r *PrometheusReader) Run() error {
 	seriesCache := newSeriesCache(r.logger, r.walDirectory)
 	go seriesCache.run(ctx)
 
+	builder := &sampleBuilder{
+		resourceMaps: ResourceMappings,
+		series:       seriesCache,
+		targets:      r.targetGetter,
+		metadata:     r.metadataGetter,
+	}
+
 	// NOTE(fabxc): wrap the tailer into a buffered reader once we become concerned
 	// with performance. The WAL reader will do a lot of tiny reads otherwise.
 	// This is also the reason for the series cache dealing with "maxSegment" hints
 	// for series rather than precise ones.
 	reader := wal.NewReader(tailer)
+Outer:
 	for reader.Next() {
 		if reader.Err() != nil {
 			return reader.Err()
 		}
 		record := reader.Record()
+
 		var decoder tsdb.RecordDecoder
 		switch decoder.Type(record) {
 		case tsdb.RecordSeries:
@@ -128,13 +143,21 @@ func (r *PrometheusReader) Run() error {
 				continue
 			}
 			for len(recordSamples) > 0 {
-				var outputSample *MetricFamily
-				outputSample, recordSamples, err = buildSample(ctx, seriesCache, r.targetGetter, recordSamples)
+				select {
+				case <-ctx.Done():
+					break Outer
+				default:
+				}
+				var outputSample *monitoring_pb.TimeSeries
+				outputSample, recordSamples, err = builder.next(ctx, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
 				}
-				r.appender.Append(outputSample)
+				if outputSample == nil {
+					continue
+				}
+				r.appender.Append(hashSeries(outputSample), outputSample)
 			}
 		case tsdb.RecordTombstones:
 		}
@@ -148,53 +171,6 @@ func (r *PrometheusReader) Stop() {
 	r.cancelTail()
 }
 
-// Creates a MetricFamily instance from the head of recordSamples, or error if
-// that fails. In either case, this function returns the recordSamples items
-// that weren't consumed.
-func buildSample(
-	ctx context.Context,
-	seriesGetter seriesGetter,
-	targetGetter TargetGetter,
-	recordSamples []tsdb.RefSample,
-) (*MetricFamily, []tsdb.RefSample, error) {
-	sample := recordSamples[0]
-	tsdblset, ok := seriesGetter.get(sample.Ref)
-	if !ok {
-		return nil, recordSamples[1:], fmt.Errorf("No series matched sample by ref %v", sample)
-	}
-	lset := pkgLabels(tsdblset)
-	// Fill in the discovered labels from the Targets API.
-	target, err := targetGetter.Get(ctx, lset)
-	if err != nil {
-		return nil, recordSamples[1:], errors.Wrapf(err, "No target matched labels %v", lset)
-	}
-	metricLabels := targets.DropTargetLabels(lset, target.Labels)
-	// TODO(jkohen): Rebuild histograms and summary from individual time series.
-	metricFamily := &dto.MetricFamily{
-		Metric: []*dto.Metric{{}},
-	}
-	metric := metricFamily.Metric[0]
-	metric.Label = make([]*dto.LabelPair, 0, len(metricLabels)-1)
-	for _, l := range metricLabels {
-		if l.Name == labels.MetricName {
-			metricFamily.Name = proto.String(l.Value)
-			continue
-		}
-		metric.Label = append(metric.Label, &dto.LabelPair{
-			Name:  proto.String(l.Name),
-			Value: proto.String(l.Value),
-		})
-	}
-	// TODO(jkohen): Support all metric types and populate Help metadata.
-	metricFamily.Type = dto.MetricType_UNTYPED.Enum()
-	metric.Untyped = &dto.Untyped{Value: proto.Float64(sample.V)}
-	metric.TimestampMs = proto.Int64(sample.T)
-	// TODO(jkohen): track reset timestamps.
-	metricResetTimestampMs := []int64{NoTimestamp}
-	m, err := NewMetricFamily(metricFamily, metricResetTimestampMs, target.DiscoveredLabels)
-	return m, recordSamples[1:], err
-}
-
 // TODO(jkohen): We should be able to avoid this conversion.
 func pkgLabels(input tsdblabels.Labels) labels.Labels {
 	output := make(labels.Labels, 0, len(input))
@@ -202,4 +178,30 @@ func pkgLabels(input tsdblabels.Labels) labels.Labels {
 		output = append(output, labels.Label(l))
 	}
 	return output
+}
+
+func hashSeries(s *monitoring_pb.TimeSeries) uint64 {
+	const sep = '\xff'
+	h := hashNew()
+
+	h = hashAdd(h, s.Resource.Type)
+	h = hashAddByte(h, sep)
+	h = hashAdd(h, s.Metric.Type)
+
+	// Map iteration is randomized. We thus convert the labels to sorted slices
+	// with labels.FromMap before hashing.
+	for _, l := range labels.FromMap(s.Resource.Labels) {
+		h = hashAddByte(h, sep)
+		h = hashAdd(h, l.Name)
+		h = hashAddByte(h, sep)
+		h = hashAdd(h, l.Value)
+	}
+	h = hashAddByte(h, sep)
+	for _, l := range labels.FromMap(s.Metric.Labels) {
+		h = hashAddByte(h, sep)
+		h = hashAdd(h, l.Name)
+		h = hashAddByte(h, sep)
+		h = hashAdd(h, l.Value)
+	}
+	return h
 }

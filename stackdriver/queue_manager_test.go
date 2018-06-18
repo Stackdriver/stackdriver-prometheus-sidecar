@@ -15,72 +15,61 @@ package stackdriver
 
 import (
 	"fmt"
-	"hash/fnv"
 	"reflect"
-	"sort"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
-	"github.com/gogo/protobuf/proto"
-	dto "github.com/prometheus/client_model/go"
-	"github.com/prometheus/common/model"
+	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/prometheus/prometheus/config"
-	"github.com/prometheus/prometheus/pkg/labels"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
-	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
+	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
+// TestStorageClient simulates a storage that can store samples and compares it
+// with an expected set.
+// All inserted series must be uniquely identified by their metric type string.
 type TestStorageClient struct {
-	receivedSamples map[string][]sample
-	expectedSamples map[string][]sample
+	receivedSamples map[string][]*monitoring_pb.TimeSeries
+	expectedSamples map[string][]*monitoring_pb.TimeSeries
 	wg              sync.WaitGroup
 	mtx             sync.Mutex
 	t               *testing.T
 }
 
-type sample struct {
-	Name           string
-	Labels         map[string]string
-	Value          float64
-	ResetTimestamp int64
-	Timestamp      int64
-}
-
-var (
-	TestTargetLabel = labels.Label{Name: "__target_label", Value: "1234"}
-)
-
-func init() {
-	// Override the default resource mappings, so they only require the
-	// project id resource label, which makes the tests more concise.
-	DefaultResourceMappings = []ResourceMap{
-		{
-			Type: "global",
-			LabelMap: map[string]string{
-				ProjectIdLabel:       "project_id",
-				TestTargetLabel.Name: TestTargetLabel.Value,
-			},
+func newTestSample(name string, start, end int64, v float64) *monitoring_pb.TimeSeries {
+	return &monitoring_pb.TimeSeries{
+		Metric: &metric_pb.Metric{
+			Type: name,
 		},
+		MetricKind: metric_pb.MetricDescriptor_GAUGE,
+		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Points: []*monitoring_pb.Point{{
+			Interval: &monitoring_pb.TimeInterval{
+				StartTime: &timestamp_pb.Timestamp{Seconds: start},
+				EndTime:   &timestamp_pb.Timestamp{Seconds: end},
+			},
+			Value: &monitoring_pb.TypedValue{
+				Value: &monitoring_pb.TypedValue_DoubleValue{v},
+			},
+		}},
 	}
 }
 
 func NewTestStorageClient(t *testing.T) *TestStorageClient {
 	return &TestStorageClient{
-		receivedSamples: map[string][]sample{},
-		expectedSamples: map[string][]sample{},
+		receivedSamples: map[string][]*monitoring_pb.TimeSeries{},
+		expectedSamples: map[string][]*monitoring_pb.TimeSeries{},
 		t:               t,
 	}
 }
 
-func (c *TestStorageClient) expectSamples(samples []sample) {
+func (c *TestStorageClient) expectSamples(samples []*monitoring_pb.TimeSeries) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	for _, s := range samples {
-		c.expectedSamples[s.Name] = append(c.expectedSamples[s.Name], s)
+		c.expectedSamples[s.Metric.Type] = append(c.expectedSamples[s.Metric.Type], s)
 	}
 	c.wg.Add(len(samples))
 }
@@ -102,64 +91,26 @@ func (c *TestStorageClient) waitForExpectedSamples(t *testing.T) {
 }
 
 func (c *TestStorageClient) resetExpectedSamples() {
-	c.receivedSamples = map[string][]sample{}
-	c.expectedSamples = map[string][]sample{}
+	c.receivedSamples = map[string][]*monitoring_pb.TimeSeries{}
+	c.expectedSamples = map[string][]*monitoring_pb.TimeSeries{}
 }
 
-func fingerprintMetric(metric *metric_pb.Metric) uint64 {
-	const SeparatorByte byte = 255
-	h := fnv.New64a()
-	h.Write([]byte(metric.GetType()))
-	// Sort the labels to get a deterministic fingerprint.
-	var keys []string
-	for k := range metric.GetLabels() {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		v := metric.GetLabels()[k]
-		h.Write([]byte{SeparatorByte})
-		h.Write([]byte(k))
-		h.Write([]byte{SeparatorByte})
-		h.Write([]byte(v))
-	}
-	return h.Sum64()
-}
-
-func (c *TestStorageClient) Store(req *monitoring.CreateTimeSeriesRequest) error {
+func (c *TestStorageClient) Store(req *monitoring_pb.CreateTimeSeriesRequest) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	seenTimeSeries := map[uint64]struct{}{}
-	count := 0
-	for _, ts := range req.TimeSeries {
-		fp := fingerprintMetric(ts.Metric)
-		if _, ok := seenTimeSeries[fp]; ok {
-			c.t.Errorf("found duplicate time series in request: %v", ts)
-		}
-		seenTimeSeries[fp] = struct{}{}
-		metricType := ts.Metric.Type
-		// Remove the Stackdriver "domain/" prefix which isn't present in the test input.
-		name := metricType[len(metricsPrefix)+1:]
-		for _, point := range ts.Points {
-			count++
-			startTime := point.GetInterval().GetStartTime()
-			var resetTimeMs int64
-			if startTime != nil {
-				resetTimeMs = time.Unix(startTime.Seconds, int64(startTime.Nanos)).UnixNano() / 1000000
+
+	for i, ts := range req.TimeSeries {
+		for _, prev := range req.TimeSeries[:i] {
+			if reflect.DeepEqual(prev, ts) {
+				c.t.Fatalf("found duplicate time series in request: %v", ts)
 			}
-			endTime := point.GetInterval().GetEndTime()
-			endTimeMs := time.Unix(endTime.Seconds, int64(endTime.Nanos)).UnixNano() / 1000000
-			s := sample{
-				Name:           name,
-				Labels:         ts.Metric.Labels,
-				Value:          point.Value.GetDoubleValue(),
-				ResetTimestamp: resetTimeMs,
-				Timestamp:      endTimeMs,
-			}
-			c.receivedSamples[name] = append(c.receivedSamples[name], s)
 		}
+		if len(ts.Points) != 1 {
+			c.t.Fatalf("unexpected number of points %d", len(ts.Points))
+		}
+		c.receivedSamples[ts.Metric.Type] = append(c.receivedSamples[ts.Metric.Type], ts)
+		c.wg.Done()
 	}
-	c.wg.Add(-count)
 	return nil
 }
 
@@ -176,23 +127,19 @@ func (c *TestStorageClient) Close() error {
 	return nil
 }
 
-func TestSampleDelivery(t *testing.T) {
+func TestSampleDeliverySimple(t *testing.T) {
 	// Let's create an even number of send batches so we don't run into the
 	// batch timeout case.
 	n := 100
 
-	samples := make([]sample, 0, n)
+	var samples []*monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("test_metric_%d", i)
-		samples = append(samples, sample{
-			Name: name,
-			Labels: map[string]string{
-				model.InstanceLabel: strconv.Itoa(i),
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890000,
-			Timestamp:      2234567890000,
-		})
+		samples = append(samples, newTestSample(
+			fmt.Sprintf("test_metric_%d", i),
+			1234567890000,
+			2234567890000,
+			float64(i),
+		))
 	}
 
 	c := NewTestStorageClient(t)
@@ -204,8 +151,8 @@ func TestSampleDelivery(t *testing.T) {
 	m := NewQueueManager(nil, cfg, c)
 
 	// These should be received by the client.
-	for _, s := range samples {
-		m.Append(samplesToMetricFamily(s))
+	for i, s := range samples {
+		m.Append(uint64(i), s)
 	}
 	m.Start()
 	defer m.Stop()
@@ -217,18 +164,14 @@ func TestSampleDeliveryMultiShard(t *testing.T) {
 	numShards := 10
 	n := 5 * numShards
 
-	samples := make([]sample, 0, n)
+	var samples []*monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("test_metric_%d", i)
-		samples = append(samples, sample{
-			Name: name,
-			Labels: map[string]string{
-				model.InstanceLabel: strconv.Itoa(i),
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890000,
-			Timestamp:      2234567890000,
-		})
+		samples = append(samples, newTestSample(
+			fmt.Sprintf("test_metric_%d", i),
+			1234567890000,
+			2234567890000,
+			float64(i),
+		))
 	}
 
 	c := NewTestStorageClient(t)
@@ -244,8 +187,8 @@ func TestSampleDeliveryMultiShard(t *testing.T) {
 
 	c.expectSamples(samples)
 	// These should be received by the client.
-	for _, s := range samples {
-		m.Append(samplesToMetricFamily(s))
+	for i, s := range samples {
+		m.Append(uint64(i), s)
 	}
 
 	c.waitForExpectedSamples(t)
@@ -255,18 +198,21 @@ func TestSampleDeliveryTimeout(t *testing.T) {
 	// Let's send one less sample than batch size, and wait the timeout duration
 	n := config.DefaultQueueConfig.MaxSamplesPerSend - 1
 
-	samples := make([]sample, 0, n)
+	var samples1, samples2 []*monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("test_metric_%d", i)
-		samples = append(samples, sample{
-			Name: name,
-			Labels: map[string]string{
-				model.InstanceLabel: strconv.Itoa(i),
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890000,
-			Timestamp:      2234567890000,
-		})
+		samples1 = append(samples1, newTestSample(
+			fmt.Sprintf("test_metric_%d", i),
+			1234567890000,
+			2234567890000,
+			float64(i),
+		))
+		samples2 = append(samples2, newTestSample(
+			fmt.Sprintf("test_metric_%d", i),
+			1234567890000,
+			2234567890000+1,
+			float64(i),
+		))
+
 	}
 
 	c := NewTestStorageClient(t)
@@ -278,19 +224,17 @@ func TestSampleDeliveryTimeout(t *testing.T) {
 	defer m.Stop()
 
 	// Send the samples twice, waiting for the samples in the meantime.
-	c.expectSamples(samples)
-	for _, s := range samples {
-		m.Append(samplesToMetricFamily(s))
+	c.expectSamples(samples1)
+	for i, s := range samples1 {
+		m.Append(uint64(i), s)
 	}
 	c.waitForExpectedSamples(t)
 
 	c.resetExpectedSamples()
-	for i := range samples {
-		samples[i].Timestamp += 1
-	}
-	c.expectSamples(samples)
-	for _, s := range samples {
-		m.Append(samplesToMetricFamily(s))
+	c.expectSamples(samples2)
+
+	for i, s := range samples2 {
+		m.Append(uint64(i), s)
 	}
 	c.waitForExpectedSamples(t)
 }
@@ -299,18 +243,14 @@ func TestSampleDeliveryOrder(t *testing.T) {
 	ts := 10
 	n := config.DefaultQueueConfig.MaxSamplesPerSend * ts
 
-	samples := make([]sample, 0, n)
+	var samples []*monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("test_metric_%d", i%ts)
-		samples = append(samples, sample{
-			Name: name,
-			Labels: map[string]string{
-				model.InstanceLabel: strconv.Itoa(i),
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890001,
-			Timestamp:      1234567890001 + int64(i),
-		})
+		samples = append(samples, newTestSample(
+			fmt.Sprintf("test_metric_%d", i%ts),
+			1234567890001,
+			1234567890001+int64(i),
+			float64(i),
+		))
 	}
 
 	c := NewTestStorageClient(t)
@@ -320,8 +260,8 @@ func TestSampleDeliveryOrder(t *testing.T) {
 	m.Start()
 	defer m.Stop()
 	// These should be received by the client.
-	for _, s := range samples {
-		m.Append(samplesToMetricFamily(s))
+	for i, s := range samples {
+		m.Append(uint64(i), s)
 	}
 
 	c.waitForExpectedSamples(t)
@@ -330,44 +270,49 @@ func TestSampleDeliveryOrder(t *testing.T) {
 func TestSampleOutOfOrder(t *testing.T) {
 	n := config.DefaultQueueConfig.MaxSamplesPerSend
 
-	samples := make([]sample, 0, n)
+	var samples1, samples2, samples3 []*monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
-		samples = append(samples, sample{
-			Name: "test_metric",
-			Labels: map[string]string{
-				"key":               fmt.Sprintf("%d", i),
-				model.InstanceLabel: strconv.Itoa(i),
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890001,
-			Timestamp:      2234567890001,
-		})
+		samples1 = append(samples1, newTestSample(
+			fmt.Sprintf("test_metric_%d", i),
+			1234567890001,
+			2234567890001,
+			float64(i),
+		))
+		samples2 = append(samples2, newTestSample(
+			fmt.Sprintf("test_metric_%d", i),
+			1234567890001,
+			2234567890001-1,
+			float64(i),
+		))
+		samples3 = append(samples3, newTestSample(
+			fmt.Sprintf("test_metric_%d", i),
+			1234567890001-1,
+			2234567890001+1000,
+			float64(i),
+		))
 	}
 
 	c := NewTestStorageClient(t)
-	c.expectSamples(samples)
+	c.expectSamples(samples1)
 	m := NewQueueManager(nil, config.DefaultQueueConfig, c)
 
 	m.Start()
 	defer m.Stop()
-	for _, s := range samples {
+	for i, s := range samples1 {
 		// These should be received by the client.
-		m.Append(samplesToMetricFamily(s))
+		m.Append(uint64(i), s)
 	}
-	for _, s := range samples {
+	for i, s := range samples1 {
 		// Same reset and value timestamp should be dropped.
-		m.Append(samplesToMetricFamily(s))
+		m.Append(uint64(i), s)
 	}
-	for _, s := range samples {
+	for i, s := range samples2 {
 		// Same reset timestamp and older value timestamp should be dropped.
-		s.Timestamp -= 1
-		m.Append(samplesToMetricFamily(s))
+		m.Append(uint64(i), s)
 	}
-	for _, s := range samples {
+	for i, s := range samples3 {
 		// Older reset timestamp should be dropped regardless of value timestamp.
-		s.ResetTimestamp -= 1
-		s.Timestamp += 1000
-		m.Append(samplesToMetricFamily(s))
+		m.Append(uint64(i), s)
 	}
 
 	c.waitForExpectedSamples(t)
@@ -381,18 +326,14 @@ func TestSampleOutOfOrderMultiShard(t *testing.T) {
 	numShards := 10
 	n := 100 * numShards
 
-	samples := make([]sample, 0, n)
+	var samples []*monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
-		samples = append(samples, sample{
-			Name: "test_metric",
-			Labels: map[string]string{
-				"key":               fmt.Sprintf("%d", i),
-				model.InstanceLabel: strconv.Itoa(i),
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890001,
-			Timestamp:      2234567890001,
-		})
+		samples = append(samples, newTestSample(
+			fmt.Sprintf("test_metric_%d", i),
+			1234567890001,
+			2234567890001,
+			float64(i),
+		))
 	}
 
 	c := NewTestStorageClient(t)
@@ -406,75 +347,18 @@ func TestSampleOutOfOrderMultiShard(t *testing.T) {
 	defer m.Stop()
 
 	c.expectSamples(samples)
-	for _, s := range samples {
+	for i, s := range samples {
 		// These should be received by the client.
-		m.Append(samplesToMetricFamily(s))
+		m.Append(uint64(i), s)
 	}
 	c.waitForExpectedSamples(t)
 
 	c.resetExpectedSamples()
-	m.reshard(numShards)        // blocks until resharded
-	c.expectSamples([]sample{}) // all samples should be dropped
-	for _, s := range samples {
-		m.Append(samplesToMetricFamily(s))
+	m.reshard(numShards) // blocks until resharded
+	c.expectSamples(nil) // all samples should be dropped
+	for i, s := range samples {
+		m.Append(uint64(i), s)
 	}
-	c.waitForExpectedSamples(t)
-}
-
-// TestEmptyRequest tests the case where the output of the translation is empty
-// (e.g. because all metric types are unsupported), and therefore there is
-// nothing to send to the storage.
-func TestStoreEmptyRequest(t *testing.T) {
-	// Let's create an even number of send batches so we don't run into the
-	// batch timeout case.
-	n := 100
-
-	samples := make([]sample, 0, n)
-	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("test_metric_%d", i)
-		samples = append(samples, sample{
-			Name: name,
-			Labels: map[string]string{
-				model.InstanceLabel: strconv.Itoa(i),
-			},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890000,
-			Timestamp:      2234567890000,
-		})
-	}
-
-	c := NewTestStorageClient(t)
-	m := NewQueueManager(nil, config.DefaultQueueConfig, c)
-
-	// These should be received by the client.
-	for _, s := range samples {
-		metricFamily, err := retrieval.NewMetricFamily(
-			&dto.MetricFamily{
-				Name: proto.String(s.Name),
-				Type: dto.MetricType_UNTYPED.Enum(),
-				Metric: []*dto.Metric{
-					&dto.Metric{
-						Label: []*dto.LabelPair{
-							&dto.LabelPair{
-								Name:  proto.String(model.InstanceLabel),
-								Value: proto.String("i123"),
-							},
-						},
-					},
-				},
-			},
-			[]int64{
-				1234567890000,
-			},
-			labels.Labels{TestTargetLabel})
-		if err != nil {
-			panic(err)
-		}
-		m.Append(metricFamily)
-	}
-	m.Start()
-	defer m.Stop()
-
 	c.waitForExpectedSamples(t)
 }
 
@@ -494,7 +378,7 @@ func NewTestBlockedStorageClient() *TestBlockingStorageClient {
 	}
 }
 
-func (c *TestBlockingStorageClient) Store(_ *monitoring.CreateTimeSeriesRequest) error {
+func (c *TestBlockingStorageClient) Store(_ *monitoring_pb.CreateTimeSeriesRequest) error {
 	atomic.AddUint64(&c.numCalls, 1)
 	<-c.block
 	return nil
@@ -537,16 +421,14 @@ func TestSpawnNotMoreThanMaxConcurrentSendsGoroutines(t *testing.T) {
 	// should be left on the queue.
 	n := config.DefaultQueueConfig.MaxSamplesPerSend * 2
 
-	samples := make([]sample, 0, n)
+	var samples []*monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("test_metric_%d", i)
-		samples = append(samples, sample{
-			Name:           name,
-			Labels:         map[string]string{},
-			Value:          float64(i),
-			ResetTimestamp: 1234567890000,
-			Timestamp:      2234567890000,
-		})
+		samples = append(samples, newTestSample(
+			fmt.Sprintf("test_metric_%d", i),
+			1234567890001,
+			2234567890001,
+			float64(i),
+		))
 	}
 
 	c := NewTestBlockedStorageClient()
@@ -562,8 +444,8 @@ func TestSpawnNotMoreThanMaxConcurrentSendsGoroutines(t *testing.T) {
 		m.Stop()
 	}()
 
-	for _, s := range samples {
-		m.Append(samplesToMetricFamily(s))
+	for i, s := range samples {
+		m.Append(uint64(i), s)
 	}
 
 	// Wait until the runShard() loops drain the queue.  If things went right, it
@@ -592,59 +474,4 @@ func TestSpawnNotMoreThanMaxConcurrentSendsGoroutines(t *testing.T) {
 	if numCalls != uint64(1) {
 		t.Errorf("Saw %d concurrent sends, expected 1", numCalls)
 	}
-}
-
-// All samples must have the same Name.
-func samplesToMetricFamily(samples ...sample) *retrieval.MetricFamily {
-	metrics := make([]*dto.Metric, len(samples))
-	resetTimestamps := make([]int64, len(samples))
-	for i, _ := range samples {
-		if samples[i].Name != samples[0].Name {
-			panic("all metric family names in this call must match")
-		}
-		metricLabels := make([]*dto.LabelPair, 0)
-		metricLabels = append(metricLabels, &dto.LabelPair{
-			Name:  proto.String(ProjectIdLabel),
-			Value: proto.String("1234567890"),
-		})
-		metricLabels = append(metricLabels,
-			&dto.LabelPair{
-				Name:  proto.String(model.InstanceLabel),
-				Value: proto.String(strconv.Itoa(int(samples[0].Value))),
-			})
-		for ln, lv := range samples[i].Labels {
-			metricLabels = append(metricLabels, &dto.LabelPair{
-				Name:  proto.String(ln),
-				Value: proto.String(lv),
-			})
-		}
-		metrics[i] = &dto.Metric{
-			Label: metricLabels,
-			Counter: &dto.Counter{
-				Value: proto.Float64(samples[i].Value),
-			},
-			TimestampMs: proto.Int64(samples[i].Timestamp),
-		}
-		resetTimestamps[i] = samples[i].ResetTimestamp
-	}
-	metricFamily, err := retrieval.NewMetricFamily(
-		&dto.MetricFamily{
-			Name:   proto.String(samples[0].Name),
-			Type:   dto.MetricType_COUNTER.Enum(),
-			Metric: metrics,
-		},
-		resetTimestamps,
-		labels.Labels{
-			TestTargetLabel,
-			// This label isn't part of the monitored resource, so
-			// two time series that only differ by this, will be
-			// seen as one time series by Stackdriver. Samples
-			// across those two time series are subject to Stackdriver
-			// constraints, such as ordering.
-			{"__not_in_monitored_resource", strconv.Itoa(int(samples[0].Value))},
-		})
-	if err != nil {
-		panic(err)
-	}
-	return metricFamily
 }
