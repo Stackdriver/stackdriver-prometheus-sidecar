@@ -18,13 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/relabel"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/config"
 	"golang.org/x/time/rate"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -146,8 +143,6 @@ type QueueManager struct {
 	logger log.Logger
 
 	cfg              config.QueueConfig
-	externalLabels   map[string]*string
-	relabelConfigs   []*config.RelabelConfig
 	clientFactory    StorageClientFactory
 	queueName        string
 	logLimiter       *rate.Limiter
@@ -164,20 +159,14 @@ type QueueManager struct {
 }
 
 // NewQueueManager builds a new QueueManager.
-func NewQueueManager(logger log.Logger, cfg config.QueueConfig, globalLabels map[string]string, relabelConfigs []*config.RelabelConfig, clientFactory StorageClientFactory) *QueueManager {
+func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory StorageClientFactory) *QueueManager {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	resourceMappings := DefaultResourceMappings
-	externalLabels := make(map[string]*string, len(globalLabels))
-	for lk, lv := range globalLabels {
-		externalLabels[lk] = proto.String(lv)
-	}
 	t := &QueueManager{
 		logger:           logger,
 		cfg:              cfg,
-		externalLabels:   externalLabels,
-		relabelConfigs:   relabelConfigs,
 		clientFactory:    clientFactory,
 		queueName:        clientFactory.Name(),
 		resourceMappings: resourceMappings,
@@ -206,7 +195,6 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, globalLabels map
 // sample on the floor if the queue is full.
 // Always returns nil.
 func (t *QueueManager) Append(metricFamily *retrieval.MetricFamily) error {
-	metricFamily = t.relabelMetrics(metricFamily)
 	// Drop family if we dropped all metrics.
 	if metricFamily.Metric == nil {
 		return nil
@@ -572,43 +560,4 @@ func (s *shardCollection) sendSamples(client StorageClient, samples []*retrieval
 	}
 
 	failedSamplesTotal.WithLabelValues(s.qm.queueName).Add(float64(len(samples)))
-}
-
-// relabelMetrics returns nil if the relabeling requested the metric to be dropped.
-func (t *QueueManager) relabelMetrics(metricFamily *retrieval.MetricFamily) *retrieval.MetricFamily {
-	metrics := []*dto.Metric{}
-	resetTimestamps := []int64{}
-	for i, metric := range metricFamily.Metric {
-		if metric.Label == nil {
-			// Need to distinguish dropped labels from uninitialized.
-			metric.Label = []*dto.LabelPair{}
-		}
-		// Add any external labels. If an external label name is already
-		// found in the set of metric labels, don't add that label.
-		lset := make(map[string]struct{})
-		for i := range metric.Label {
-			lset[*metric.Label[i].Name] = struct{}{}
-		}
-		for ln, lv := range t.externalLabels {
-			if _, ok := lset[ln]; !ok {
-				metric.Label = append(metric.Label, &dto.LabelPair{
-					Name:  proto.String(ln),
-					Value: lv,
-				})
-			}
-		}
-
-		metric.Label = relabel.Process(metric.Label, t.relabelConfigs...)
-		// The label set may be set to nil to indicate dropping.
-		if metric.Label != nil {
-			if len(metric.Label) == 0 {
-				metric.Label = nil
-			}
-			metrics = append(metrics, metric)
-			resetTimestamps = append(resetTimestamps, metricFamily.MetricResetTimestampMs[i])
-		}
-	}
-	metricFamily.Metric = metrics
-	metricFamily.MetricResetTimestampMs = resetTimestamps
-	return metricFamily
 }

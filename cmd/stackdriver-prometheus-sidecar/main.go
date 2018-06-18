@@ -36,11 +36,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/config"
-	k8s_runtime "k8s.io/apimachinery/pkg/util/runtime"
+	"github.com/prometheus/prometheus/pkg/labels"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
@@ -108,15 +108,6 @@ func main() {
 
 	logger := promlog.New(cfg.logLevel)
 
-	// XXX(fabxc): Kubernetes does background logging which we can only customize by modifying
-	// a global variable.
-	// Ultimately, here is the best place to set it.
-	k8s_runtime.ErrorHandlers = []func(error){
-		func(err error) {
-			level.Error(log.With(logger, "component", "k8s_client_runtime")).Log("err", err)
-		},
-	}
-
 	level.Info(logger).Log("msg", "Starting Stackdriver Prometheus sidecar", "version", version.Info())
 	level.Info(logger).Log("build_context", version.BuildContext())
 	level.Info(logger).Log("host_details", Uname())
@@ -130,6 +121,12 @@ func main() {
 	}
 	targetCache := targets.NewCache(logger, nil, targetsURL)
 
+	metadataURL, err := cfg.prometheusURL.Parse(metadata.DefaultEndpointPath)
+	if err != nil {
+		panic(err)
+	}
+	metadataCache := metadata.NewCache(prometheus.DefaultRegisterer, nil, metadataURL)
+
 	// TODO(jkohen): Remove once we have proper translation of all metric
 	// types. Currently Stackdriver fails the entire request if you attempt
 	// to write to the different metric type, which we do fairly often at
@@ -139,38 +136,6 @@ func main() {
 		queueManager = stackdriver.NewQueueManager(
 			log.With(logger, "component", "queue_manager"),
 			config.DefaultQueueConfig,
-			cfg.globalLabels,
-			// TODO(jkohen): remove this configuration once we have proper metadata integration.
-			[]*config.RelabelConfig{
-				{
-					SourceLabels: []model.LabelName{"job"},
-					TargetLabel:  "__meta_kubernetes_pod_container_name",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "$1",
-				},
-				{
-					SourceLabels: []model.LabelName{"instance"},
-					TargetLabel:  "__meta_kubernetes_pod_name",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "$1",
-				},
-				{
-					SourceLabels: []model.LabelName{"job"},
-					TargetLabel:  "job",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "",
-				},
-				{
-					SourceLabels: []model.LabelName{"instance"},
-					TargetLabel:  "instance",
-					Action:       "replace",
-					Regex:        config.MustNewRegexp("(.*)"),
-					Replacement:  "",
-				},
-			},
 			&clientFactory{
 				logger:            log.With(logger, "component", "storage"),
 				projectIdResource: cfg.projectIdResource,
@@ -178,7 +143,13 @@ func main() {
 				timeout:           10 * time.Second,
 			},
 		)
-		prometheusReader = retrieval.NewPrometheusReader(log.With(logger, "component", "Prometheus reader"), cfg.walDirectory, targetCache, queueManager)
+		prometheusReader = retrieval.NewPrometheusReader(
+			log.With(logger, "component", "Prometheus reader"),
+			cfg.walDirectory,
+			retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(cfg.globalLabels)),
+			metadataCache,
+			queueManager,
+		)
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.

@@ -16,6 +16,7 @@ package retrieval
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
@@ -26,6 +27,7 @@ import (
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
 	tsdblabels "github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
@@ -35,22 +37,55 @@ type TargetGetter interface {
 	Get(ctx context.Context, lset labels.Labels) (*targets.Target, error)
 }
 
+type targetsWithDiscoveredLabels struct {
+	TargetGetter
+	lset labels.Labels
+}
+
+// TargetsWithDiscoveredLabels wraps a TargetGetter and adds a static set of labels to the discovered
+// labels of all targets retrieved from it.
+func TargetsWithDiscoveredLabels(tg TargetGetter, lset labels.Labels) TargetGetter {
+	return &targetsWithDiscoveredLabels{TargetGetter: tg, lset: lset}
+}
+
+func (tg *targetsWithDiscoveredLabels) Get(ctx context.Context, lset labels.Labels) (*targets.Target, error) {
+	t, err := tg.TargetGetter.Get(ctx, lset)
+	if err != nil || t == nil {
+		return t, err
+	}
+	t.DiscoveredLabels = append(append(labels.Labels{}, t.DiscoveredLabels...), tg.lset...)
+	sort.Sort(t.DiscoveredLabels)
+	return t, nil
+}
+
+type MetadataGetter interface {
+	Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error)
+}
+
 // NewPrometheusReader is the PrometheusReader constructor
-func NewPrometheusReader(logger log.Logger, walDirectory string, targetGetter TargetGetter, appender Appender) *PrometheusReader {
+func NewPrometheusReader(
+	logger log.Logger,
+	walDirectory string,
+	targetGetter TargetGetter,
+	metadataGetter MetadataGetter,
+	appender Appender,
+) *PrometheusReader {
 	return &PrometheusReader{
-		appender:     appender,
-		logger:       logger,
-		walDirectory: walDirectory,
-		targetGetter: targetGetter,
+		appender:       appender,
+		logger:         logger,
+		walDirectory:   walDirectory,
+		targetGetter:   targetGetter,
+		metadataGetter: metadataGetter,
 	}
 }
 
 type PrometheusReader struct {
-	logger       log.Logger
-	walDirectory string
-	targetGetter TargetGetter
-	appender     Appender
-	cancelTail   context.CancelFunc
+	logger         log.Logger
+	walDirectory   string
+	targetGetter   TargetGetter
+	metadataGetter MetadataGetter
+	appender       Appender
+	cancelTail     context.CancelFunc
 }
 
 func (r *PrometheusReader) Run() error {
@@ -116,7 +151,12 @@ func (r *PrometheusReader) Stop() {
 // Creates a MetricFamily instance from the head of recordSamples, or error if
 // that fails. In either case, this function returns the recordSamples items
 // that weren't consumed.
-func buildSample(ctx context.Context, seriesGetter seriesGetter, targetGetter TargetGetter, recordSamples []tsdb.RefSample) (*MetricFamily, []tsdb.RefSample, error) {
+func buildSample(
+	ctx context.Context,
+	seriesGetter seriesGetter,
+	targetGetter TargetGetter,
+	recordSamples []tsdb.RefSample,
+) (*MetricFamily, []tsdb.RefSample, error) {
 	sample := recordSamples[0]
 	tsdblset, ok := seriesGetter.get(sample.Ref)
 	if !ok {
