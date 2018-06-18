@@ -76,6 +76,12 @@ func TestSampleBuilder(t *testing.T) {
 			series: seriesMap{
 				1: labels.FromStrings("job", "job1", "instance", "instance1", "a", "1", "__name__", "metric1"),
 				2: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric2"),
+				// Series with more than 10 labels should be dropped. This does not include targets labels
+				// and the special metric name label.
+				3: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "labelnum_ok",
+					"a", "1", "b", "2", "c", "3", "d", "4", "e", "5", "f", "6", "g", "7", "h", "8", "i", "9", "j", "10"),
+				4: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "labelnum_bad",
+					"a", "1", "b", "2", "c", "3", "d", "4", "e", "5", "f", "6", "g", "7", "h", "8", "i", "9", "j", "10", "k", "11"),
 			},
 			targets: targetMap{
 				"job1/instance1": &targets.Target{
@@ -84,19 +90,19 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": &scrape.MetricMetadata{
-					Type: textparse.MetricTypeGauge,
-				},
-				"job1/instance1/metric2": &scrape.MetricMetadata{
-					Type: textparse.MetricTypeCounter,
-				},
+				"job1/instance1/metric1":      &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
+				"job1/instance1/metric2":      &scrape.MetricMetadata{Type: textparse.MetricTypeCounter},
+				"job1/instance1/labelnum_ok":  &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
+				"job1/instance1/labelnum_bad": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
 			},
 			input: []tsdb.RefSample{
-				{Ref: 2, T: 200, V: 5.5},
-				{Ref: 1, T: 100, V: 200},
+				{Ref: 2, T: 2000, V: 5.5},
+				{Ref: 1, T: 1000, V: 200},
+				{Ref: 3, T: 3000, V: 1},
+				{Ref: 4, T: 4000, V: 2},
 			},
 			result: []*monitoring_pb.TimeSeries{
-				{
+				{ // 0
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -109,14 +115,15 @@ func TestSampleBuilder(t *testing.T) {
 					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
 					Points: []*monitoring_pb.Point{{
 						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{}, // TODO(fabxc): update when reset timestamps are implemented.
-							EndTime:   &timestamp_pb.Timestamp{Nanos: 200000000},
+							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
 						},
 						Value: &monitoring_pb.TypedValue{
 							Value: &monitoring_pb.TypedValue_DoubleValue{5.5},
 						},
 					}},
-				}, {
+				},
+				{ // 1
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -129,14 +136,63 @@ func TestSampleBuilder(t *testing.T) {
 					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
 					Points: []*monitoring_pb.Point{{
 						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Nanos: 100000000},
+							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
 						},
 						Value: &monitoring_pb.TypedValue{
 							Value: &monitoring_pb.TypedValue_DoubleValue{200},
 						},
 					}},
 				},
+				{ // 2
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type: "external.googleapis.com/prometheus/labelnum_ok",
+						Labels: map[string]string{
+							"a": "1", "b": "2", "c": "3", "d": "4", "e": "5", "f": "6", "g": "7", "h": "8", "i": "9", "j": "10",
+						},
+					},
+					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							EndTime: &timestamp_pb.Timestamp{Seconds: 3},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{1},
+						},
+					}},
+				},
+				nil, // 3: Dropped sample with too many labels.
 			},
+		},
+		// Various cases where we drop series due to absence of additional information.
+		{
+			targets: targetMap{
+				"job1/instance1": &targets.Target{
+					Labels:           promlabels.FromStrings("job", "job1", "instance", "instance1"),
+					DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+				},
+				"job1/instance_noresource": &targets.Target{
+					Labels: promlabels.FromStrings("job", "job1", "instance", "instance_noresource"),
+				},
+			},
+			metadata: metadataMap{
+				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
+			},
+			series: seriesMap{
+				1: labels.FromStrings("job", "job1", "instance", "instance_notfound", "__name__", "metric1"),
+				2: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric_notfound"),
+				3: labels.FromStrings("job", "job1", "instance", "instance_noresource", "__name__", "metric1"),
+			},
+			input: []tsdb.RefSample{
+				{Ref: 1, T: 1000, V: 1},
+				{Ref: 2, T: 2000, V: 2},
+				{Ref: 3, T: 3000, V: 3},
+			},
+			result: []*monitoring_pb.TimeSeries{nil, nil, nil},
 		},
 	}
 	for i, c := range cases {
@@ -144,6 +200,7 @@ func TestSampleBuilder(t *testing.T) {
 
 		var s *monitoring_pb.TimeSeries
 		var err error
+		var result []*monitoring_pb.TimeSeries
 
 		b := &sampleBuilder{
 			resourceMaps: resourceMaps,
@@ -156,12 +213,7 @@ func TestSampleBuilder(t *testing.T) {
 			if err != nil {
 				break
 			}
-			if k >= len(c.result) {
-				t.Fatalf("received more samples than expected")
-			}
-			if !reflect.DeepEqual(s, c.result[k]) {
-				t.Fatalf("unexpected sample %v, want %v", s, c.result[k])
-			}
+			result = append(result, s)
 		}
 		if err == nil && c.fail {
 			t.Fatal("expected error but got none")
@@ -169,5 +221,14 @@ func TestSampleBuilder(t *testing.T) {
 		if err != nil && !c.fail {
 			t.Fatalf("unexpected error: %s", err)
 		}
+		if len(result) != len(c.result) {
+			t.Fatalf("mismatching count %d of received samples, want %d", len(result), len(c.result))
+		}
+		for k, res := range result {
+			if !reflect.DeepEqual(res, c.result[k]) {
+				t.Fatalf("unexpected sample %v, want %v", res, c.result[k])
+			}
+		}
+
 	}
 }

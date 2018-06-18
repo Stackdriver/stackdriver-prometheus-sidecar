@@ -186,21 +186,22 @@ func hashSeries(s *monitoring_pb.TimeSeries) uint64 {
 
 	h = hashAdd(h, s.Resource.Type)
 	h = hashAddByte(h, sep)
+	h = hashAdd(h, s.Metric.Type)
+
+	// Map iteration is randomized. We thus convert the labels to sorted slices
+	// with labels.FromMap before hashing.
 	for _, l := range labels.FromMap(s.Resource.Labels) {
+		h = hashAddByte(h, sep)
 		h = hashAdd(h, l.Name)
 		h = hashAddByte(h, sep)
 		h = hashAdd(h, l.Value)
-		h = hashAddByte(h, sep)
 	}
 	h = hashAddByte(h, sep)
-
-	h = hashAdd(h, s.Metric.Type)
-	h = hashAddByte(h, sep)
 	for _, l := range labels.FromMap(s.Metric.Labels) {
+		h = hashAddByte(h, sep)
 		h = hashAdd(h, l.Name)
 		h = hashAddByte(h, sep)
 		h = hashAdd(h, l.Value)
-		h = hashAddByte(h, sep)
 	}
 	return h
 }

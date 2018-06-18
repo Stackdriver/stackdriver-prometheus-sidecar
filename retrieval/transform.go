@@ -72,7 +72,8 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 
 	resource, ok := b.getResource(target.DiscoveredLabels)
 	if !ok {
-		return nil, samples[1:], errors.Errorf("couldn't infer resource for target %s", target.DiscoveredLabels)
+		// TODO(fabxc): increment a metric
+		return nil, samples[1:], nil
 	}
 	// TODO(fabxc): this needs special handling for summaries and histograms since we need to strip
 	// suffices like _bucket, _sum, and _count.
