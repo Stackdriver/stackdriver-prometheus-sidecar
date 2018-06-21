@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
+	distribution_pb "google.golang.org/genproto/googleapis/api/distribution"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredres_pb "google.golang.org/genproto/googleapis/api/monitoredres"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -92,7 +93,7 @@ func TestSampleBuilder(t *testing.T) {
 			metadata: metadataMap{
 				"job1/instance1/metric1":      &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
 				"job1/instance1/metric2":      &scrape.MetricMetadata{Type: textparse.MetricTypeCounter},
-				"job1/instance1/labelnum_ok":  &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
+				"job1/instance1/labelnum_ok":  &scrape.MetricMetadata{Type: textparse.MetricTypeUntyped},
 				"job1/instance1/labelnum_bad": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
 			},
 			input: []tsdb.RefSample{
@@ -194,6 +195,249 @@ func TestSampleBuilder(t *testing.T) {
 			},
 			result: []*monitoring_pb.TimeSeries{nil, nil, nil},
 		},
+		// Summary metrics.
+		{
+			targets: targetMap{
+				"job1/instance1": &targets.Target{
+					Labels:           promlabels.FromStrings("job", "job1", "instance", "instance1"),
+					DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+				},
+			},
+			metadata: metadataMap{
+				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeSummary},
+			},
+			series: seriesMap{
+				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_sum"),
+				2: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1", "quantile", "0.5"),
+				3: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_count"),
+				4: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1", "quantile", "0.9"),
+			},
+			input: []tsdb.RefSample{
+				{Ref: 1, T: 1000, V: 1},
+				{Ref: 2, T: 2000, V: 2},
+				{Ref: 3, T: 3000, V: 3},
+				{Ref: 4, T: 4000, V: 4},
+			},
+			result: []*monitoring_pb.TimeSeries{
+				{ // 0
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric1_sum",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 1},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{1},
+						},
+					}},
+				},
+				{ // 1
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric1",
+						Labels: map[string]string{"quantile": "0.5"},
+					},
+					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							EndTime: &timestamp_pb.Timestamp{Seconds: 2},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{2},
+						},
+					}},
+				},
+				{ // 2
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric1_count",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_INT64,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_Int64Value{3},
+						},
+					}},
+				},
+				{ // 3
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric1",
+						Labels: map[string]string{"quantile": "0.9"},
+					},
+					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							EndTime: &timestamp_pb.Timestamp{Seconds: 4},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{4},
+						},
+					}},
+				},
+			},
+		},
+		// Histogram.
+		{
+			targets: targetMap{
+				"job1/instance1": &targets.Target{
+					Labels:           promlabels.FromStrings("job", "job1", "instance", "instance1"),
+					DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+				},
+			},
+			metadata: metadataMap{
+				"job1/instance1/metric1":         &scrape.MetricMetadata{Type: textparse.MetricTypeHistogram},
+				"job1/instance1/metric1_a_count": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
+			},
+			series: seriesMap{
+				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_sum"),
+				2: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_count"),
+				3: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_bucket", "le", "0.1"),
+				4: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_bucket", "le", "0.5"),
+				5: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_bucket", "le", "1"),
+				6: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_bucket", "le", "2.5"),
+				7: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_bucket", "le", "+Inf"),
+				// Add another series that only deviates by having an extra label. We must properly detect a new histogram.
+				// This is an discouraged but possible case of metric labeling.
+				8: labels.FromStrings("job", "job1", "instance", "instance1", "a", "b", "__name__", "metric1_sum"),
+				9: labels.FromStrings("job", "job1", "instance", "instance1", "a", "b", "__name__", "metric1_count"),
+				// Series that triggers more edge cases.
+				10: labels.FromStrings("job", "job1", "instance", "instance1", "a", "b", "__name__", "metric1_a_count"),
+			},
+			input: []tsdb.RefSample{
+				// Mix up order of the series to test bucket sorting.
+				{Ref: 3, T: 1000, V: 2},    // 0.1
+				{Ref: 5, T: 1000, V: 6},    // 1
+				{Ref: 6, T: 1000, V: 8},    // 2.5
+				{Ref: 7, T: 1000, V: 10},   // inf
+				{Ref: 1, T: 1000, V: 55.1}, // sum
+				{Ref: 4, T: 1000, V: 5},    // 0.5
+				{Ref: 2, T: 1000, V: 10},   // count
+				// New histogram without actual buckets – should still work.
+				{Ref: 8, T: 1000, V: 100},
+				{Ref: 9, T: 1000, V: 10},
+				// New metric that actually matches the base name but the suffix is more more than a valid histogram suffix.
+				{Ref: 10, T: 1000, V: 3},
+			},
+			result: []*monitoring_pb.TimeSeries{
+				{ // 0
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric1",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_DISTRIBUTION,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 1},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DistributionValue{
+								&distribution_pb.Distribution{
+									Count: 10,
+									Mean:  5.51,
+									SumOfSquaredDeviation: 210.1085,
+									BucketOptions: &distribution_pb.Distribution_BucketOptions{
+										Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
+											ExplicitBuckets: &distribution_pb.Distribution_BucketOptions_Explicit{
+												Bounds: []float64{0.1, 0.5, 1, 2.5},
+											},
+										},
+									},
+									BucketCounts: []int64{2, 3, 1, 2, 2},
+								},
+							},
+						},
+					}},
+				},
+				{ // 1
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric1",
+						Labels: map[string]string{"a": "b"},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_DISTRIBUTION,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 1},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DistributionValue{
+								&distribution_pb.Distribution{
+									Count: 10,
+									Mean:  10,
+									SumOfSquaredDeviation: 0,
+									BucketOptions: &distribution_pb.Distribution_BucketOptions{
+										Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
+											ExplicitBuckets: &distribution_pb.Distribution_BucketOptions_Explicit{
+												Bounds: []float64{},
+											},
+										},
+									},
+									BucketCounts: []int64{},
+								},
+							},
+						},
+					}},
+				},
+				{ // 2
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric1_a_count",
+						Labels: map[string]string{"a": "b"},
+					},
+					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{3},
+						},
+					}},
+				},
+			},
+		},
 	}
 	for i, c := range cases {
 		t.Logf("Test case %d", i)
@@ -226,7 +470,7 @@ func TestSampleBuilder(t *testing.T) {
 		}
 		for k, res := range result {
 			if !reflect.DeepEqual(res, c.result[k]) {
-				t.Fatalf("unexpected sample %v, want %v", res, c.result[k])
+				t.Fatalf("unexpected sample %d: got %v, want %v", k, res, c.result[k])
 			}
 		}
 
