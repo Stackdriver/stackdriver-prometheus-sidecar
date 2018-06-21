@@ -106,6 +106,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		}
 	}
 	// Handle label modifications for histograms early so we don't build the label map twice.
+	// We have to remove the 'le' label which defines the bucket boundary.
 	if metadata.Type == textparse.MetricTypeHistogram {
 		for i, l := range finalLabels {
 			if l.Name == "le" {
@@ -278,8 +279,6 @@ func (b *sampleBuilder) buildDistribution(baseName string, matchLset tsdbLabels.
 	)
 	// We assume that all series belonging to the histogram are sequential. Consume series
 	// until we hit a new metric.
-	// We do not assume that the series list buckets in ascending order. This is more likely to
-	// not be the case depending on the implementation of client.
 Loop:
 	for _, s := range samples {
 		lset, ok := b.series.get(s.Ref)
@@ -313,8 +312,8 @@ Loop:
 		}
 		consumed++
 	}
-
-	// Ensure buckets are increasing.
+	// We do not assume that the buckets in the sample batch are in order, so we sort them agian here.
+	// The code below relies on this to convert between Prometheus's and Stackdriver's bucketing approaches.
 	sort.Sort(&dist)
 	// Reuse slices we already populated to build final bounds and values.
 	var (
