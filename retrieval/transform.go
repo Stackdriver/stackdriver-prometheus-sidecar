@@ -45,7 +45,7 @@ type sampleBuilder struct {
 // the remainder of the input.
 func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, []tsdb.RefSample, error) {
 	sample := samples[0]
-	lset, ok := b.series.get(sample.Ref)
+	lset, ok := b.series.getLabels(sample.Ref)
 	if !ok {
 		return nil, samples[1:], errors.Errorf("No series matched by ref %d", sample.Ref)
 	}
@@ -134,8 +134,12 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		res.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 		res.ValueType = metric_pb.MetricDescriptor_DOUBLE
 
-		point.Interval.StartTime = getTimestamp(1) // TODO(fabxc): replace with proper reset timestamp.
-		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{sample.V}}
+		resetTimestamp, v, ok := b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
+		if !ok {
+			return nil, samples[1:], nil
+		}
+		point.Interval.StartTime = getTimestamp(resetTimestamp)
+		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
 
 	case textparse.MetricTypeGauge, textparse.MetricTypeUntyped:
 		res.MetricKind = metric_pb.MetricDescriptor_GAUGE
@@ -148,13 +152,23 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		case metricSuffixSum:
 			res.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 			res.ValueType = metric_pb.MetricDescriptor_DOUBLE
-			point.Interval.StartTime = getTimestamp(1) // TODO(fabxc): replace with proper reset timestamp.
-			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{sample.V}}
+
+			resetTimestamp, v, ok := b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
+			if !ok {
+				return nil, samples[1:], nil
+			}
+			point.Interval.StartTime = getTimestamp(resetTimestamp)
+			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
 		case metricSuffixCount:
 			res.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 			res.ValueType = metric_pb.MetricDescriptor_INT64
-			point.Interval.StartTime = getTimestamp(1) // TODO(fabxc): replace with proper reset timestamp.
-			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_Int64Value{int64(sample.V)}}
+
+			resetTimestamp, v, ok := b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
+			if !ok {
+				return nil, samples[1:], nil
+			}
+			point.Interval.StartTime = getTimestamp(resetTimestamp)
+			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_Int64Value{int64(v)}}
 		case "": // Actual quantiles.
 			res.MetricKind = metric_pb.MetricDescriptor_GAUGE
 			res.ValueType = metric_pb.MetricDescriptor_DOUBLE
@@ -175,9 +189,12 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		// We pass in the original lset for matching since Prometheus's target label must
 		// be the same as well.
 		var v *distribution_pb.Distribution
-		v, samples = b.buildDistribution(baseMetricName, lset, samples)
-
-		point.Interval.StartTime = getTimestamp(1) // TODO(fabxc): replace with proper reset timestamp.
+		var resetTimestamp int64
+		v, resetTimestamp, samples = b.buildDistribution(baseMetricName, lset, samples)
+		if v == nil {
+			return nil, samples, nil
+		}
+		point.Interval.StartTime = getTimestamp(resetTimestamp)
 		point.Value = &monitoring_pb.TypedValue{
 			Value: &monitoring_pb.TypedValue_DistributionValue{v},
 		}
@@ -271,17 +288,21 @@ func (d *distribution) Swap(i, j int) {
 
 // buildDistribution consumes series from the beginning of the input slice that belong to a histogram
 // with the given metric name and label set.
-func (b *sampleBuilder) buildDistribution(baseName string, matchLset tsdbLabels.Labels, samples []tsdb.RefSample) (*distribution_pb.Distribution, []tsdb.RefSample) {
+// It returns the reset timestamp along with the distrubution.
+func (b *sampleBuilder) buildDistribution(baseName string, matchLset tsdbLabels.Labels, samples []tsdb.RefSample) (*distribution_pb.Distribution, int64, []tsdb.RefSample) {
 	var (
-		consumed   int
-		count, sum float64
-		dist       = distribution{bounds: make([]float64, 0, 20), values: make([]int64, 0, 20)}
+		consumed       int
+		count, sum     float64
+		resetTimestamp int64
+		lastTimestamp  int64
+		dist           = distribution{bounds: make([]float64, 0, 20), values: make([]int64, 0, 20)}
+		skip           = false
 	)
 	// We assume that all series belonging to the histogram are sequential. Consume series
 	// until we hit a new metric.
 Loop:
-	for _, s := range samples {
-		lset, ok := b.series.get(s.Ref)
+	for i, s := range samples {
+		lset, ok := b.series.getLabels(s.Ref)
 		if !ok {
 			consumed++
 			// TODO(fabxc): increment metric.
@@ -293,11 +314,22 @@ Loop:
 		if !strings.HasPrefix(name, baseName) || !histogramLabelsEqual(lset, matchLset) {
 			break
 		}
+		// Allow the same histogram to be repeated in a single batch for different timestamps.
+		// That's not a case that should ever happen with Prometheus, but it makes testing easier.
+		if i > 0 && s.T != lastTimestamp {
+			break
+		}
+		lastTimestamp = s.T
+
+		rt, v, ok := b.series.getResetAdjusted(s.Ref, s.T, s.V)
+
 		switch name[len(baseName):] {
 		case metricSuffixSum:
-			sum = s.V
+			sum = v
 		case metricSuffixCount:
-			count = s.V
+			count = v
+			// We take the count series as the authoritative source for the overall reset timestamp.
+			resetTimestamp = rt
 		case metricSuffixBucket:
 			upper, err := strconv.ParseFloat(lset.Get("le"), 64)
 			if err != nil {
@@ -306,13 +338,24 @@ Loop:
 				continue
 			}
 			dist.bounds = append(dist.bounds, upper)
-			dist.values = append(dist.values, int64(s.V))
+			dist.values = append(dist.values, int64(v))
 		default:
 			break Loop
 		}
+		// If new series appear through a change in the buckets  we will keep processing all
+		// series up to this point but won't emit a sample afterwards.
+		// The next histogram sample should than be aligned properly again.
+		if !ok {
+			skip = true
+		}
 		consumed++
 	}
-	// We do not assume that the buckets in the sample batch are in order, so we sort them agian here.
+	// Don't emit a sample if we explicitly skip it or no reset timestamp was set because the
+	// count series was missing.
+	if skip || resetTimestamp == 0 {
+		return nil, 0, samples[consumed:]
+	}
+	// We do not assume that the buckets in the sample batch are in order, so we sort them again here.
 	// The code below relies on this to convert between Prometheus's and Stackdriver's bucketing approaches.
 	sort.Sort(&dist)
 	// Reuse slices we already populated to build final bounds and values.
@@ -353,7 +396,7 @@ Loop:
 		},
 		BucketCounts: values,
 	}
-	return d, samples[consumed:]
+	return d, resetTimestamp, samples[consumed:]
 }
 
 // histogramLabelsEqual checks whether two label sets for a histogram series are equal aside from their

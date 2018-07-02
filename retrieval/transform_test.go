@@ -34,11 +34,6 @@ import (
 // seriesMap implements seriesGetter.
 type seriesMap map[uint64]labels.Labels
 
-func (g seriesMap) get(ref uint64) (labels.Labels, bool) {
-	ls, ok := g[ref]
-	return ls, ok
-}
-
 // targetMap implements a TargetGetter that indexes targets by job/instance combination.
 // It never returns an error.
 type targetMap map[string]*targets.Target
@@ -66,7 +61,7 @@ func TestSampleBuilder(t *testing.T) {
 		},
 	}
 	cases := []struct {
-		series   seriesGetter
+		series   seriesMap
 		targets  TargetGetter
 		metadata MetadataGetter
 		input    []tsdb.RefSample
@@ -98,12 +93,16 @@ func TestSampleBuilder(t *testing.T) {
 			},
 			input: []tsdb.RefSample{
 				{Ref: 2, T: 2000, V: 5.5},
+				{Ref: 2, T: 3000, V: 8},
+				{Ref: 2, T: 4000, V: 9},
+				{Ref: 2, T: 5000, V: 3},
 				{Ref: 1, T: 1000, V: 200},
 				{Ref: 3, T: 3000, V: 1},
 				{Ref: 4, T: 4000, V: 2},
 			},
 			result: []*monitoring_pb.TimeSeries{
-				{ // 0
+				nil, // Skipped by reset timestamp handling.
+				{ // 1
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -116,15 +115,57 @@ func TestSampleBuilder(t *testing.T) {
 					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
 					Points: []*monitoring_pb.Point{{
 						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
+							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
 						},
 						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{5.5},
+							Value: &monitoring_pb.TypedValue_DoubleValue{2.5},
 						},
 					}},
 				},
-				{ // 1
+				{ // 2
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric2",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 4},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{3.5},
+						},
+					}},
+				},
+				{ // 3
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric2",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Seconds: 4, Nanos: 1e9 - 1e6},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 5},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{3},
+						},
+					}},
+				},
+				{ // 4
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -144,7 +185,7 @@ func TestSampleBuilder(t *testing.T) {
 						},
 					}},
 				},
-				{ // 2
+				{ // 5
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -166,7 +207,7 @@ func TestSampleBuilder(t *testing.T) {
 						},
 					}},
 				},
-				nil, // 3: Dropped sample with too many labels.
+				nil, // 6: Dropped sample with too many labels.
 			},
 		},
 		// Various cases where we drop series due to absence of additional information.
@@ -214,12 +255,15 @@ func TestSampleBuilder(t *testing.T) {
 			},
 			input: []tsdb.RefSample{
 				{Ref: 1, T: 1000, V: 1},
+				{Ref: 1, T: 1500, V: 1},
 				{Ref: 2, T: 2000, V: 2},
 				{Ref: 3, T: 3000, V: 3},
+				{Ref: 3, T: 3500, V: 4},
 				{Ref: 4, T: 4000, V: 4},
 			},
 			result: []*monitoring_pb.TimeSeries{
-				{ // 0
+				nil, // 0: dropped by reset handling.
+				{ // 1
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -232,15 +276,15 @@ func TestSampleBuilder(t *testing.T) {
 					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
 					Points: []*monitoring_pb.Point{{
 						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 1},
+							StartTime: &timestamp_pb.Timestamp{Seconds: 1},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 1, Nanos: 5e8},
 						},
 						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{1},
+							Value: &monitoring_pb.TypedValue_DoubleValue{0},
 						},
 					}},
 				},
-				{ // 1
+				{ // 2
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -260,7 +304,8 @@ func TestSampleBuilder(t *testing.T) {
 						},
 					}},
 				},
-				{ // 2
+				nil, // 3: dropped by reset handling.
+				{ // 4
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -273,15 +318,15 @@ func TestSampleBuilder(t *testing.T) {
 					ValueType:  metric_pb.MetricDescriptor_INT64,
 					Points: []*monitoring_pb.Point{{
 						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
+							StartTime: &timestamp_pb.Timestamp{Seconds: 3},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 3, Nanos: 5e8},
 						},
 						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_Int64Value{3},
+							Value: &monitoring_pb.TypedValue_Int64Value{1},
 						},
 					}},
 				},
-				{ // 3
+				{ // 5
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -332,6 +377,7 @@ func TestSampleBuilder(t *testing.T) {
 			},
 			input: []tsdb.RefSample{
 				// Mix up order of the series to test bucket sorting.
+				// First sample set, should be skipped by reset handling.
 				{Ref: 3, T: 1000, V: 2},    // 0.1
 				{Ref: 5, T: 1000, V: 6},    // 1
 				{Ref: 6, T: 1000, V: 8},    // 2.5
@@ -339,14 +385,25 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 1, T: 1000, V: 55.1}, // sum
 				{Ref: 4, T: 1000, V: 5},    // 0.5
 				{Ref: 2, T: 1000, V: 10},   // count
+				// Second sample set should actually be emitted.
+				{Ref: 2, T: 2000, V: 21},    // count
+				{Ref: 3, T: 2000, V: 4},     // 0.1
+				{Ref: 6, T: 2000, V: 15},    // 2.5
+				{Ref: 5, T: 2000, V: 11},    // 1
+				{Ref: 1, T: 2000, V: 123.4}, // sum
+				{Ref: 7, T: 2000, V: 21},    // inf
+				{Ref: 4, T: 2000, V: 9},     // 0.5
 				// New histogram without actual buckets – should still work.
 				{Ref: 8, T: 1000, V: 100},
 				{Ref: 9, T: 1000, V: 10},
+				{Ref: 8, T: 2000, V: 115},
+				{Ref: 9, T: 2000, V: 13},
 				// New metric that actually matches the base name but the suffix is more more than a valid histogram suffix.
 				{Ref: 10, T: 1000, V: 3},
 			},
 			result: []*monitoring_pb.TimeSeries{
-				{ // 0
+				nil, // 0: skipped by reset handling.
+				{ // 1
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -359,15 +416,15 @@ func TestSampleBuilder(t *testing.T) {
 					ValueType:  metric_pb.MetricDescriptor_DISTRIBUTION,
 					Points: []*monitoring_pb.Point{{
 						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 1},
+							StartTime: &timestamp_pb.Timestamp{Seconds: 1},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
 						},
 						Value: &monitoring_pb.TypedValue{
 							Value: &monitoring_pb.TypedValue_DistributionValue{
 								&distribution_pb.Distribution{
-									Count: 10,
-									Mean:  5.51,
-									SumOfSquaredDeviation: 210.1085,
+									Count: 11,
+									Mean:  6.20909090909091,
+									SumOfSquaredDeviation: 270.301590909091,
 									BucketOptions: &distribution_pb.Distribution_BucketOptions{
 										Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
 											ExplicitBuckets: &distribution_pb.Distribution_BucketOptions_Explicit{
@@ -375,13 +432,14 @@ func TestSampleBuilder(t *testing.T) {
 											},
 										},
 									},
-									BucketCounts: []int64{2, 3, 1, 2, 2},
+									BucketCounts: []int64{2, 2, 1, 2, 4},
 								},
 							},
 						},
 					}},
 				},
-				{ // 1
+				nil, // 2: skipped by reset handling
+				{ // 3
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -394,14 +452,14 @@ func TestSampleBuilder(t *testing.T) {
 					ValueType:  metric_pb.MetricDescriptor_DISTRIBUTION,
 					Points: []*monitoring_pb.Point{{
 						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Nanos: 1e6}, // TODO(fabxc): update when reset timestamps are implemented.
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 1},
+							StartTime: &timestamp_pb.Timestamp{Seconds: 1},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
 						},
 						Value: &monitoring_pb.TypedValue{
 							Value: &monitoring_pb.TypedValue_DistributionValue{
 								&distribution_pb.Distribution{
-									Count: 10,
-									Mean:  10,
+									Count: 3,
+									Mean:  5,
 									SumOfSquaredDeviation: 0,
 									BucketOptions: &distribution_pb.Distribution_BucketOptions{
 										Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
@@ -416,7 +474,7 @@ func TestSampleBuilder(t *testing.T) {
 						},
 					}},
 				},
-				{ // 2
+				{ // 4
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -446,9 +504,14 @@ func TestSampleBuilder(t *testing.T) {
 		var err error
 		var result []*monitoring_pb.TimeSeries
 
+		series := newSeriesCache(nil, "")
+		for ref, s := range c.series {
+			series.set(ref, s, 0)
+		}
+
 		b := &sampleBuilder{
 			resourceMaps: resourceMaps,
-			series:       c.series,
+			series:       series,
 			targets:      c.targets,
 			metadata:     c.metadata,
 		}
@@ -466,11 +529,13 @@ func TestSampleBuilder(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 		if len(result) != len(c.result) {
+			t.Logf("gotres %v", result)
+			t.Logf("expres %v", c.result)
 			t.Fatalf("mismatching count %d of received samples, want %d", len(result), len(c.result))
 		}
 		for k, res := range result {
 			if !reflect.DeepEqual(res, c.result[k]) {
-				t.Fatalf("unexpected sample %d: got %v, want %v", k, res, c.result[k])
+				t.Fatalf("unexpected sample %d: got\n\t%v\nwant\n\t%v", k, res, c.result[k])
 			}
 		}
 

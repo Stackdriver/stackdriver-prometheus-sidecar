@@ -46,7 +46,7 @@ func TestScrapeCache(t *testing.T) {
 
 	// We should be able to read them all.
 	for i := 1; i <= 7; i++ {
-		lset, ok := c.get(uint64(i))
+		lset, ok := c.getLabels(uint64(i))
 		if !ok {
 			t.Fatalf("label set with ref %d not found", i)
 		}
@@ -82,13 +82,13 @@ func TestScrapeCache(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i := 1; i < 2; i++ {
-			if lset, ok := c.get(uint64(i)); ok {
+			if lset, ok := c.getLabels(uint64(i)); ok {
 				t.Fatalf("unexpected cache entry %d: %s", i, lset)
 			}
 		}
 		// We should be able to read them all.
 		for i := 3; i <= 7; i++ {
-			lset, ok := c.get(uint64(i))
+			lset, ok := c.getLabels(uint64(i))
 			if !ok {
 				t.Fatalf("label set with ref %d not found", i)
 			}
@@ -125,12 +125,12 @@ func TestScrapeCache(t *testing.T) {
 	//  Only series 4 and 7 should be left.
 	for i := 1; i <= 7; i++ {
 		if i != 4 && i != 7 {
-			if lset, ok := c.get(uint64(i)); ok {
+			if lset, ok := c.getLabels(uint64(i)); ok {
 				t.Fatalf("unexpected cache entry %d: %s", i, lset)
 			}
 			continue
 		}
-		lset, ok := c.get(uint64(i))
+		lset, ok := c.getLabels(uint64(i))
 		if !ok {
 			t.Fatalf("label set with ref %d not found", i)
 		}
