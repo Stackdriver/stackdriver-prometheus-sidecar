@@ -131,7 +131,8 @@ func main() {
 	// types. Currently Stackdriver fails the entire request if you attempt
 	// to write to the different metric type, which we do fairly often at
 	// this point, so lots of writes fail, and most writes fail.
-	config.DefaultQueueConfig.MaxSamplesPerSend = 1
+	config.DefaultQueueConfig.MaxSamplesPerSend = 30000
+	config.DefaultQueueConfig.MaxShards = 1000
 	var (
 		queueManager = stackdriver.NewQueueManager(
 			log.With(logger, "component", "queue_manager"),
