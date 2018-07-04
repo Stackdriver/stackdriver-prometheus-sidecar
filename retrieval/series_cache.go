@@ -169,9 +169,9 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 	if !ok {
 		return 0, 0, false
 	}
-	init := !e.hasReset
+	hasReset := e.hasReset
 	e.hasReset = true
-	if init {
+	if !hasReset {
 		e.resetTimestamp = t
 		e.resetValue = v
 		// If we just initialized the reset timestamp, this sample should be skipped.
@@ -180,10 +180,10 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 		return 0, 0, false
 	}
 	if v < e.resetValue {
-		// If the series was reset, place the reset timestamp right before
-		// the currently observed timestamp.
-		// We don't know the true reset time but the range between the two
-		// must be greater than zero.
+		// If the series was reset, set the reset timestamp to be one millisecond
+		// before the timestamp of the current sample.
+		// We don't know the true reset time but this ensures the range is non-zero
+		// while unlikely to conflict with any previous sample.
 		e.resetValue = 0
 		e.resetTimestamp = t - 1
 	}

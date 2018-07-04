@@ -314,8 +314,9 @@ Loop:
 		if !strings.HasPrefix(name, baseName) || !histogramLabelsEqual(lset, matchLset) {
 			break
 		}
-		// Allow the same histogram to be repeated in a single batch for different timestamps.
-		// That's not a case that should ever happen with Prometheus, but it makes testing easier.
+		// In general, a scrape cannot contain the same (set of) series repeatedlty but for different timestamps.
+		// It could still happen with bad clients though and we are doing it in tests for simplicity.
+		// Ensure that we detect equivalent series for different timestamps and break when encountering them.
 		if i > 0 && s.T != lastTimestamp {
 			break
 		}
@@ -342,9 +343,9 @@ Loop:
 		default:
 			break Loop
 		}
-		// If new series appear through a change in the buckets  we will keep processing all
-		// series up to this point but won't emit a sample afterwards.
-		// The next histogram sample should than be aligned properly again.
+		// If a series appeared for the first time, we won't get a valid reset timestamp yet.
+		// This may happen if the histogram is entirely new or if new series appeared through bucket changes.
+		// We skip the entire histogram sample in this case.
 		if !ok {
 			skip = true
 		}
