@@ -86,10 +86,10 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1":      &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
-				"job1/instance1/metric2":      &scrape.MetricMetadata{Type: textparse.MetricTypeCounter},
-				"job1/instance1/labelnum_ok":  &scrape.MetricMetadata{Type: textparse.MetricTypeUntyped},
-				"job1/instance1/labelnum_bad": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
+				"job1/instance1/metric1":      &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+				"job1/instance1/metric2":      &scrape.MetricMetadata{Type: textparse.MetricTypeCounter, Metric: "metric2"},
+				"job1/instance1/labelnum_ok":  &scrape.MetricMetadata{Type: textparse.MetricTypeUntyped, Metric: "labelnum_ok"},
+				"job1/instance1/labelnum_bad": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "labelnum_bad"},
 			},
 			input: []tsdb.RefSample{
 				{Ref: 2, T: 2000, V: 5.5},
@@ -222,7 +222,7 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
+				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
 			},
 			series: seriesMap{
 				1: labels.FromStrings("job", "job1", "instance", "instance_notfound", "__name__", "metric1"),
@@ -245,7 +245,7 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeSummary},
+				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeSummary, Metric: "metric1"},
 			},
 			series: seriesMap{
 				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_sum"),
@@ -357,8 +357,8 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1":         &scrape.MetricMetadata{Type: textparse.MetricTypeHistogram},
-				"job1/instance1/metric1_a_count": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge},
+				"job1/instance1/metric1":         &scrape.MetricMetadata{Type: textparse.MetricTypeHistogram, Metric: "metric1"},
+				"job1/instance1/metric1_a_count": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1_a_count"},
 			},
 			series: seriesMap{
 				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_sum"),
@@ -497,6 +497,9 @@ func TestSampleBuilder(t *testing.T) {
 			},
 		},
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for i, c := range cases {
 		t.Logf("Test case %d", i)
 
@@ -504,19 +507,15 @@ func TestSampleBuilder(t *testing.T) {
 		var err error
 		var result []*monitoring_pb.TimeSeries
 
-		series := newSeriesCache(nil, "")
+		series := newSeriesCache(nil, "", c.targets, c.metadata, resourceMaps)
 		for ref, s := range c.series {
-			series.set(ref, s, 0)
+			series.set(ctx, ref, s, 0)
 		}
 
-		b := &sampleBuilder{
-			resourceMaps: resourceMaps,
-			series:       series,
-			targets:      c.targets,
-			metadata:     c.metadata,
-		}
+		b := &sampleBuilder{series: series}
+
 		for k := 0; len(c.input) > 0; k++ {
-			s, c.input, err = b.next(context.Background(), c.input)
+			s, _, c.input, err = b.next(context.Background(), c.input)
 			if err != nil {
 				break
 			}
@@ -529,12 +528,12 @@ func TestSampleBuilder(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 		if len(result) != len(c.result) {
-			t.Logf("gotres %v", result)
-			t.Logf("expres %v", c.result)
 			t.Fatalf("mismatching count %d of received samples, want %d", len(result), len(c.result))
 		}
 		for k, res := range result {
 			if !reflect.DeepEqual(res, c.result[k]) {
+				t.Logf("gotres %v", result)
+				t.Logf("expres %v", c.result)
 				t.Fatalf("unexpected sample %d: got\n\t%v\nwant\n\t%v", k, res, c.result[k])
 			}
 		}

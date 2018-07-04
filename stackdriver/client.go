@@ -37,7 +37,7 @@ import (
 
 const (
 	metricsPrefix             = "external.googleapis.com/prometheus"
-	maxTimeseriesesPerRequest = 200
+	maxTimeseriesesPerRequest = 2000
 	MonitoringWriteScope      = "https://www.googleapis.com/auth/monitoring.write"
 )
 
@@ -140,7 +140,7 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 		return err
 	}
 
-	level.Debug(c.logger).Log("msg", "sending request to Stackdriver")
+	// level.Debug(c.logger).Log("msg", "sending request to Stackdriver")
 	service := monitoring.NewMetricServiceClient(conn)
 
 	errors := make(chan error, len(tss)/maxTimeseriesesPerRequest+1)
