@@ -23,6 +23,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
@@ -94,6 +95,15 @@ type PrometheusReader struct {
 	cancelTail     context.CancelFunc
 }
 
+var samplesProcessed = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "prometheus_sidecar_wal_samples_processed_total",
+	Help: "Total number of samples processed from the WAL",
+})
+
+func init() {
+	prometheus.MustRegister(samplesProcessed)
+}
+
 func (r *PrometheusReader) Run() error {
 	level.Info(r.logger).Log("msg", "Starting Prometheus reader...")
 	var ctx context.Context
@@ -158,6 +168,8 @@ Outer:
 					continue
 				}
 				r.appender.Append(hashSeries(outputSample), outputSample)
+
+				samplesProcessed.Inc()
 			}
 		case tsdb.RecordTombstones:
 		}
