@@ -312,32 +312,7 @@ func (t *QueueManager) reshard(n int) {
 	newShards := t.newShardCollection(n)
 	oldShards := t.shards
 	t.shards = newShards
-
-	// Carry over the map of youngest samples to the new shards.
-	//
-	// Reset timestamps are determined in the scraper, and in case multiple
-	// scrapers collect the same time series (e.g. overlapping scrape
-	// configs), cumulative samples from different scrapers are likely to
-	// have overlapping intervals. Normally this map guarantees
-	// non-overlapping intervals in the output, but if after resharding the
-	// map gets initialized with an earlier reset timestamp, the overlapping
-	// intervals will prevent the right samples from making it to
-	// Stackdriver, causing the time series to get stuck.  This could be
-	// avoided by aligning reset timestamps across all shards, e.g. using
-	// DELTA metrics instead of CUMULATIVE.
-	oldShards.stop() // the old shards must be stopped before we poke at their internals
-	// This is a critical section, and growing the map on a large deployment
-	// is slow, so preallocate the map to be near the expected size.
-	for newShardIndex := range newShards.shards {
-		newShards.shards[newShardIndex].youngestSampleIntervals = make(map[uint64]*monitoring_pb.TimeInterval, len(oldShards.shards[0].youngestSampleIntervals))
-	}
-	newShardsModulo := uint64(len(newShards.shards))
-	for oldShardIndex := range oldShards.shards {
-		for k, v := range oldShards.shards[oldShardIndex].youngestSampleIntervals {
-			newShardIndex := k % newShardsModulo
-			newShards.shards[newShardIndex].youngestSampleIntervals[k] = v
-		}
-	}
+	oldShards.stop()
 	t.shardsMtx.Unlock()
 
 	// We start the newShards after we have stopped (the therefore completely
@@ -346,37 +321,18 @@ func (t *QueueManager) reshard(n int) {
 	newShards.start()
 }
 
-// AcceptsInterval returns true if the given interval can be written to
-// Stackdriver after the reference interval. This defines an order for value
-// timestamps with equal reset timestamp, and requires that if the reset
-// timestamp moves, it doesn't overlap with the previous interval.
-func acceptsInterval(young, current *monitoring_pb.TimeInterval) bool {
-	currentEnd := time.Unix(current.EndTime.Seconds, int64(current.EndTime.Nanos))
-	youngEnd := time.Unix(young.EndTime.Seconds, int64(young.EndTime.Nanos))
-	if current.StartTime == nil {
-		return currentEnd.After(youngEnd)
-	}
-	youngReset := time.Unix(young.StartTime.Seconds, int64(young.StartTime.Nanos))
-	currentReset := time.Unix(current.StartTime.Seconds, int64(current.StartTime.Nanos))
-
-	return (currentReset == youngReset && currentEnd.After(youngEnd)) ||
-		(currentReset.After(youngReset) && !currentReset.Before(youngEnd))
-}
-
 type queueEntry struct {
 	hash   uint64
 	sample *monitoring_pb.TimeSeries
 }
 
 type shard struct {
-	queue                   chan queueEntry
-	youngestSampleIntervals map[uint64]*monitoring_pb.TimeInterval
+	queue chan queueEntry
 }
 
 func newShard(cfg config.QueueConfig) shard {
 	return shard{
 		queue: make(chan queueEntry, cfg.Capacity),
-		youngestSampleIntervals: map[uint64]*monitoring_pb.TimeInterval{},
 	}
 }
 
@@ -469,42 +425,28 @@ func (s *shardCollection) runShard(i int) {
 			}
 			queueLength.WithLabelValues(s.qm.queueName).Dec()
 
-			// Stackdriver rejects requests with points out of order
-			// or with multiple points for the same time series. The
-			// check below reduces the likelihood that this will
-			// happen by keeping track of the youngest interval
-			// written for each time series by the current
-			// shard. Each shard builds requests for a disjoint set
-			// of time series, so we don't need to track the
-			// intervals across shards.
-			currentSampleInterval := sample.Points[0].Interval
+			// If pendingSamples contains a point for the
+			// incoming time series, send all pending points
+			// to Stackdriver, and start a new list. This
+			// prevents adding two points for the same time
+			// series to a single request, which Stackdriver
+			// rejects.
+			_, seen := seenSamples[fp]
+			if !seen {
+				pendingSamples = append(pendingSamples, sample)
+				seenSamples[fp] = struct{}{}
+			}
+			if len(pendingSamples) >= s.qm.cfg.MaxSamplesPerSend || seen {
+				s.sendSamples(client, pendingSamples)
+				pendingSamples = pendingSamples[:0]
+				seenSamples = newSeenSamples()
 
-			if youngestSampleInterval, ok := shard.youngestSampleIntervals[fp]; !ok || acceptsInterval(youngestSampleInterval, currentSampleInterval) {
-				shard.youngestSampleIntervals[fp] = currentSampleInterval
-
-				// If pendingSamples contains a point for the
-				// incoming time series, send all pending points
-				// to Stackdriver, and start a new list. This
-				// prevents adding two points for the same time
-				// series to a single request, which Stackdriver
-				// rejects.
-				_, seen := seenSamples[fp]
-				if !seen {
-					pendingSamples = append(pendingSamples, sample)
-					seenSamples[fp] = struct{}{}
-				}
-				if len(pendingSamples) >= s.qm.cfg.MaxSamplesPerSend || seen {
-					s.sendSamples(client, pendingSamples)
-					pendingSamples = pendingSamples[:0]
-					seenSamples = newSeenSamples()
-
-					stop()
-					timer.Reset(s.qm.cfg.BatchSendDeadline)
-				}
-				if seen {
-					pendingSamples = append(pendingSamples, sample)
-					seenSamples[fp] = struct{}{}
-				}
+				stop()
+				timer.Reset(s.qm.cfg.BatchSendDeadline)
+			}
+			if seen {
+				pendingSamples = append(pendingSamples, sample)
+				seenSamples[fp] = struct{}{}
 			}
 		case <-timer.C:
 			if len(pendingSamples) > 0 {
