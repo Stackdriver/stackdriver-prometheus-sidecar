@@ -328,11 +328,21 @@ type queueEntry struct {
 
 type shard struct {
 	queue chan queueEntry
+	// A reusable cache of samples that were already seen in a
+	// smaple batch.
+	seen map[uint64]struct{}
+}
+
+func (s *shard) resetSeen() {
+	for k := range s.seen {
+		delete(s.seen, k)
+	}
 }
 
 func newShard(cfg config.QueueConfig) shard {
 	return shard{
 		queue: make(chan queueEntry, cfg.Capacity),
+		seen:  map[uint64]struct{}{},
 	}
 }
 
@@ -394,10 +404,7 @@ func (s *shardCollection) runShard(i int) {
 	pendingSamples := make([]*monitoring_pb.TimeSeries, 0, s.qm.cfg.MaxSamplesPerSend)
 	// Fingerprint of time series contained in pendingSamples. Gets reset
 	// whenever samples are extracted from pendingSamples.
-	newSeenSamples := func() map[uint64]struct{} {
-		return make(map[uint64]struct{}, s.qm.cfg.MaxSamplesPerSend)
-	}
-	seenSamples := newSeenSamples()
+	shard.resetSeen()
 
 	timer := time.NewTimer(s.qm.cfg.BatchSendDeadline)
 	stop := func() {
@@ -431,28 +438,28 @@ func (s *shardCollection) runShard(i int) {
 			// prevents adding two points for the same time
 			// series to a single request, which Stackdriver
 			// rejects.
-			_, seen := seenSamples[fp]
+			_, seen := shard.seen[fp]
 			if !seen {
 				pendingSamples = append(pendingSamples, sample)
-				seenSamples[fp] = struct{}{}
+				shard.seen[fp] = struct{}{}
 			}
 			if len(pendingSamples) >= s.qm.cfg.MaxSamplesPerSend || seen {
 				s.sendSamples(client, pendingSamples)
 				pendingSamples = pendingSamples[:0]
-				seenSamples = newSeenSamples()
+				shard.resetSeen()
 
 				stop()
 				timer.Reset(s.qm.cfg.BatchSendDeadline)
 			}
 			if seen {
 				pendingSamples = append(pendingSamples, sample)
-				seenSamples[fp] = struct{}{}
+				shard.seen[fp] = struct{}{}
 			}
 		case <-timer.C:
 			if len(pendingSamples) > 0 {
 				s.sendSamples(client, pendingSamples)
 				pendingSamples = pendingSamples[:0]
-				seenSamples = newSeenSamples()
+				shard.resetSeen()
 			}
 			timer.Reset(s.qm.cfg.BatchSendDeadline)
 		}
