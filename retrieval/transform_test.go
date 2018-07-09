@@ -496,6 +496,88 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 		},
+		// Interval overlap handling.
+		{
+			series: seriesMap{
+				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1"),
+				2: labels.FromStrings("job", "job1", "instance", "instance2", "__name__", "metric1"),
+			},
+			// Both instances map to the same monitored resource and will thus produce the same series.
+			targets: targetMap{
+				"job1/instance1": &targets.Target{
+					Labels:           promlabels.FromStrings("job", "job1", "instance", "instance1"),
+					DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+				},
+				"job1/instance2": &targets.Target{
+					Labels:           promlabels.FromStrings("job", "job1", "instance", "instance2"),
+					DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+				},
+			},
+			metadata: metadataMap{
+				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeCounter, Metric: "metric1"},
+				"job1/instance2/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeCounter, Metric: "metric1"},
+			},
+			input: []tsdb.RefSample{
+				// First sample for both series will define the reset timestamp.
+				{Ref: 1, T: 1000, V: 4},
+				{Ref: 2, T: 1500, V: 5},
+				// The sample for series 2 must be rejected.
+				{Ref: 1, T: 2000, V: 9},
+				{Ref: 2, T: 2500, V: 11},
+				// Both series get reset but the 2nd one is detected first.
+				// The emitted samples should flip over.
+				{Ref: 2, T: 3500, V: 3},
+				{Ref: 1, T: 3000, V: 2},
+			},
+			result: []*monitoring_pb.TimeSeries{
+				nil, // Skipped by reset timestamp handling.
+				nil, // Skipped by reset timestamp handling.
+				{
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric1",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Seconds: 1},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 2},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{5},
+						},
+					}},
+				},
+				nil,
+				{
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric1",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Seconds: 3, Nanos: 5e8 - 1e6},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 3, Nanos: 5e8},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{3},
+						},
+					}},
+				},
+				nil,
+			},
+		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

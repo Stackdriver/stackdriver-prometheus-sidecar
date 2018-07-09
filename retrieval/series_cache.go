@@ -41,6 +41,10 @@ type seriesGetter interface {
 	// Get the reset timestamp and adjusted value for the input sample.
 	// If false is returned, the sample should be skipped.
 	getResetAdjusted(ref uint64, t int64, v float64) (int64, float64, bool)
+
+	// Attempt to set the new most recent time range for the series with given hash.
+	// Returns true if it failed, in which case the sample must be discarded.
+	updateSampleInterval(hash uint64, start, end int64) bool
 }
 
 // seriesCache holds a mapping from series reference to label set.
@@ -57,7 +61,10 @@ type seriesCache struct {
 	// We don't have to redo garbage collection until a higher checkpoint appears.
 	lastCheckpoint int
 	mtx            sync.Mutex
-	entries        map[uint64]*seriesCacheEntry
+	// Map from series reference to various cached information about it.
+	entries map[uint64]*seriesCacheEntry
+	// Map from series hash to most recently written interval.
+	intervals map[uint64]sampleInterval
 }
 
 type seriesCacheEntry struct {
@@ -91,6 +98,7 @@ func newSeriesCache(logger log.Logger, dir string, targets TargetGetter, metadat
 		metadata:     metadata,
 		resourceMaps: resourceMaps,
 		entries:      map[uint64]*seriesCacheEntry{},
+		intervals:    map[uint64]sampleInterval{},
 	}
 }
 
@@ -172,6 +180,25 @@ func (c *seriesCache) get(ref uint64) (*seriesCacheEntry, bool) {
 	e, ok := c.entries[ref]
 	c.mtx.Unlock()
 	return e, ok
+}
+
+// updateSampleInterval attempts to set the new most recent time range for the series with given hash.
+// Returns true if it failed, in which case the sample must be discarded.
+func (c *seriesCache) updateSampleInterval(hash uint64, start, end int64) bool {
+	iv, ok := c.intervals[hash]
+	if !ok || iv.accepts(start, end) {
+		c.intervals[hash] = sampleInterval{start, end}
+		return true
+	}
+	return false
+}
+
+type sampleInterval struct {
+	start, end int64
+}
+
+func (si *sampleInterval) accepts(start, end int64) bool {
+	return (start == si.start && end > si.end) || (start > si.start && start >= si.end)
 }
 
 // getResetAdjusted takes a sample for a referenced series and returns

@@ -55,9 +55,12 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	}
 	ts.Points = append(ts.Points, point)
 
+	var resetTimestamp int64
+
 	switch entry.metadata.Type {
 	case textparse.MetricTypeCounter:
-		resetTimestamp, v, ok := b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
+		var v float64
+		resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 		if !ok {
 			return nil, 0, samples[1:], nil
 		}
@@ -70,14 +73,16 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	case textparse.MetricTypeSummary:
 		switch entry.suffix {
 		case metricSuffixSum:
-			resetTimestamp, v, ok := b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
+			var v float64
+			resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 			if !ok {
 				return nil, 0, samples[1:], nil
 			}
 			point.Interval.StartTime = getTimestamp(resetTimestamp)
 			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
 		case metricSuffixCount:
-			resetTimestamp, v, ok := b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
+			var v float64
+			resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 			if !ok {
 				return nil, 0, samples[1:], nil
 			}
@@ -93,7 +98,6 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		// We pass in the original lset for matching since Prometheus's target label must
 		// be the same as well.
 		var v *distribution_pb.Distribution
-		var resetTimestamp int64
 		v, resetTimestamp, samples = b.buildDistribution(entry.metadata.Metric, entry.lset, samples)
 		if v == nil {
 			return nil, 0, samples, nil
@@ -106,6 +110,10 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 
 	default:
 		return nil, 0, samples[1:], errors.Errorf("unexpected metric type %s", entry.metadata.Type)
+	}
+
+	if !b.series.updateSampleInterval(entry.hash, resetTimestamp, sample.T) {
+		return nil, 0, samples[1:], nil
 	}
 	return &ts, entry.hash, samples[1:], nil
 }

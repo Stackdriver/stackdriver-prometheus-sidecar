@@ -122,7 +122,11 @@ func (r *PrometheusReader) Run() error {
 	// with performance. The WAL reader will do a lot of tiny reads otherwise.
 	// This is also the reason for the series cache dealing with "maxSegment" hints
 	// for series rather than precise ones.
-	reader := wal.NewReader(tailer)
+	var (
+		reader  = wal.NewReader(tailer)
+		samples []tsdb.RefSample
+		series  []tsdb.RefSeries
+	)
 Outer:
 	for reader.Next() {
 		record := reader.Record()
@@ -130,21 +134,21 @@ Outer:
 		var decoder tsdb.RecordDecoder
 		switch decoder.Type(record) {
 		case tsdb.RecordSeries:
-			recordSeries, err := decoder.Series(record, nil)
+			series, err = decoder.Series(record, series[:0])
 			if err != nil {
 				level.Error(r.logger).Log("error", err)
 				continue
 			}
-			for _, series := range recordSeries {
-				seriesCache.set(ctx, series.Ref, series.Labels, tailer.CurrentSegment())
+			for _, s := range series {
+				seriesCache.set(ctx, s.Ref, s.Labels, tailer.CurrentSegment())
 			}
 		case tsdb.RecordSamples:
-			recordSamples, err := decoder.Samples(record, nil)
+			samples, err = decoder.Samples(record, samples[:0])
 			if err != nil {
 				level.Error(r.logger).Log("error", err)
 				continue
 			}
-			for len(recordSamples) > 0 {
+			for len(samples) > 0 {
 				select {
 				case <-ctx.Done():
 					break Outer
@@ -152,7 +156,7 @@ Outer:
 				}
 				var outputSample *monitoring_pb.TimeSeries
 				var hash uint64
-				outputSample, hash, recordSamples, err = builder.next(ctx, recordSamples)
+				outputSample, hash, samples, err = builder.next(ctx, samples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
