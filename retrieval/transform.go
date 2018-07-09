@@ -316,7 +316,8 @@ Loop:
 		}
 		// In general, a scrape cannot contain the same (set of) series repeatedlty but for different timestamps.
 		// It could still happen with bad clients though and we are doing it in tests for simplicity.
-		// Ensure that we detect equivalent series for different timestamps and break when encountering them.
+		// If we detect the same series as before but for a different timestamp, return the histogram up to this
+		// series and leave the duplicate time series untouched on the input.
 		if i > 0 && s.T != lastTimestamp {
 			break
 		}
