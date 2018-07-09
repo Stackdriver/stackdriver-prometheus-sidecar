@@ -328,8 +328,7 @@ type queueEntry struct {
 
 type shard struct {
 	queue chan queueEntry
-	// A reusable cache of samples that were already seen in a
-	// smaple batch.
+	// A reusable cache of samples that were already seen in a sample batch.
 	seen map[uint64]struct{}
 }
 

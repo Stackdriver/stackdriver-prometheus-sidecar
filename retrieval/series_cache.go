@@ -182,6 +182,8 @@ func (c *seriesCache) get(ref uint64) (*seriesCacheEntry, bool) {
 	return e, ok
 }
 
+// updateSampleInterval attempts to set the new most recent time range for the series with given hash.
+// Returns true if it failed, in which case the sample must be discarded.
 func (c *seriesCache) updateSampleInterval(hash uint64, start, end int64) bool {
 	iv, ok := c.intervals[hash]
 	if !ok || iv.accepts(start, end) {
