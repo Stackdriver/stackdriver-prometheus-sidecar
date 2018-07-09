@@ -29,7 +29,11 @@ import (
 
 type seriesGetter interface {
 	// Same interface as the standard map getter.
-	get(ref uint64) (labels.Labels, bool)
+	getLabels(ref uint64) (labels.Labels, bool)
+
+	// Get the reset timestamp and adjusted value for the input sample.
+	// If false is returned, the sample should be skipped.
+	getResetAdjusted(ref uint64, t int64, v float64) (int64, float64, bool)
 }
 
 // seriesCache holds a mapping from series reference to label set.
@@ -43,11 +47,14 @@ type seriesCache struct {
 	// We don't have to redo garbage collection until a higher checkpoint appears.
 	lastCheckpoint int
 	mtx            sync.Mutex
-	lsets          map[uint64]seriesCacheEntry
+	entries        map[uint64]*seriesCacheEntry
 }
 
 type seriesCacheEntry struct {
-	lset labels.Labels
+	lset           labels.Labels
+	hasReset       bool
+	resetValue     float64
+	resetTimestamp int64
 	// maxSegment indicates the maximum WAL segment index in which
 	// the series was first logged.
 	// By providing it as an upper bound, we can safely delete a series entry
@@ -63,9 +70,9 @@ func newSeriesCache(logger log.Logger, dir string) *seriesCache {
 		logger = log.NewNopLogger()
 	}
 	return &seriesCache{
-		logger: logger,
-		dir:    dir,
-		lsets:  map[uint64]seriesCacheEntry{},
+		logger:  logger,
+		dir:     dir,
+		entries: map[uint64]*seriesCacheEntry{},
 	}
 }
 
@@ -133,26 +140,60 @@ func (c *seriesCache) garbageCollect() error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	for ref, entry := range c.lsets {
+	for ref, entry := range c.entries {
 		if _, ok := exists[ref]; !ok && entry.maxSegment <= cpNum {
-			delete(c.lsets, ref)
+			delete(c.entries, ref)
 		}
 	}
 	c.lastCheckpoint = cpNum
 	return nil
 }
 
-func (c *seriesCache) get(ref uint64) (labels.Labels, bool) {
+func (c *seriesCache) getLabels(ref uint64) (labels.Labels, bool) {
 	c.mtx.Lock()
-	l, ok := c.lsets[ref]
+	e, ok := c.entries[ref]
 	c.mtx.Unlock()
-	return l.lset, ok
+	if !ok {
+		return nil, false
+	}
+	return e.lset, true
+}
+
+// getResetAdjusted takes a sample for a referenced series and returns
+// its reset timestamp and adjusted value.
+// If the last return argument is false, the sample should be dropped.
+func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, float64, bool) {
+	c.mtx.Lock()
+	e, ok := c.entries[ref]
+	c.mtx.Unlock()
+	if !ok {
+		return 0, 0, false
+	}
+	hasReset := e.hasReset
+	e.hasReset = true
+	if !hasReset {
+		e.resetTimestamp = t
+		e.resetValue = v
+		// If we just initialized the reset timestamp, this sample should be skipped.
+		// We don't know the window over which the current cumulative value was built up over.
+		// The next sample for will be considered from this point onwards.
+		return 0, 0, false
+	}
+	if v < e.resetValue {
+		// If the series was reset, set the reset timestamp to be one millisecond
+		// before the timestamp of the current sample.
+		// We don't know the true reset time but this ensures the range is non-zero
+		// while unlikely to conflict with any previous sample.
+		e.resetValue = 0
+		e.resetTimestamp = t - 1
+	}
+	return e.resetTimestamp, v - e.resetValue, true
 }
 
 // set the label set for the given reference.
 // maxSegment indicates the the highest segment at which the series was possibly defined.
 func (c *seriesCache) set(ref uint64, lset labels.Labels, maxSegment int) {
 	c.mtx.Lock()
-	c.lsets[ref] = seriesCacheEntry{maxSegment: maxSegment, lset: lset}
+	c.entries[ref] = &seriesCacheEntry{maxSegment: maxSegment, lset: lset}
 	c.mtx.Unlock()
 }
