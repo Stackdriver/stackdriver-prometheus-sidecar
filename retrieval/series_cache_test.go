@@ -14,44 +14,61 @@ limitations under the License.
 package retrieval
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
+	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
 )
 
-func TestScrapeCache(t *testing.T) {
+// This test primarily verifies the garbage collection logic of the cache.
+// The getters are verified integrated into the sample builder in transform_test.go
+func TestScrapeCache_GarbageCollect(t *testing.T) {
 	dir, err := ioutil.TempDir("", "scrape_cache")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
 
-	c := newSeriesCache(nil, dir)
+	// Initialize the series cache with "empty" target and metadata maps.
+	// The series we use below have no job, instance, and __name__ labels set, which
+	// will result in those empty lookup keys.
+	c := newSeriesCache(nil, dir,
+		targetMap{"/": &targets.Target{}},
+		metadataMap{"//": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge}},
+		[]ResourceMap{
+			{Type: "resource1", LabelMap: map[string]string{}},
+		},
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Add the series to the cache. Normally, they would have been inserted during
 	// tailing - either with the checkpoint index or a segment index at or below.
-	c.set(1, labels.FromStrings("a", "1"), 0)
-	c.set(2, labels.FromStrings("a", "2"), 5)
-	c.set(3, labels.FromStrings("a", "3"), 9)
-	c.set(4, labels.FromStrings("a", "4"), 10)
-	c.set(5, labels.FromStrings("a", "5"), 11)
-	c.set(6, labels.FromStrings("a", "6"), 12)
-	c.set(7, labels.FromStrings("a", "7"), 13)
+	c.set(ctx, 1, labels.FromStrings("a", "1"), 0)
+	c.set(ctx, 2, labels.FromStrings("a", "2"), 5)
+	c.set(ctx, 3, labels.FromStrings("a", "3"), 9)
+	c.set(ctx, 4, labels.FromStrings("a", "4"), 10)
+	c.set(ctx, 5, labels.FromStrings("a", "5"), 11)
+	c.set(ctx, 6, labels.FromStrings("a", "6"), 12)
+	c.set(ctx, 7, labels.FromStrings("a", "7"), 13)
 
 	// We should be able to read them all.
 	for i := 1; i <= 7; i++ {
-		lset, ok := c.getLabels(uint64(i))
+		entry, ok := c.get(uint64(i))
 		if !ok {
-			t.Fatalf("label set with ref %d not found", i)
+			t.Fatalf("entry with ref %d not found", i)
 		}
-		if !lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
-			t.Fatalf("unexpected label set for ref %d: %s", i, lset)
+		if !entry.lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
+			t.Fatalf("unexpected label set for ref %d: %s", i, entry.lset)
 		}
 	}
 
@@ -82,18 +99,18 @@ func TestScrapeCache(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i := 1; i < 2; i++ {
-			if lset, ok := c.getLabels(uint64(i)); ok {
-				t.Fatalf("unexpected cache entry %d: %s", i, lset)
+			if entry, ok := c.get(uint64(i)); ok {
+				t.Fatalf("unexpected cache entry %d: %s", i, entry.lset)
 			}
 		}
 		// We should be able to read them all.
 		for i := 3; i <= 7; i++ {
-			lset, ok := c.getLabels(uint64(i))
+			entry, ok := c.get(uint64(i))
 			if !ok {
 				t.Fatalf("label set with ref %d not found", i)
 			}
-			if !lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
-				t.Fatalf("unexpected label set for ref %d: %s", i, lset)
+			if !entry.lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
+				t.Fatalf("unexpected label set for ref %d: %s", i, entry.lset)
 			}
 		}
 	}
@@ -125,17 +142,17 @@ func TestScrapeCache(t *testing.T) {
 	//  Only series 4 and 7 should be left.
 	for i := 1; i <= 7; i++ {
 		if i != 4 && i != 7 {
-			if lset, ok := c.getLabels(uint64(i)); ok {
-				t.Fatalf("unexpected cache entry %d: %s", i, lset)
+			if entry, ok := c.get(uint64(i)); ok {
+				t.Fatalf("unexpected cache entry %d: %s", i, entry.lset)
 			}
 			continue
 		}
-		lset, ok := c.getLabels(uint64(i))
+		entry, ok := c.get(uint64(i))
 		if !ok {
-			t.Fatalf("label set with ref %d not found", i)
+			t.Fatalf("entrywith ref %d not found", i)
 		}
-		if !lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
-			t.Fatalf("unexpected label set for ref %d: %s", i, lset)
+		if !entry.lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
+			t.Fatalf("unexpected label set for ref %d: %s", i, entry.lset)
 		}
 	}
 }

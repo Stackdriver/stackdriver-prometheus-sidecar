@@ -21,189 +21,93 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/tsdb"
 	tsdbLabels "github.com/prometheus/tsdb/labels"
 	distribution_pb "google.golang.org/genproto/googleapis/api/distribution"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
-	monitoredres_pb "google.golang.org/genproto/googleapis/api/monitoredres"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 type sampleBuilder struct {
-	resourceMaps []ResourceMap
-	series       seriesGetter
-	targets      TargetGetter
-	metadata     MetadataGetter
+	series seriesGetter
 }
 
 // next extracts the next sample from the TSDB input sample list and returns
 // the remainder of the input.
-func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, []tsdb.RefSample, error) {
+func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, uint64, []tsdb.RefSample, error) {
 	sample := samples[0]
-	lset, ok := b.series.getLabels(sample.Ref)
-	if !ok {
-		return nil, samples[1:], errors.Errorf("No series matched by ref %d", sample.Ref)
-	}
-	// Use the first available sample to probe for the target, its applicable resource, and the
-	// series metadata.
-	// They will be used subsequently for all other Prometheus series that map to the same complex
-	// Stackdriver series.
-	// If either of those pieces of data is missing, the series will be skipped.
-	target, err := b.targets.Get(ctx, pkgLabels(lset))
-	if err != nil {
-		return nil, samples, errors.Wrap(err, "retrieving target failed")
-	}
-	if target == nil {
-		// TODO(fabxc): increment a metric.
-		return nil, samples[1:], nil
-	}
-	// Remove target labels and __name__ label.
-	finalLabels := targets.DropTargetLabels(pkgLabels(lset), target.Labels)
-	for i, l := range finalLabels {
-		if l.Name == "__name__" {
-			finalLabels = append(finalLabels[:i], finalLabels[i+1:]...)
-			break
-		}
-	}
-	// Drop series with too many labels.
-	if len(finalLabels) > maxLabelCount {
-		// TODO(fabxc): increment a metric
-		return nil, samples[1:], nil
-	}
 
-	resource, ok := b.getResource(target.DiscoveredLabels)
+	entry, ok := b.series.get(sample.Ref)
 	if !ok {
-		// TODO(fabxc): increment a metric
-		return nil, samples[1:], nil
+		return nil, 0, samples[1:], nil
 	}
-	var (
-		metricName     = lset.Get("__name__")
-		baseMetricName string // metric name stripped by potential suffixes.
-		suffix         string
-	)
-	metadata, err := b.metadata.Get(ctx, lset.Get("job"), lset.Get("instance"), metricName)
-	if err != nil {
-		return nil, samples, errors.Wrap(err, "get metadata")
-	}
-	if metadata == nil {
-		// The full name didn't turn anything up. Check again in case it's a summary or histogram without
-		// the metric name suffix.
-		var ok bool
-		if baseMetricName, suffix, ok = stripComplexMetricSuffix(metricName); ok {
-			metadata, err = b.metadata.Get(ctx, lset.Get("job"), lset.Get("instance"), baseMetricName)
-			if err != nil {
-				return nil, samples, errors.Wrap(err, "get metadata")
-			}
-		}
-		if metadata == nil {
-			// TODO(fabxc): increment a metric.
-			return nil, samples[1:], nil
-		}
-	}
-	// Handle label modifications for histograms early so we don't build the label map twice.
-	// We have to remove the 'le' label which defines the bucket boundary.
-	if metadata.Type == textparse.MetricTypeHistogram {
-		for i, l := range finalLabels {
-			if l.Name == "le" {
-				finalLabels = append(finalLabels[:i], finalLabels[i+1:]...)
-				break
-			}
-		}
-	}
+	// Get a shallow copy of the proto so we can overwrite the point field
+	// and safely send it into the remote queues.
+	ts := *entry.proto
+
 	point := &monitoring_pb.Point{
 		Interval: &monitoring_pb.TimeInterval{
 			EndTime: getTimestamp(sample.T),
 		},
 	}
-	res := &monitoring_pb.TimeSeries{
-		Metric: &metric_pb.Metric{
-			Type:   getMetricType(metricName),
-			Labels: finalLabels.Map(),
-		},
-		Resource: resource,
-		Points:   []*monitoring_pb.Point{point},
-	}
+	ts.Points = append(ts.Points, point)
 
-	switch metadata.Type {
+	switch entry.metadata.Type {
 	case textparse.MetricTypeCounter:
-		res.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
-		res.ValueType = metric_pb.MetricDescriptor_DOUBLE
-
 		resetTimestamp, v, ok := b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 		if !ok {
-			return nil, samples[1:], nil
+			return nil, 0, samples[1:], nil
 		}
 		point.Interval.StartTime = getTimestamp(resetTimestamp)
 		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
 
 	case textparse.MetricTypeGauge, textparse.MetricTypeUntyped:
-		res.MetricKind = metric_pb.MetricDescriptor_GAUGE
-		res.ValueType = metric_pb.MetricDescriptor_DOUBLE
-
 		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{sample.V}}
 
 	case textparse.MetricTypeSummary:
-		switch suffix {
+		switch entry.suffix {
 		case metricSuffixSum:
-			res.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
-			res.ValueType = metric_pb.MetricDescriptor_DOUBLE
-
 			resetTimestamp, v, ok := b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 			if !ok {
-				return nil, samples[1:], nil
+				return nil, 0, samples[1:], nil
 			}
 			point.Interval.StartTime = getTimestamp(resetTimestamp)
 			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
 		case metricSuffixCount:
-			res.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
-			res.ValueType = metric_pb.MetricDescriptor_INT64
-
 			resetTimestamp, v, ok := b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 			if !ok {
-				return nil, samples[1:], nil
+				return nil, 0, samples[1:], nil
 			}
 			point.Interval.StartTime = getTimestamp(resetTimestamp)
 			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_Int64Value{int64(v)}}
 		case "": // Actual quantiles.
-			res.MetricKind = metric_pb.MetricDescriptor_GAUGE
-			res.ValueType = metric_pb.MetricDescriptor_DOUBLE
 			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{sample.V}}
 		default:
-			return res, samples[1:], errors.Errorf("unexpected metric name suffix %q", suffix)
+			return nil, 0, samples[1:], errors.Errorf("unexpected metric name suffix %q", entry.suffix)
 		}
 
 	case textparse.MetricTypeHistogram:
-		// The metric is set to the base name and the le label must be stripped.
-		// buildDistribution uses the cleaned up label set and base name to detect series
-		// belonging to the same histogram.
-		res.Metric.Type = getMetricType(baseMetricName)
-
-		res.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
-		res.ValueType = metric_pb.MetricDescriptor_DISTRIBUTION
-
 		// We pass in the original lset for matching since Prometheus's target label must
 		// be the same as well.
 		var v *distribution_pb.Distribution
 		var resetTimestamp int64
-		v, resetTimestamp, samples = b.buildDistribution(baseMetricName, lset, samples)
+		v, resetTimestamp, samples = b.buildDistribution(entry.metadata.Metric, entry.lset, samples)
 		if v == nil {
-			return nil, samples, nil
+			return nil, 0, samples, nil
 		}
 		point.Interval.StartTime = getTimestamp(resetTimestamp)
 		point.Value = &monitoring_pb.TypedValue{
 			Value: &monitoring_pb.TypedValue_DistributionValue{v},
 		}
-		return res, samples, nil
+		return &ts, 0, samples, nil
 
 	default:
-		return nil, samples[1:], errors.Errorf("unexpected metric type %s", metadata.Type)
+		return nil, 0, samples[1:], errors.Errorf("unexpected metric type %s", entry.metadata.Type)
 	}
-	return res, samples[1:], nil
+	return &ts, entry.hash, samples[1:], nil
 }
 
 const (
@@ -256,18 +160,6 @@ func getTimestamp(t int64) *timestamp_pb.Timestamp {
 	}
 }
 
-func (b *sampleBuilder) getResource(lset labels.Labels) (*monitoredres_pb.MonitoredResource, bool) {
-	for _, m := range b.resourceMaps {
-		if lset := m.Translate(lset); lset != nil {
-			return &monitoredres_pb.MonitoredResource{
-				Type:   m.Type,
-				Labels: lset,
-			}, true
-		}
-	}
-	return nil, false
-}
-
 type distribution struct {
 	bounds []float64
 	values []int64
@@ -302,16 +194,16 @@ func (b *sampleBuilder) buildDistribution(baseName string, matchLset tsdbLabels.
 	// until we hit a new metric.
 Loop:
 	for i, s := range samples {
-		lset, ok := b.series.getLabels(s.Ref)
+		e, ok := b.series.get(s.Ref)
 		if !ok {
 			consumed++
 			// TODO(fabxc): increment metric.
 			continue
 		}
-		name := lset.Get("__name__")
+		name := e.lset.Get("__name__")
 		// The series matches if it has the same base name, the remainder is a valid histogram suffix,
 		// and the labels aside from the le and __name__ label match up.
-		if !strings.HasPrefix(name, baseName) || !histogramLabelsEqual(lset, matchLset) {
+		if !strings.HasPrefix(name, baseName) || !histogramLabelsEqual(e.lset, matchLset) {
 			break
 		}
 		// In general, a scrape cannot contain the same (set of) series repeatedlty but for different timestamps.
@@ -333,7 +225,7 @@ Loop:
 			// We take the count series as the authoritative source for the overall reset timestamp.
 			resetTimestamp = rt
 		case metricSuffixBucket:
-			upper, err := strconv.ParseFloat(lset.Get("le"), 64)
+			upper, err := strconv.ParseFloat(e.lset.Get("le"), 64)
 			if err != nil {
 				consumed++
 				// TODO(fabxc): increment metric.

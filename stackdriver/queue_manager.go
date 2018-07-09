@@ -461,9 +461,7 @@ func (s *shardCollection) runShard(i int) {
 
 			if !ok {
 				if len(pendingSamples) > 0 {
-					level.Debug(s.qm.logger).Log("msg", "Flushing samples to remote storage...", "count", len(pendingSamples))
 					s.sendSamples(client, pendingSamples)
-					level.Debug(s.qm.logger).Log("msg", "Done flushing.")
 				}
 				return
 			}

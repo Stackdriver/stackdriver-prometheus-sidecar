@@ -23,6 +23,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
@@ -94,6 +95,15 @@ type PrometheusReader struct {
 	cancelTail     context.CancelFunc
 }
 
+var samplesProcessed = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "prometheus_sidecar_wal_samples_processed_total",
+	Help: "Total number of samples processed from the WAL",
+})
+
+func init() {
+	prometheus.MustRegister(samplesProcessed)
+}
+
 func (r *PrometheusReader) Run() error {
 	level.Info(r.logger).Log("msg", "Starting Prometheus reader...")
 	var ctx context.Context
@@ -103,15 +113,10 @@ func (r *PrometheusReader) Run() error {
 		level.Error(r.logger).Log("error", err)
 		return err
 	}
-	seriesCache := newSeriesCache(r.logger, r.walDirectory)
+	seriesCache := newSeriesCache(r.logger, r.walDirectory, r.targetGetter, r.metadataGetter, ResourceMappings)
 	go seriesCache.run(ctx)
 
-	builder := &sampleBuilder{
-		resourceMaps: ResourceMappings,
-		series:       seriesCache,
-		targets:      r.targetGetter,
-		metadata:     r.metadataGetter,
-	}
+	builder := &sampleBuilder{series: seriesCache}
 
 	// NOTE(fabxc): wrap the tailer into a buffered reader once we become concerned
 	// with performance. The WAL reader will do a lot of tiny reads otherwise.
@@ -120,9 +125,6 @@ func (r *PrometheusReader) Run() error {
 	reader := wal.NewReader(tailer)
 Outer:
 	for reader.Next() {
-		if reader.Err() != nil {
-			return reader.Err()
-		}
 		record := reader.Record()
 
 		var decoder tsdb.RecordDecoder
@@ -134,7 +136,7 @@ Outer:
 				continue
 			}
 			for _, series := range recordSeries {
-				seriesCache.set(series.Ref, series.Labels, tailer.CurrentSegment())
+				seriesCache.set(ctx, series.Ref, series.Labels, tailer.CurrentSegment())
 			}
 		case tsdb.RecordSamples:
 			recordSamples, err := decoder.Samples(record, nil)
@@ -149,7 +151,8 @@ Outer:
 				default:
 				}
 				var outputSample *monitoring_pb.TimeSeries
-				outputSample, recordSamples, err = builder.next(ctx, recordSamples)
+				var hash uint64
+				outputSample, hash, recordSamples, err = builder.next(ctx, recordSamples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
 					continue
@@ -157,13 +160,14 @@ Outer:
 				if outputSample == nil {
 					continue
 				}
-				r.appender.Append(hashSeries(outputSample), outputSample)
+				r.appender.Append(hash, outputSample)
+				samplesProcessed.Inc()
 			}
 		case tsdb.RecordTombstones:
 		}
 	}
 	level.Info(r.logger).Log("msg", "Done processing WAL.")
-	return nil
+	return reader.Err()
 }
 
 // Stop cancels the reader and blocks until it has exited.

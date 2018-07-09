@@ -19,17 +19,24 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
+	metric_pb "google.golang.org/genproto/googleapis/api/metric"
+	monitoredres_pb "google.golang.org/genproto/googleapis/api/monitoredres"
+	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 type seriesGetter interface {
 	// Same interface as the standard map getter.
-	getLabels(ref uint64) (labels.Labels, bool)
+	get(ref uint64) (*seriesCacheEntry, bool)
 
 	// Get the reset timestamp and adjusted value for the input sample.
 	// If false is returned, the sample should be skipped.
@@ -40,8 +47,11 @@ type seriesGetter interface {
 // It can garbage collect obsolete entries based on the most recent WAL checkpoint.
 // Implements seriesGetter.
 type seriesCache struct {
-	logger log.Logger
-	dir    string
+	logger       log.Logger
+	dir          string
+	targets      TargetGetter
+	metadata     MetadataGetter
+	resourceMaps []ResourceMap
 
 	// lastCheckpoint holds the index of the last checkpoint we garbage collected for.
 	// We don't have to redo garbage collection until a higher checkpoint appears.
@@ -51,7 +61,12 @@ type seriesCache struct {
 }
 
 type seriesCacheEntry struct {
-	lset           labels.Labels
+	proto    *monitoring_pb.TimeSeries
+	metadata *scrape.MetricMetadata
+	lset     labels.Labels
+	suffix   string
+	hash     uint64
+
 	hasReset       bool
 	resetValue     float64
 	resetTimestamp int64
@@ -65,14 +80,17 @@ type seriesCacheEntry struct {
 	maxSegment int
 }
 
-func newSeriesCache(logger log.Logger, dir string) *seriesCache {
+func newSeriesCache(logger log.Logger, dir string, targets TargetGetter, metadata MetadataGetter, resourceMaps []ResourceMap) *seriesCache {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &seriesCache{
-		logger:  logger,
-		dir:     dir,
-		entries: map[uint64]*seriesCacheEntry{},
+		logger:       logger,
+		dir:          dir,
+		targets:      targets,
+		metadata:     metadata,
+		resourceMaps: resourceMaps,
+		entries:      map[uint64]*seriesCacheEntry{},
 	}
 }
 
@@ -149,14 +167,11 @@ func (c *seriesCache) garbageCollect() error {
 	return nil
 }
 
-func (c *seriesCache) getLabels(ref uint64) (labels.Labels, bool) {
+func (c *seriesCache) get(ref uint64) (*seriesCacheEntry, bool) {
 	c.mtx.Lock()
 	e, ok := c.entries[ref]
 	c.mtx.Unlock()
-	if !ok {
-		return nil, false
-	}
-	return e.lset, true
+	return e, ok
 }
 
 // getResetAdjusted takes a sample for a referenced series and returns
@@ -192,8 +207,130 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 
 // set the label set for the given reference.
 // maxSegment indicates the the highest segment at which the series was possibly defined.
-func (c *seriesCache) set(ref uint64, lset labels.Labels, maxSegment int) {
+func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, maxSegment int) error {
+	// Probe for the target, its applicable resource, and the series metadata.
+	// They will be used subsequently for all other Prometheus series that map to the same complex
+	// Stackdriver series.
+	// If either of those pieces of data is missing, the series will be skipped.
+	target, err := c.targets.Get(ctx, pkgLabels(lset))
+	if err != nil {
+		return errors.Wrap(err, "retrieving target failed")
+	}
+	if target == nil {
+		// TODO(fabxc): increment a metric.
+		return nil
+	}
+	// Remove target labels and __name__ label.
+	finalLabels := targets.DropTargetLabels(pkgLabels(lset), target.Labels)
+	for i, l := range finalLabels {
+		if l.Name == "__name__" {
+			finalLabels = append(finalLabels[:i], finalLabels[i+1:]...)
+			break
+		}
+	}
+	// Drop series with too many labels.
+	if len(finalLabels) > maxLabelCount {
+		// TODO(fabxc): increment a metric
+		return nil
+	}
+
+	resource, ok := c.getResource(target.DiscoveredLabels)
+	if !ok {
+		// TODO(fabxc): increment a metric
+		return nil
+	}
+	var (
+		metricName     = lset.Get("__name__")
+		baseMetricName string
+		suffix         string
+	)
+	metadata, err := c.metadata.Get(ctx, lset.Get("job"), lset.Get("instance"), metricName)
+	if err != nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	if metadata == nil {
+		// The full name didn't turn anything up. Check again in case it's a summary or histogram without
+		// the metric name suffix.
+		var ok bool
+		if baseMetricName, suffix, ok = stripComplexMetricSuffix(metricName); ok {
+			metadata, err = c.metadata.Get(ctx, lset.Get("job"), lset.Get("instance"), baseMetricName)
+			if err != nil {
+				return errors.Wrap(err, "get metadata")
+			}
+		}
+		if metadata == nil {
+			// TODO(fabxc): increment a metric.
+			return nil
+		}
+	}
+	// Handle label modifications for histograms early so we don't build the label map twice.
+	// We have to remove the 'le' label which defines the bucket boundary.
+	if metadata.Type == textparse.MetricTypeHistogram {
+		for i, l := range finalLabels {
+			if l.Name == "le" {
+				finalLabels = append(finalLabels[:i], finalLabels[i+1:]...)
+				break
+			}
+		}
+	}
+	ts := &monitoring_pb.TimeSeries{
+		Metric: &metric_pb.Metric{
+			Type:   getMetricType(metricName),
+			Labels: finalLabels.Map(),
+		},
+		Resource: resource,
+	}
+
+	switch metadata.Type {
+	case textparse.MetricTypeCounter:
+		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
+		ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
+	case textparse.MetricTypeGauge, textparse.MetricTypeUntyped:
+		ts.MetricKind = metric_pb.MetricDescriptor_GAUGE
+		ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
+	case textparse.MetricTypeSummary:
+		switch suffix {
+		case metricSuffixSum:
+			ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
+			ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
+		case metricSuffixCount:
+			ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
+			ts.ValueType = metric_pb.MetricDescriptor_INT64
+		case "": // Actual quantiles.
+			ts.MetricKind = metric_pb.MetricDescriptor_GAUGE
+			ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
+		default:
+			return errors.Errorf("unexpected metric name suffix %q", suffix)
+		}
+	case textparse.MetricTypeHistogram:
+		ts.Metric.Type = getMetricType(baseMetricName)
+		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
+		ts.ValueType = metric_pb.MetricDescriptor_DISTRIBUTION
+	default:
+		return errors.Errorf("unexpected metric type %s", metadata.Type)
+	}
+
 	c.mtx.Lock()
-	c.entries[ref] = &seriesCacheEntry{maxSegment: maxSegment, lset: lset}
+	c.entries[ref] = &seriesCacheEntry{
+		maxSegment: maxSegment,
+		lset:       lset,
+		proto:      ts,
+		metadata:   metadata,
+		suffix:     suffix,
+		hash:       hashSeries(ts),
+	}
 	c.mtx.Unlock()
+	return nil
+}
+
+func (c *seriesCache) getResource(lset promlabels.Labels) (*monitoredres_pb.MonitoredResource, bool) {
+	for _, m := range c.resourceMaps {
+		if lset := m.Translate(lset); lset != nil {
+			return &monitoredres_pb.MonitoredResource{
+				Type:   m.Type,
+				Labels: lset,
+			}, true
+		}
+	}
+	return nil, false
 }
