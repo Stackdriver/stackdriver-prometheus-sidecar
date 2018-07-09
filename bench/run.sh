@@ -9,7 +9,7 @@ trap 'kill 0' SIGTERM
 echo "Starting Prometheus"
 
 prometheus \
-  --storage.tsdb.min-block-duration=5m \
+  --storage.tsdb.min-block-duration=15m \
   --storage.tsdb.retention=48h 2>&1 | sed -e "s/^/[prometheus] /" &
 
 echo "Starting server"
@@ -20,8 +20,10 @@ sleep 2
 echo "Starting sidecar"
 
 ./stackdriver-prometheus-sidecar \
+  --log.level=debug \
   --stackdriver.project-id=test \
   --web.listen-address="0.0.0.0:9091" \
+  --stackdriver.global-label=_debug=debug \
   --stackdriver.global-label=_kubernetes_cluster_name=prom-test-cluster-1 \
   --stackdriver.global-label=_kubernetes_location=us-central1-a \
   --stackdriver.global-label=__meta_kubernetes_namespace=stackdriver \
@@ -29,11 +31,11 @@ echo "Starting sidecar"
   --stackdriver.api-address="http://127.0.0.1:9092/?auth=false" \
   2>&1 | sed -e "s/^/[sidecar] /" &
 
-if [ -n ${SIDECAR_OLD} ]; then
+if [ -n "${SIDECAR_OLD}" ]; then
   echo "Starting old sidecar"
   
   ${SIDECAR_OLD} \
-   --stackdriver.project-id=test \
+    --stackdriver.project-id=test \
     --web.listen-address="0.0.0.0:9093" \
     --stackdriver.global-label=_kubernetes_cluster_name=prom-test-cluster-1 \
     --stackdriver.global-label=_kubernetes_location=us-central1-a \

@@ -37,7 +37,7 @@ import (
 
 const (
 	metricsPrefix             = "external.googleapis.com/prometheus"
-	maxTimeseriesesPerRequest = 2000
+	MaxTimeseriesesPerRequest = 200
 	MonitoringWriteScope      = "https://www.googleapis.com/auth/monitoring.write"
 )
 
@@ -140,13 +140,12 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 		return err
 	}
 
-	// level.Debug(c.logger).Log("msg", "sending request to Stackdriver")
 	service := monitoring.NewMetricServiceClient(conn)
 
-	errors := make(chan error, len(tss)/maxTimeseriesesPerRequest+1)
+	errors := make(chan error, len(tss)/MaxTimeseriesesPerRequest+1)
 	var wg sync.WaitGroup
-	for i := 0; i < len(tss); i += maxTimeseriesesPerRequest {
-		end := i + maxTimeseriesesPerRequest
+	for i := 0; i < len(tss); i += MaxTimeseriesesPerRequest {
+		end := i + MaxTimeseriesesPerRequest
 		if end > len(tss) {
 			end = len(tss)
 		}
@@ -161,8 +160,7 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 			if err != nil {
 				level.Debug(c.logger).Log(
 					"msg", "Partial failure calling CreateTimeSeries",
-					"err", err,
-					"req", req_copy.String())
+					"err", err)
 				status, ok := status.FromError(err)
 				if !ok {
 					level.Warn(c.logger).Log("msg", "Unexpected error message type from Monitoring API", "err", err)

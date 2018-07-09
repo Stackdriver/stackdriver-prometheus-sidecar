@@ -27,6 +27,14 @@ type ResourceMap struct {
 // TODO(jkohen): ensure these are sorted from more specific to less specific.
 var ResourceMappings = []ResourceMap{
 	{
+		Type: "debug",
+		LabelMap: map[string]string{
+			"_debug":      "debug",
+			"__address__": "address",
+			"job":         "job",
+		},
+	},
+	{
 		Type: "k8s_container",
 		LabelMap: map[string]string{
 			ProjectIDLabel:                         "project_id",
