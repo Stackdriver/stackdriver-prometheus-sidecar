@@ -16,6 +16,7 @@ package retrieval
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
@@ -73,6 +74,7 @@ type Appender interface {
 func NewPrometheusReader(
 	logger log.Logger,
 	walDirectory string,
+	tailer *tail.Tailer,
 	targetGetter TargetGetter,
 	metadataGetter MetadataGetter,
 	appender Appender,
@@ -80,6 +82,7 @@ func NewPrometheusReader(
 	return &PrometheusReader{
 		appender:       appender,
 		logger:         logger,
+		tailer:         tailer,
 		walDirectory:   walDirectory,
 		targetGetter:   targetGetter,
 		metadataGetter: metadataGetter,
@@ -89,10 +92,10 @@ func NewPrometheusReader(
 type PrometheusReader struct {
 	logger         log.Logger
 	walDirectory   string
+	tailer         *tail.Tailer
 	targetGetter   TargetGetter
 	metadataGetter MetadataGetter
 	appender       Appender
-	cancelTail     context.CancelFunc
 }
 
 var samplesProcessed = prometheus.NewCounter(prometheus.CounterOpts{
@@ -104,15 +107,16 @@ func init() {
 	prometheus.MustRegister(samplesProcessed)
 }
 
-func (r *PrometheusReader) Run() error {
+func (r *PrometheusReader) Run(ctx context.Context) error {
+	// TODO(fabxc): Since we no longer get target and metadata for every sample but rather once when
+	// we read a series record, failure to get this data initially will cause samples to always be dropped
+	// subsequently.
+	// We should generally at least allow Prometheus to startup once properly to get all its targets.
+	// For now we just sleep for a bit. But this must be addressed in a more reliable way.
+	time.Sleep(30 * time.Second)
+
 	level.Info(r.logger).Log("msg", "Starting Prometheus reader...")
-	var ctx context.Context
-	ctx, r.cancelTail = context.WithCancel(context.Background())
-	tailer, err := tail.Tail(ctx, r.walDirectory)
-	if err != nil {
-		level.Error(r.logger).Log("error", err)
-		return err
-	}
+
 	seriesCache := newSeriesCache(r.logger, r.walDirectory, r.targetGetter, r.metadataGetter, ResourceMappings)
 	go seriesCache.run(ctx)
 
@@ -123,7 +127,8 @@ func (r *PrometheusReader) Run() error {
 	// This is also the reason for the series cache dealing with "maxSegment" hints
 	// for series rather than precise ones.
 	var (
-		reader  = wal.NewReader(tailer)
+		err     error
+		reader  = wal.NewReader(r.tailer)
 		samples []tsdb.RefSample
 		series  []tsdb.RefSeries
 	)
@@ -140,7 +145,7 @@ Outer:
 				continue
 			}
 			for _, s := range series {
-				seriesCache.set(ctx, s.Ref, s.Labels, tailer.CurrentSegment())
+				seriesCache.set(ctx, s.Ref, s.Labels, r.tailer.CurrentSegment())
 			}
 		case tsdb.RecordSamples:
 			samples, err = decoder.Samples(record, samples[:0])
@@ -172,11 +177,6 @@ Outer:
 	}
 	level.Info(r.logger).Log("msg", "Done processing WAL.")
 	return reader.Err()
-}
-
-// Stop cancels the reader and blocks until it has exited.
-func (r *PrometheusReader) Stop() {
-	r.cancelTail()
 }
 
 // TODO(jkohen): We should be able to avoid this conversion.

@@ -43,6 +43,7 @@ import (
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/prometheus/common/promlog"
 	promlogflag "github.com/prometheus/common/promlog/flag"
@@ -127,30 +128,45 @@ func main() {
 	}
 	metadataCache := metadata.NewCache(prometheus.DefaultRegisterer, nil, metadataURL)
 
+	// We instantiate a context here since the tailer is used by two other components.
+	// The context will be used in the lifecycle of prometheusReader further down.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	tailer, err := tail.Tail(ctx, cfg.walDirectory)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Tailing WAL failed:", err)
+		os.Exit(1)
+	}
 	// TODO(jkohen): Remove once we have proper translation of all metric
 	// types. Currently Stackdriver fails the entire request if you attempt
 	// to write to the different metric type, which we do fairly often at
 	// this point, so lots of writes fail, and most writes fail.
 	// config.DefaultQueueConfig.MaxSamplesPerSend = 1
 	config.DefaultQueueConfig.MaxSamplesPerSend = stackdriver.MaxTimeseriesesPerRequest
-	var (
-		queueManager = stackdriver.NewQueueManager(
-			log.With(logger, "component", "queue_manager"),
-			config.DefaultQueueConfig,
-			&clientFactory{
-				logger:            log.With(logger, "component", "storage"),
-				projectIdResource: cfg.projectIdResource,
-				url:               cfg.stackdriverAddress,
-				timeout:           10 * time.Second,
-			},
-		)
-		prometheusReader = retrieval.NewPrometheusReader(
-			log.With(logger, "component", "Prometheus reader"),
-			cfg.walDirectory,
-			retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(cfg.globalLabels)),
-			metadataCache,
-			queueManager,
-		)
+	config.DefaultQueueConfig.Capacity = 3 * stackdriver.MaxTimeseriesesPerRequest
+
+	queueManager, err := stackdriver.NewQueueManager(
+		log.With(logger, "component", "queue_manager"),
+		config.DefaultQueueConfig,
+		&clientFactory{
+			logger:            log.With(logger, "component", "storage"),
+			projectIdResource: cfg.projectIdResource,
+			url:               cfg.stackdriverAddress,
+			timeout:           10 * time.Second,
+		},
+		tailer,
+	)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Creating queue manager failed:", err)
+		os.Exit(1)
+	}
+	prometheusReader := retrieval.NewPrometheusReader(
+		log.With(logger, "component", "Prometheus reader"),
+		cfg.walDirectory,
+		tailer,
+		retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(cfg.globalLabels)),
+		metadataCache,
+		queueManager,
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.
@@ -200,9 +216,10 @@ func main() {
 		)
 	}
 	{
+		// We use the context we defined higher up instead of a local one like in the other actors.
 		g.Add(
 			func() error {
-				err := prometheusReader.Run()
+				err := prometheusReader.Run(ctx)
 				level.Info(logger).Log("msg", "Prometheus reader stopped")
 				return err
 			},
@@ -210,7 +227,7 @@ func main() {
 				// Prometheus reader needs to be stopped before closing the TSDB
 				// so that it doesn't try to write samples to a closed storage.
 				level.Info(logger).Log("msg", "Stopping Prometheus reader...")
-				prometheusReader.Stop()
+				cancel()
 			},
 		)
 	}

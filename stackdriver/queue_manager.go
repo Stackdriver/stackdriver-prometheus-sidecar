@@ -18,8 +18,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/config"
 	"golang.org/x/time/rate"
@@ -35,10 +37,7 @@ const (
 	// We track samples in/out and how long pushes take using an Exponentially
 	// Weighted Moving Average.
 	ewmaWeight          = 0.2
-	shardUpdateDuration = 10 * time.Second
-
-	// Allow 10% too many shards before scaling down.
-	shardToleranceFraction = 0.1
+	shardUpdateDuration = 15 * time.Second
 
 	// Limit to 1 log event every 10s
 	logRateLimit = 0.1
@@ -153,11 +152,15 @@ type QueueManager struct {
 	quit        chan struct{}
 	wg          sync.WaitGroup
 
-	samplesIn *ewmaRate
+	samplesIn, samplesOut, samplesOutDuration *ewmaRate
+	walSize, walOffset                        *ewmaRate
+
+	tailer               *tail.Tailer
+	lastSize, lastOffset int
 }
 
 // NewQueueManager builds a new QueueManager.
-func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory StorageClientFactory) *QueueManager {
+func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory StorageClientFactory, tailer *tail.Tailer) (*QueueManager, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -168,12 +171,28 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory St
 		queueName:     clientFactory.Name(),
 
 		logLimiter:  rate.NewLimiter(logRateLimit, logBurst),
-		numShards:   1,
+		numShards:   2,
 		reshardChan: make(chan int),
 		quit:        make(chan struct{}),
 
-		samplesIn: newEWMARate(ewmaWeight, shardUpdateDuration),
+		samplesIn:          newEWMARate(ewmaWeight, shardUpdateDuration),
+		samplesOut:         newEWMARate(ewmaWeight, shardUpdateDuration),
+		samplesOutDuration: newEWMARate(ewmaWeight, shardUpdateDuration),
+		walSize:            newEWMARate(ewmaWeight, shardUpdateDuration),
+		walOffset:          newEWMARate(ewmaWeight, shardUpdateDuration),
+		tailer:             tailer,
 	}
+	lastSize, err := tailer.Size()
+	if err != nil {
+		return nil, errors.Wrap(err, "get WAL size")
+	}
+	lastOffset, err := tailer.Offset()
+	if err != nil {
+		return nil, errors.Wrap(err, "get WAL offset")
+	}
+	t.lastSize = lastSize
+	t.lastOffset = lastOffset
+
 	t.shards = t.newShardCollection(t.numShards)
 	numShards.WithLabelValues(t.queueName).Set(float64(t.numShards))
 	queueCapacity.WithLabelValues(t.queueName).Set(float64(t.cfg.Capacity))
@@ -184,7 +203,7 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory St
 	failedSamplesTotal.WithLabelValues(t.queueName)
 	droppedSamplesTotal.WithLabelValues(t.queueName)
 
-	return t
+	return t, nil
 }
 
 // Append queues a sample to be sent to the remote storage. It drops the
@@ -243,29 +262,67 @@ func (t *QueueManager) updateShardsLoop() {
 }
 
 func (t *QueueManager) calculateDesiredShards() {
+	wsz, err := t.tailer.Size()
+	if err != nil {
+		level.Error(t.logger).Log("msg", "get WAL size", "err", err)
+		return
+	}
+	woff, err := t.tailer.Offset()
+	if err != nil {
+		level.Error(t.logger).Log("msg", "get WAL offset", "err", err)
+	}
+	t.walSize.incr(int64(wsz - t.lastSize))
+	t.walOffset.incr(int64(woff - t.lastOffset))
+
 	t.samplesIn.tick()
+	t.samplesOut.tick()
+	t.samplesOutDuration.tick()
+	t.walSize.tick()
+	t.walOffset.tick()
 
-	// We use the number of incoming samples as a prediction of how much work we
-	// will need to do next iteration.  We add to this any pending samples
-	// (received - send) so we can catch up with any backlog. We use the average
-	// outgoing batch latency to work out how many shards we need.
-	// These rates are samples per second.
-	samplesIn := t.samplesIn.rate()
-
-	// Size the shards so that they can fit enough samples to keep
-	// good flow, but not more than the batch send deadline,
-	// otherwise we'll underutilize the batches. Below "send" is for one batch.
-	desiredShards := t.cfg.BatchSendDeadline.Seconds() * samplesIn / float64(t.cfg.Capacity)
-
-	level.Debug(t.logger).Log("msg", "QueueManager.caclulateDesiredShards",
-		"samplesIn", samplesIn, "desiredShards", desiredShards)
-
-	// Changes in the number of shards must be greater than shardToleranceFraction.
 	var (
-		lowerBound = float64(t.numShards) * (1. - shardToleranceFraction)
-		upperBound = float64(t.numShards) * (1. + shardToleranceFraction)
+		sizeRate           = t.walSize.rate()
+		offsetRate         = t.walOffset.rate()
+		samplesIn          = t.samplesIn.rate()
+		samplesOut         = t.samplesOut.rate()
+		samplesOutDuration = t.samplesOutDuration.rate()
 	)
-	level.Debug(t.logger).Log("msg", "QueueManager.updateShardsLoop",
+	t.lastSize = wsz
+	t.lastOffset = woff
+
+	if samplesOut == 0 {
+		return
+	}
+	// We compute desired amount of shards based on the time required to delivered a sample.
+	// We multiply by a weight of 1.5 to overprovision our number of shards. This ensures
+	// that if we can send more samples, the picked shard count has capacity for them.
+	// This ensures that we have a feedback loop that keeps growing shards on subsequent
+	// calculations until further increase does not increase the throughput anymore.
+	timePerSample := samplesOutDuration / samplesOut
+	desiredShards := (timePerSample / float64(time.Second)) * 1.5 * samplesIn
+
+	// If the WAL grows faster than we can process it, we are about to build up a backlog.
+	// We increase the shards proportionally to get the processing and growth rate to the same level.
+	// If we are processing the WAL faster than it grows, we are already working down a backlog
+	// and increase throughput as well.
+	if sizeRate >= offsetRate {
+		desiredShards *= sizeRate / offsetRate
+	} else {
+		desiredShards *= 1 + (1-(sizeRate/offsetRate))*1.5
+	}
+
+	level.Debug(t.logger).Log("msg", "QueueManager.caclulateDesiredShards", "samplesIn", samplesIn,
+		"samplesOut", samplesOut, "samplesOutDuration", samplesOutDuration, "timePerSample", timePerSample,
+		"sizeRate", sizeRate, "offsetRate", offsetRate, "desiredShards", desiredShards)
+
+	// Only change number of shards if the change up or down is significant enough
+	// to justifty the caused disruption.
+	// We are more eager to increase the number of shards than to decrease it.
+	var (
+		lowerBound = float64(t.numShards) * 0.7
+		upperBound = float64(t.numShards) * 1.1
+	)
+	level.Info(t.logger).Log("msg", "QueueManager.updateShardsLoop",
 		"lowerBound", lowerBound, "desiredShards", desiredShards, "upperBound", upperBound)
 	if lowerBound <= desiredShards && desiredShards <= upperBound {
 		return
@@ -463,8 +520,18 @@ func (s *shardCollection) runShard(i int) {
 	}
 }
 
-// sendSamples to the remote storage with backoff for recoverable errors.
 func (s *shardCollection) sendSamples(client StorageClient, samples []*monitoring_pb.TimeSeries) {
+	begin := time.Now()
+	s.sendSamplesWithBackoff(client, samples)
+
+	// These counters are used to calculate the dynamic sharding, and as such
+	// should be maintained irrespective of success or failure.
+	s.qm.samplesOut.incr(int64(len(samples)))
+	s.qm.samplesOutDuration.incr(int64(time.Since(begin)))
+}
+
+// sendSamples to the remote storage with backoff for recoverable errors.
+func (s *shardCollection) sendSamplesWithBackoff(client StorageClient, samples []*monitoring_pb.TimeSeries) {
 	backoff := s.qm.cfg.MinBackoff
 	for retries := s.qm.cfg.MaxRetries; retries > 0; retries-- {
 		begin := time.Now()
