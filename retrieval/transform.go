@@ -40,7 +40,10 @@ type sampleBuilder struct {
 func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, uint64, []tsdb.RefSample, error) {
 	sample := samples[0]
 
-	entry, ok := b.series.get(sample.Ref)
+	entry, ok, err := b.series.get(ctx, sample.Ref)
+	if err != nil {
+		return nil, 0, samples, errors.Wrap(err, "get series information")
+	}
 	if !ok {
 		return nil, 0, samples[1:], nil
 	}
@@ -98,9 +101,9 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		// We pass in the original lset for matching since Prometheus's target label must
 		// be the same as well.
 		var v *distribution_pb.Distribution
-		v, resetTimestamp, samples = b.buildDistribution(entry.metadata.Metric, entry.lset, samples)
-		if v == nil {
-			return nil, 0, samples, nil
+		v, resetTimestamp, samples, err = b.buildDistribution(ctx, entry.metadata.Metric, entry.lset, samples)
+		if v == nil || err != nil {
+			return nil, 0, samples, err
 		}
 		point.Interval.StartTime = getTimestamp(resetTimestamp)
 		point.Value = &monitoring_pb.TypedValue{
@@ -189,7 +192,12 @@ func (d *distribution) Swap(i, j int) {
 // buildDistribution consumes series from the beginning of the input slice that belong to a histogram
 // with the given metric name and label set.
 // It returns the reset timestamp along with the distrubution.
-func (b *sampleBuilder) buildDistribution(baseName string, matchLset tsdbLabels.Labels, samples []tsdb.RefSample) (*distribution_pb.Distribution, int64, []tsdb.RefSample) {
+func (b *sampleBuilder) buildDistribution(
+	ctx context.Context,
+	baseName string,
+	matchLset tsdbLabels.Labels,
+	samples []tsdb.RefSample,
+) (*distribution_pb.Distribution, int64, []tsdb.RefSample, error) {
 	var (
 		consumed       int
 		count, sum     float64
@@ -202,7 +210,10 @@ func (b *sampleBuilder) buildDistribution(baseName string, matchLset tsdbLabels.
 	// until we hit a new metric.
 Loop:
 	for i, s := range samples {
-		e, ok := b.series.get(s.Ref)
+		e, ok, err := b.series.get(ctx, s.Ref)
+		if err != nil {
+			return nil, 0, samples, err
+		}
 		if !ok {
 			consumed++
 			// TODO(fabxc): increment metric.
@@ -255,7 +266,7 @@ Loop:
 	// Don't emit a sample if we explicitly skip it or no reset timestamp was set because the
 	// count series was missing.
 	if skip || resetTimestamp == 0 {
-		return nil, 0, samples[consumed:]
+		return nil, 0, samples[consumed:], nil
 	}
 	// We do not assume that the buckets in the sample batch are in order, so we sort them again here.
 	// The code below relies on this to convert between Prometheus's and Stackdriver's bucketing approaches.
@@ -298,7 +309,7 @@ Loop:
 		},
 		BucketCounts: values,
 	}
-	return d, resetTimestamp, samples[consumed:]
+	return d, resetTimestamp, samples[consumed:], nil
 }
 
 // histogramLabelsEqual checks whether two label sets for a histogram series are equal aside from their

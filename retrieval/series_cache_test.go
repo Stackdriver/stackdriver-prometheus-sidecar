@@ -20,8 +20,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
+	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
@@ -63,9 +65,12 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 
 	// We should be able to read them all.
 	for i := 1; i <= 7; i++ {
-		entry, ok := c.get(uint64(i))
+		entry, ok, err := c.get(ctx, uint64(i))
 		if !ok {
 			t.Fatalf("entry with ref %d not found", i)
+		}
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
 		}
 		if !entry.lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
 			t.Fatalf("unexpected label set for ref %d: %s", i, entry.lset)
@@ -99,15 +104,20 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i := 1; i < 2; i++ {
-			if entry, ok := c.get(uint64(i)); ok {
+			if entry, ok, err := c.get(ctx, uint64(i)); ok {
 				t.Fatalf("unexpected cache entry %d: %s", i, entry.lset)
+			} else if err != nil {
+				t.Fatalf("unexpected error: %s", err)
 			}
 		}
 		// We should be able to read them all.
 		for i := 3; i <= 7; i++ {
-			entry, ok := c.get(uint64(i))
+			entry, ok, err := c.get(ctx, uint64(i))
 			if !ok {
 				t.Fatalf("label set with ref %d not found", i)
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
 			}
 			if !entry.lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
 				t.Fatalf("unexpected label set for ref %d: %s", i, entry.lset)
@@ -142,17 +152,76 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 	//  Only series 4 and 7 should be left.
 	for i := 1; i <= 7; i++ {
 		if i != 4 && i != 7 {
-			if entry, ok := c.get(uint64(i)); ok {
+			if entry, ok, err := c.get(ctx, uint64(i)); ok {
 				t.Fatalf("unexpected cache entry %d: %s", i, entry.lset)
+			} else if err != nil {
+				t.Fatalf("unexpected error: %s", err)
 			}
 			continue
 		}
-		entry, ok := c.get(uint64(i))
+		entry, ok, err := c.get(ctx, uint64(i))
 		if !ok {
-			t.Fatalf("entrywith ref %d not found", i)
+			t.Fatalf("entry with ref %d not found", i)
+		}
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
 		}
 		if !entry.lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
 			t.Fatalf("unexpected label set for ref %d: %s", i, entry.lset)
 		}
+	}
+}
+
+func TestSeriesCache_Refresh(t *testing.T) {
+	resourceMaps := []ResourceMap{
+		{
+			Type:     "resource2",
+			LabelMap: map[string]string{"__resource_a": "resource_a"},
+		},
+	}
+	targetMap := targetMap{}
+	metadataMap := metadataMap{}
+	c := newSeriesCache(nil, "", targetMap, metadataMap, resourceMaps)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Query unset reference.
+	entry, ok, err := c.get(ctx, 1)
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
+	}
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Set a series but the metadata and target getters won't have sufficient information for it.
+	if err := c.set(ctx, 1, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	// We should still not receive anything.
+	entry, ok, err = c.get(ctx, 1)
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
+	}
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Populate the getters with data.
+	targetMap["job1/inst1"] = &targets.Target{
+		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
+		DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+	}
+	metadataMap["job1/inst1/metric1"] = &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"}
+
+	// Hack the timestamp of the last update to be sufficiently in the past that a refresh
+	// will be triggered.
+	c.entries[1].lastRefresh = time.Now().Add(-2 * refreshInterval)
+
+	// Now another get should trigger a refresh, which now finds data.
+	entry, ok, err = c.get(ctx, 1)
+	if entry == nil || !ok || err != nil {
+		t.Errorf("expected metadata but got none, error: %s", err)
 	}
 }

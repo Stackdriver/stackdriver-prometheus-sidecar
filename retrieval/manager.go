@@ -16,7 +16,6 @@ package retrieval
 import (
 	"context"
 	"sort"
-	"time"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
@@ -108,13 +107,6 @@ func init() {
 }
 
 func (r *PrometheusReader) Run(ctx context.Context) error {
-	// TODO(fabxc): Since we no longer get target and metadata for every sample but rather once when
-	// we read a series record, failure to get this data initially will cause samples to always be dropped
-	// subsequently.
-	// We should generally at least allow Prometheus to startup once properly to get all its targets.
-	// For now we just sleep for a bit. But this must be addressed in a more reliable way.
-	time.Sleep(30 * time.Second)
-
 	level.Info(r.logger).Log("msg", "Starting Prometheus reader...")
 
 	seriesCache := newSeriesCache(r.logger, r.walDirectory, r.targetGetter, r.metadataGetter, ResourceMappings)

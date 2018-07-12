@@ -36,7 +36,7 @@ import (
 
 type seriesGetter interface {
 	// Same interface as the standard map getter.
-	get(ref uint64) (*seriesCacheEntry, bool)
+	get(ctx context.Context, ref uint64) (*seriesCacheEntry, bool, error)
 
 	// Get the reset timestamp and adjusted value for the input sample.
 	// If false is returned, the sample should be skipped.
@@ -85,6 +85,19 @@ type seriesCacheEntry struct {
 	// We don't require a precise number since the caller may not be able to provide
 	// it when retrieving records through a buffered reader.
 	maxSegment int
+
+	// Last time we attempted to populate meta information about the series.
+	lastRefresh time.Time
+}
+
+const refreshInterval = 3 * time.Minute
+
+func (e *seriesCacheEntry) populated() bool {
+	return e.proto != nil
+}
+
+func (e *seriesCacheEntry) shouldRefresh() bool {
+	return !e.populated() && time.Since(e.lastRefresh) > refreshInterval
 }
 
 func newSeriesCache(logger log.Logger, dir string, targets TargetGetter, metadata MetadataGetter, resourceMaps []ResourceMap) *seriesCache {
@@ -175,11 +188,23 @@ func (c *seriesCache) garbageCollect() error {
 	return nil
 }
 
-func (c *seriesCache) get(ref uint64) (*seriesCacheEntry, bool) {
+func (c *seriesCache) get(ctx context.Context, ref uint64) (*seriesCacheEntry, bool, error) {
 	c.mtx.Lock()
 	e, ok := c.entries[ref]
 	c.mtx.Unlock()
-	return e, ok
+
+	if !ok {
+		return nil, false, nil
+	}
+	if e.shouldRefresh() {
+		if err := c.refresh(ctx, ref); err != nil {
+			return nil, false, err
+		}
+	}
+	if !e.populated() {
+		return nil, false, nil
+	}
+	return e, true, nil
 }
 
 // updateSampleInterval attempts to set the new most recent time range for the series with given hash.
@@ -235,11 +260,27 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 // set the label set for the given reference.
 // maxSegment indicates the the highest segment at which the series was possibly defined.
 func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, maxSegment int) error {
+	c.mtx.Lock()
+	c.entries[ref] = &seriesCacheEntry{
+		maxSegment: maxSegment,
+		lset:       lset,
+	}
+	c.mtx.Unlock()
+	return c.refresh(ctx, ref)
+}
+
+func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
+	c.mtx.Lock()
+	entry := c.entries[ref]
+	c.mtx.Unlock()
+
+	entry.lastRefresh = time.Now()
+
 	// Probe for the target, its applicable resource, and the series metadata.
 	// They will be used subsequently for all other Prometheus series that map to the same complex
 	// Stackdriver series.
 	// If either of those pieces of data is missing, the series will be skipped.
-	target, err := c.targets.Get(ctx, pkgLabels(lset))
+	target, err := c.targets.Get(ctx, pkgLabels(entry.lset))
 	if err != nil {
 		return errors.Wrap(err, "retrieving target failed")
 	}
@@ -248,7 +289,7 @@ func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, m
 		return nil
 	}
 	// Remove target labels and __name__ label.
-	finalLabels := targets.DropTargetLabels(pkgLabels(lset), target.Labels)
+	finalLabels := targets.DropTargetLabels(pkgLabels(entry.lset), target.Labels)
 	for i, l := range finalLabels {
 		if l.Name == "__name__" {
 			finalLabels = append(finalLabels[:i], finalLabels[i+1:]...)
@@ -267,11 +308,13 @@ func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, m
 		return nil
 	}
 	var (
-		metricName     = lset.Get("__name__")
+		metricName     = entry.lset.Get("__name__")
 		baseMetricName string
 		suffix         string
+		job            = entry.lset.Get("job")
+		instance       = entry.lset.Get("instance")
 	)
-	metadata, err := c.metadata.Get(ctx, lset.Get("job"), lset.Get("instance"), metricName)
+	metadata, err := c.metadata.Get(ctx, job, instance, metricName)
 	if err != nil {
 		return errors.Wrap(err, "get metadata")
 	}
@@ -280,7 +323,7 @@ func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, m
 		// the metric name suffix.
 		var ok bool
 		if baseMetricName, suffix, ok = stripComplexMetricSuffix(metricName); ok {
-			metadata, err = c.metadata.Get(ctx, lset.Get("job"), lset.Get("instance"), baseMetricName)
+			metadata, err = c.metadata.Get(ctx, job, instance, baseMetricName)
 			if err != nil {
 				return errors.Wrap(err, "get metadata")
 			}
@@ -337,16 +380,11 @@ func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, m
 		return errors.Errorf("unexpected metric type %s", metadata.Type)
 	}
 
-	c.mtx.Lock()
-	c.entries[ref] = &seriesCacheEntry{
-		maxSegment: maxSegment,
-		lset:       lset,
-		proto:      ts,
-		metadata:   metadata,
-		suffix:     suffix,
-		hash:       hashSeries(ts),
-	}
-	c.mtx.Unlock()
+	entry.proto = ts
+	entry.metadata = metadata
+	entry.suffix = suffix
+	entry.hash = hashSeries(ts)
+
 	return nil
 }
 
