@@ -19,8 +19,11 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -34,7 +37,7 @@ type Tailer struct {
 	ctx         context.Context
 	dir         string
 	cur         io.ReadCloser
-	nextSegment int
+	nextSegment uint64
 }
 
 // Tail the prommetheus/tsdb write ahead log in the given directory. Checkpoints
@@ -47,7 +50,7 @@ func Tail(ctx context.Context, dir string) (*Tailer, error) {
 		dir: dir,
 	}
 	cpdir, k, err := tsdb.LastCheckpoint(dir)
-	if err == tsdb.ErrNotFound {
+	if errors.Cause(err) == tsdb.ErrNotFound {
 		t.cur = ioutil.NopCloser(bytes.NewReader(nil))
 		t.nextSegment = 0
 	} else {
@@ -56,13 +59,88 @@ func Tail(ctx context.Context, dir string) (*Tailer, error) {
 		}
 		// Open the entire checkpoint first. It has to be consumed before
 		// the tailer proceeds to any segments.
-		t.cur, err = wal.NewSegmentsReader(cpdir)
+		t.cur, err = wal.NewSegmentsReader(filepath.Join(dir, cpdir))
 		if err != nil {
 			return nil, errors.Wrap(err, "open checkpoint")
 		}
-		t.nextSegment = k + 1
+		t.nextSegment = uint64(k) + 1
 	}
 	return t, nil
+}
+
+type segmentRef struct {
+	name  string
+	index int
+}
+
+// TODO(fabxc): export this function in TSDB upstream.
+func listSegments(dir string) (refs []segmentRef, err error) {
+	files, err := fileutil.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var last int
+	for _, fn := range files {
+		k, err := strconv.Atoi(fn)
+		if err != nil {
+			continue
+		}
+		if len(refs) > 0 && k > last+1 {
+			return nil, errors.New("segments are not sequential")
+		}
+		refs = append(refs, segmentRef{name: fn, index: k})
+		last = k
+	}
+	sort.Slice(refs, func(i, j int) bool {
+		return refs[i].index < refs[j].index
+	})
+	return refs, nil
+}
+
+const segmentSize = 128 * 1024 * 1024
+
+// Size returns the total size of the WAL as indicated by its highest segment.
+// It includes the size of any past segments that may no longer exist.
+func (t *Tailer) Size() (int, error) {
+	segs, err := listSegments(t.dir)
+	if err != nil || len(segs) == 0 {
+		return 0, err
+	}
+	last := segs[len(segs)-1]
+
+	fi, err := os.Stat(filepath.Join(t.dir, last.name))
+	if err != nil {
+		return 0, err
+	}
+	return last.index*segmentSize + int(fi.Size()), nil
+}
+
+func (t *Tailer) incNextSegment() {
+	atomic.AddUint64(&t.nextSegment, 1)
+}
+
+func (t *Tailer) getNextSegment() int {
+	return int(atomic.LoadUint64(&t.nextSegment))
+}
+
+// Offset returns the approximate current position of the tailer in the WAL with
+// respect to Size().
+func (t *Tailer) Offset() (int, error) {
+	seg, ok := t.cur.(*wal.Segment)
+	// When reading the checkpoint, the current reader is not a segment.
+	// We just treat this temporary case as having "no progress" since it
+	// will generally only contain series records anyway and be processed quickly.
+	if !ok {
+		return t.getNextSegment() * segmentSize, nil
+	}
+	off, err := seg.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return 0, err
+	}
+	if cs := t.CurrentSegment(); cs > 0 {
+		off += int64(cs * segmentSize)
+	}
+	return int(off), nil
 }
 
 // Close all underlying resources of the tailer.
@@ -73,7 +151,7 @@ func (t *Tailer) Close() error {
 // CurrentSegment returns the index of the currently read segment.
 // If no successful read has been performed yet, it may be negative.
 func (t *Tailer) CurrentSegment() int {
-	return t.nextSegment - 1
+	return t.getNextSegment() - 1
 }
 
 func (t *Tailer) Read(b []byte) (int, error) {
@@ -97,7 +175,7 @@ func (t *Tailer) Read(b []byte) (int, error) {
 		// one is really done.
 		// We could do something more sophisticated to save syscalls, but this
 		// seems fine for the expected throughput (<5MB/s).
-		next, err := openSegment(t.dir, t.nextSegment)
+		next, err := openSegment(t.dir, t.getNextSegment())
 		if err == tsdb.ErrNotFound {
 			// Next segment doesn't exist yet. We'll probably just have to
 			// wait for more data to be written.
@@ -114,7 +192,7 @@ func (t *Tailer) Read(b []byte) (int, error) {
 			return n, errors.Wrap(err, "open next segment")
 		}
 		t.cur = next
-		t.nextSegment++
+		t.incNextSegment()
 	}
 }
 

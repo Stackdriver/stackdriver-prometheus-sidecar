@@ -42,6 +42,8 @@ func main() {
 	if err != nil {
 		log.Fatalln("failed to listen on primary port:", err)
 	}
+	grpc_prometheus.EnableHandlingTimeHistogram()
+
 	srv := grpc.NewServer(
 		grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
 		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
@@ -59,7 +61,7 @@ func main() {
 		log.Fatal(http.ListenAndServe(*metricsAddress, nil))
 	}()
 
-	for i := 0; i < 100; i++ {
+	for i := 1; i <= 100; i++ {
 		go func(i int) {
 			err := http.ListenAndServe(fmt.Sprintf(":8%03d", i), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write(metricsText)
