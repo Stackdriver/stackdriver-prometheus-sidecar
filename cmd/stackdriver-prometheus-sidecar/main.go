@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"runtime"
 	"syscall"
@@ -225,6 +226,13 @@ func main() {
 		// depends on to exit properly.
 		g.Add(
 			func() error {
+				waitForPrometheus(ctx, logger, cfg.prometheusURL)
+				// Sleep a fixed amount of time to allow the first scrapes to complete.
+				select {
+				case <-time.After(time.Minute):
+				case <-ctx.Done():
+					return nil
+				}
 				err := prometheusReader.Run(ctx)
 				level.Info(logger).Log("msg", "Prometheus reader stopped")
 				return err
@@ -303,4 +311,29 @@ func (f *clientFactory) New() stackdriver.StorageClient {
 
 func (f *clientFactory) Name() string {
 	return f.url.String()
+}
+
+func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL) {
+	tick := time.NewTicker(3 * time.Second)
+	defer tick.Stop()
+
+	u := *promURL
+	u.Path = path.Join(promURL.Path, "/-/ready")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			resp, err := http.Get(u.String())
+			if err != nil {
+				level.Warn(logger).Log("msg", "query Prometheus readiness", "err", err)
+				continue
+			}
+			if resp.StatusCode/100 == 2 {
+				return
+			}
+			level.Warn(logger).Log("msg", "Prometheus not ready", "status", resp.Status)
+		}
+	}
 }
