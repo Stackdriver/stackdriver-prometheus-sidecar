@@ -262,23 +262,33 @@ func (t *QueueManager) updateShardsLoop() {
 }
 
 func (t *QueueManager) calculateDesiredShards() {
-	wsz, err := t.tailer.Size()
-	if err != nil {
-		level.Error(t.logger).Log("msg", "get WAL size", "err", err)
-		return
+	// Get current wal size and offset but don't return on failure so we can
+	// always call tick() for all rates below.
+	wsz, err1 := t.tailer.Size()
+	if err1 != nil {
+		level.Error(t.logger).Log("msg", "get WAL size", "err", err1)
 	}
-	woff, err := t.tailer.Offset()
-	if err != nil {
-		level.Error(t.logger).Log("msg", "get WAL offset", "err", err)
+	woff, err2 := t.tailer.Offset()
+	if err2 != nil {
+		level.Error(t.logger).Log("msg", "get WAL offset", "err", err2)
 	}
 	t.walSize.incr(int64(wsz - t.lastSize))
 	t.walOffset.incr(int64(woff - t.lastOffset))
 
+	// The ewma rates are intialized with a specific interval at which we have to guarantee that
+	// tick is called for each.
+	// Since the current function is called every interval, this is the point where we do this
+	// for all rates at once. This ensures they are sensical to use for comparisons and computations
+	// with each other.
 	t.samplesIn.tick()
 	t.samplesOut.tick()
 	t.samplesOutDuration.tick()
 	t.walSize.tick()
 	t.walOffset.tick()
+
+	if err1 != nil || err2 != nil {
+		return
+	}
 
 	var (
 		sizeRate           = t.walSize.rate()
@@ -322,7 +332,7 @@ func (t *QueueManager) calculateDesiredShards() {
 		lowerBound = float64(t.numShards) * 0.7
 		upperBound = float64(t.numShards) * 1.1
 	)
-	level.Info(t.logger).Log("msg", "QueueManager.updateShardsLoop",
+	level.Debug(t.logger).Log("msg", "QueueManager.updateShardsLoop",
 		"lowerBound", lowerBound, "desiredShards", desiredShards, "upperBound", upperBound)
 	if lowerBound <= desiredShards && desiredShards <= upperBound {
 		return

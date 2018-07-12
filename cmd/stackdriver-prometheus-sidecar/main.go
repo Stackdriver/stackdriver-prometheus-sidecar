@@ -143,6 +143,10 @@ func main() {
 	// this point, so lots of writes fail, and most writes fail.
 	// config.DefaultQueueConfig.MaxSamplesPerSend = 1
 	config.DefaultQueueConfig.MaxSamplesPerSend = stackdriver.MaxTimeseriesesPerRequest
+	// We want the queues to have enough buffer to ensure consistent flow with full batches
+	// being available for every new request.
+	// Testing with different latencies and shard numbers have shown that 3x of the batch size
+	// works well.
 	config.DefaultQueueConfig.Capacity = 3 * stackdriver.MaxTimeseriesesPerRequest
 
 	queueManager, err := stackdriver.NewQueueManager(
@@ -217,6 +221,8 @@ func main() {
 	}
 	{
 		// We use the context we defined higher up instead of a local one like in the other actors.
+		// This is necessary since it's also used to manage the tailer's lifecycle, which the reader
+		// depends on to exit properly.
 		g.Add(
 			func() error {
 				err := prometheusReader.Run(ctx)

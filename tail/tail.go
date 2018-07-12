@@ -69,8 +69,8 @@ func Tail(ctx context.Context, dir string) (*Tailer, error) {
 }
 
 type segmentRef struct {
-	s string
-	n int
+	name  string
+	index int
 }
 
 // TODO(fabxc): export this function in TSDB upstream.
@@ -88,11 +88,11 @@ func listSegments(dir string) (refs []segmentRef, err error) {
 		if len(refs) > 0 && k > last+1 {
 			return nil, errors.New("segments are not sequential")
 		}
-		refs = append(refs, segmentRef{s: fn, n: k})
+		refs = append(refs, segmentRef{name: fn, index: k})
 		last = k
 	}
 	sort.Slice(refs, func(i, j int) bool {
-		return refs[i].n < refs[j].n
+		return refs[i].index < refs[j].index
 	})
 	return refs, nil
 }
@@ -108,11 +108,11 @@ func (t *Tailer) Size() (int, error) {
 	}
 	last := segs[len(segs)-1]
 
-	fi, err := os.Stat(filepath.Join(t.dir, last.s))
+	fi, err := os.Stat(filepath.Join(t.dir, last.name))
 	if err != nil {
 		return 0, err
 	}
-	return last.n*segmentSize + int(fi.Size()), nil
+	return last.index*segmentSize + int(fi.Size()), nil
 }
 
 func (t *Tailer) incNextSegment() {
