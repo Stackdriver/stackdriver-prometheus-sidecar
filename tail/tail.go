@@ -23,7 +23,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -34,10 +34,13 @@ import (
 
 // Tailer tails a write ahead log in a given directory.
 type Tailer struct {
-	ctx         context.Context
-	dir         string
-	cur         io.ReadCloser
-	nextSegment uint64
+	ctx context.Context
+	dir string
+	cur io.ReadCloser
+
+	mtx         sync.Mutex
+	nextSegment int
+	offset      int // Bytes read within the current reader.
 }
 
 // Tail the prommetheus/tsdb write ahead log in the given directory. Checkpoints
@@ -63,7 +66,7 @@ func Tail(ctx context.Context, dir string) (*Tailer, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "open checkpoint")
 		}
-		t.nextSegment = uint64(k) + 1
+		t.nextSegment = k + 1
 	}
 	return t, nil
 }
@@ -115,32 +118,37 @@ func (t *Tailer) Size() (int, error) {
 	return last.index*segmentSize + int(fi.Size()), nil
 }
 
+func (t *Tailer) incOffset(v int) {
+	t.mtx.Lock()
+	t.offset += v
+	t.mtx.Unlock()
+}
+
 func (t *Tailer) incNextSegment() {
-	atomic.AddUint64(&t.nextSegment, 1)
+	t.mtx.Lock()
+	t.nextSegment++
+	t.offset = 0
+	t.mtx.Unlock()
 }
 
 func (t *Tailer) getNextSegment() int {
-	return int(atomic.LoadUint64(&t.nextSegment))
+	t.mtx.Lock()
+	v := t.nextSegment
+	t.mtx.Unlock()
+	return v
 }
 
 // Offset returns the approximate current position of the tailer in the WAL with
 // respect to Size().
-func (t *Tailer) Offset() (int, error) {
-	seg, ok := t.cur.(*wal.Segment)
-	// When reading the checkpoint, the current reader is not a segment.
-	// We just treat this temporary case as having "no progress" since it
-	// will generally only contain series records anyway and be processed quickly.
-	if !ok {
-		return t.getNextSegment() * segmentSize, nil
+func (t *Tailer) Offset() int {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	// Handle tailer that was initialized against an empty WAL.
+	if t.nextSegment == 0 {
+		return 0
 	}
-	off, err := seg.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return 0, err
-	}
-	if cs := t.CurrentSegment(); cs > 0 {
-		off += int64(cs * segmentSize)
-	}
-	return int(off), nil
+	return (t.nextSegment-1)*segmentSize + t.offset
 }
 
 // Close all underlying resources of the tailer.
@@ -161,6 +169,7 @@ func (t *Tailer) Read(b []byte) (int, error) {
 	for {
 		n, err := t.cur.Read(b)
 		if err != io.EOF {
+			t.incOffset(n)
 			return n, err
 		}
 		select {
@@ -168,6 +177,7 @@ func (t *Tailer) Read(b []byte) (int, error) {
 			// We return EOF here. This will make the WAL reader identify a corruption
 			// if we terminate mid stream. But at least we have a clean shutdown if we
 			// realy read till the end of a stopped WAL.
+			t.incOffset(n)
 			return n, io.EOF
 		default:
 		}
@@ -189,6 +199,7 @@ func (t *Tailer) Read(b []byte) (int, error) {
 			}
 			continue
 		} else if err != nil {
+			t.incOffset(n)
 			return n, errors.Wrap(err, "open next segment")
 		}
 		t.cur = next

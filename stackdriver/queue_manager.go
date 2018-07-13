@@ -186,12 +186,8 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory St
 	if err != nil {
 		return nil, errors.Wrap(err, "get WAL size")
 	}
-	lastOffset, err := tailer.Offset()
-	if err != nil {
-		return nil, errors.Wrap(err, "get WAL offset")
-	}
 	t.lastSize = lastSize
-	t.lastOffset = lastOffset
+	t.lastOffset = tailer.Offset()
 
 	t.shards = t.newShardCollection(t.numShards)
 	numShards.WithLabelValues(t.queueName).Set(float64(t.numShards))
@@ -264,14 +260,12 @@ func (t *QueueManager) updateShardsLoop() {
 func (t *QueueManager) calculateDesiredShards() {
 	// Get current wal size and offset but don't return on failure so we can
 	// always call tick() for all rates below.
-	wsz, err1 := t.tailer.Size()
-	if err1 != nil {
-		level.Error(t.logger).Log("msg", "get WAL size", "err", err1)
+	wsz, err := t.tailer.Size()
+	if err != nil {
+		level.Error(t.logger).Log("msg", "get WAL size", "err", err)
 	}
-	woff, err2 := t.tailer.Offset()
-	if err2 != nil {
-		level.Error(t.logger).Log("msg", "get WAL offset", "err", err2)
-	}
+	woff := t.tailer.Offset()
+
 	t.walSize.incr(int64(wsz - t.lastSize))
 	t.walOffset.incr(int64(woff - t.lastOffset))
 
@@ -286,7 +280,7 @@ func (t *QueueManager) calculateDesiredShards() {
 	t.walSize.tick()
 	t.walOffset.tick()
 
-	if err1 != nil || err2 != nil {
+	if err != nil {
 		return
 	}
 

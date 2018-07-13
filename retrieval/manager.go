@@ -15,7 +15,12 @@ package retrieval
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
@@ -27,6 +32,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/fileutil"
 	tsdblabels "github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
 )
@@ -78,23 +84,28 @@ func NewPrometheusReader(
 	metadataGetter MetadataGetter,
 	appender Appender,
 ) *PrometheusReader {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	return &PrometheusReader{
-		appender:       appender,
-		logger:         logger,
-		tailer:         tailer,
-		walDirectory:   walDirectory,
-		targetGetter:   targetGetter,
-		metadataGetter: metadataGetter,
+		appender:             appender,
+		logger:               logger,
+		tailer:               tailer,
+		walDirectory:         walDirectory,
+		targetGetter:         targetGetter,
+		metadataGetter:       metadataGetter,
+		progressSaveInterval: time.Minute,
 	}
 }
 
 type PrometheusReader struct {
-	logger         log.Logger
-	walDirectory   string
-	tailer         *tail.Tailer
-	targetGetter   TargetGetter
-	metadataGetter MetadataGetter
-	appender       Appender
+	logger               log.Logger
+	walDirectory         string
+	tailer               *tail.Tailer
+	targetGetter         TargetGetter
+	metadataGetter       MetadataGetter
+	appender             Appender
+	progressSaveInterval time.Duration
 }
 
 var samplesProcessed = prometheus.NewCounter(prometheus.CounterOpts{
@@ -114,21 +125,35 @@ func (r *PrometheusReader) Run(ctx context.Context) error {
 
 	builder := &sampleBuilder{series: seriesCache}
 
+	progress, err := readProgressFile(r.walDirectory)
+	if err != nil {
+		level.Warn(r.logger).Log("msg", "reading progress file failed", "err", err)
+	}
+
 	// NOTE(fabxc): wrap the tailer into a buffered reader once we become concerned
 	// with performance. The WAL reader will do a lot of tiny reads otherwise.
 	// This is also the reason for the series cache dealing with "maxSegment" hints
 	// for series rather than precise ones.
 	var (
-		err     error
-		reader  = wal.NewReader(r.tailer)
-		samples []tsdb.RefSample
-		series  []tsdb.RefSeries
+		lastSave time.Time
+		reader   = wal.NewReader(r.tailer)
+		samples  []tsdb.RefSample
+		series   []tsdb.RefSeries
 	)
 Outer:
 	for reader.Next() {
+		offset := r.tailer.Offset()
 		record := reader.Record()
 
+		if offset > progress.Offset && time.Since(lastSave) > r.progressSaveInterval {
+			if err := saveProgressFile(r.walDirectory, offset); err != nil {
+				level.Error(r.logger).Log("msg", "saving progress failed", "err", err)
+			} else {
+				lastSave = time.Now()
+			}
+		}
 		var decoder tsdb.RecordDecoder
+
 		switch decoder.Type(record) {
 		case tsdb.RecordSeries:
 			series, err = decoder.Series(record, series[:0])
@@ -140,6 +165,10 @@ Outer:
 				seriesCache.set(ctx, s.Ref, s.Labels, r.tailer.CurrentSegment())
 			}
 		case tsdb.RecordSamples:
+			// Skip sample records before the the boundary offset.
+			if offset < progress.Offset {
+				continue
+			}
 			samples, err = decoder.Samples(record, samples[:0])
 			if err != nil {
 				level.Error(r.logger).Log("error", err)
@@ -169,6 +198,46 @@ Outer:
 	}
 	level.Info(r.logger).Log("msg", "Done processing WAL.")
 	return reader.Err()
+}
+
+const (
+	progressFilename     = "stackdriver_sidecar.json"
+	progressBufferMargin = 512 * 1024
+)
+
+type progress struct {
+	Offset int `json:"offset"`
+}
+
+func readProgressFile(dir string) (p progress, err error) {
+	b, err := ioutil.ReadFile(filepath.Join(dir, progressFilename))
+	if os.IsNotExist(err) {
+		return p, nil
+	}
+	if err != nil {
+		return p, err
+	}
+	if err := json.Unmarshal(b, &p); err != nil {
+		return p, err
+	}
+	return p, nil
+}
+
+func saveProgressFile(dir string, offset int) error {
+	// Adjust offset to account for buffered records that possibly haven't been
+	// written yet.
+	b, err := json.Marshal(progress{Offset: offset - progressBufferMargin})
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(dir, progressFilename+".tmp")
+	if err := ioutil.WriteFile(tmp, b, 0666); err != nil {
+		return err
+	}
+	if err := fileutil.Rename(tmp, filepath.Join(dir, progressFilename)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // TODO(jkohen): We should be able to avoid this conversion.
