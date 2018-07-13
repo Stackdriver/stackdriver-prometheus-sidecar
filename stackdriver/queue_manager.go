@@ -171,7 +171,7 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory St
 		queueName:     clientFactory.Name(),
 
 		logLimiter:  rate.NewLimiter(logRateLimit, logBurst),
-		numShards:   2,
+		numShards:   1,
 		reshardChan: make(chan int),
 		quit:        make(chan struct{}),
 
