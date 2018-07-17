@@ -226,6 +226,15 @@ func main() {
 		// depends on to exit properly.
 		g.Add(
 			func() error {
+				startOffset, err := retrieval.ReadProgressFile(cfg.walDirectory)
+				if err != nil {
+					level.Warn(logger).Log("msg", "reading progress file failed", "err", err)
+					startOffset = 0
+				}
+				// Write the file again once to ensure we have write permission on startup.
+				if err := retrieval.SaveProgressFile(cfg.walDirectory, startOffset); err != nil {
+					return err
+				}
 				waitForPrometheus(ctx, logger, cfg.prometheusURL)
 				// Sleep a fixed amount of time to allow the first scrapes to complete.
 				select {
@@ -233,7 +242,7 @@ func main() {
 				case <-ctx.Done():
 					return nil
 				}
-				err := prometheusReader.Run(ctx)
+				err = prometheusReader.Run(ctx, startOffset)
 				level.Info(logger).Log("msg", "Prometheus reader stopped")
 				return err
 			},
