@@ -40,6 +40,11 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
+	oc_prometheus "go.opencensus.io/exporter/prometheus"
+	"go.opencensus.io/plugin/ocgrpc"
+	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
@@ -50,8 +55,85 @@ import (
 	promlogflag "github.com/prometheus/common/promlog/flag"
 )
 
+var (
+	sizeDistribution    = view.Distribution(0, 1024, 2048, 4096, 16384, 65536, 262144, 1048576, 4194304, 33554432)
+	latencyDistribution = view.Distribution(0, 1, 2, 5, 10, 15, 25, 50, 100, 200, 400, 800, 1500, 3000, 6000)
+)
+
 func init() {
 	prometheus.MustRegister(version.NewCollector("prometheus"))
+
+	if err := view.Register(
+		&view.View{
+			Name:        "opencensus.io/http/client/request_count",
+			Description: "Count of HTTP requests started",
+			Measure:     ochttp.ClientRequestCount,
+			TagKeys:     []tag.Key{ochttp.Method, ochttp.Path},
+			Aggregation: view.Count(),
+		},
+		&view.View{
+			Name:        "opencensus.io/http/client/request_bytes",
+			Description: "Size distribution of HTTP request body",
+			Measure:     ochttp.ClientRequestBytes,
+			TagKeys:     []tag.Key{ochttp.Method, ochttp.StatusCode, ochttp.Path},
+			Aggregation: sizeDistribution,
+		},
+		&view.View{
+			Name:        "opencensus.io/http/client/response_bytes",
+			Description: "Size distribution of HTTP response body",
+			Measure:     ochttp.ClientResponseBytes,
+			TagKeys:     []tag.Key{ochttp.Method, ochttp.StatusCode, ochttp.Path},
+			Aggregation: sizeDistribution,
+		},
+		&view.View{
+			Name:        "opencensus.io/http/client/latency",
+			Description: "Latency distribution of HTTP requests",
+			TagKeys:     []tag.Key{ochttp.Method, ochttp.StatusCode, ochttp.Path},
+			Measure:     ochttp.ClientLatency,
+			Aggregation: latencyDistribution,
+		},
+	); err != nil {
+		panic(err)
+	}
+	if err := view.Register(
+		&view.View{
+			Measure:     ocgrpc.ClientSentBytesPerRPC,
+			Name:        "grpc.io/client/sent_bytes_per_rpc",
+			Description: "Distribution of bytes sent per RPC, by method.",
+			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
+			Aggregation: sizeDistribution,
+		},
+		&view.View{
+			Measure:     ocgrpc.ClientReceivedBytesPerRPC,
+			Name:        "grpc.io/client/received_bytes_per_rpc",
+			Description: "Distribution of bytes received per RPC, by method.",
+			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
+			Aggregation: sizeDistribution,
+		},
+		&view.View{
+			Measure:     ocgrpc.ClientRoundtripLatency,
+			Name:        "grpc.io/client/roundtrip_latency",
+			Description: "Distribution of round-trip latency, by method.",
+			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
+			Aggregation: latencyDistribution,
+		},
+		&view.View{
+			Measure:     ocgrpc.ClientRoundtripLatency,
+			Name:        "grpc.io/client/completed_rpcs",
+			Description: "Count of RPCs by method and status.",
+			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
+			Aggregation: view.Count(),
+		},
+		&view.View{
+			Measure:     ocgrpc.ClientServerLatency,
+			Name:        "grpc.io/client/server_latency",
+			Description: "Distribution of server latency as viewed by client, by method.",
+			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
+			Aggregation: latencyDistribution,
+		},
+	); err != nil {
+		panic(err)
+	}
 }
 
 func main() {
@@ -115,19 +197,30 @@ func main() {
 	level.Info(logger).Log("host_details", Uname())
 	level.Info(logger).Log("fd_limits", FdLimits())
 
+	promExporter, err := oc_prometheus.NewExporter(oc_prometheus.Options{
+		Registry: prometheus.DefaultRegisterer.(*prometheus.Registry),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "creating Prometheus exporter failed:", err)
+		os.Exit(1)
+	}
+	view.RegisterExporter(promExporter)
+
+	httpClient := &http.Client{Transport: &ochttp.Transport{}}
+
 	cfg.globalLabels[retrieval.ProjectIDLabel] = *projectId
 	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
 	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {
 		panic(err)
 	}
-	targetCache := targets.NewCache(logger, nil, targetsURL)
+	targetCache := targets.NewCache(logger, httpClient, targetsURL)
 
 	metadataURL, err := cfg.prometheusURL.Parse(metadata.DefaultEndpointPath)
 	if err != nil {
 		panic(err)
 	}
-	metadataCache := metadata.NewCache(prometheus.DefaultRegisterer, nil, metadataURL)
+	metadataCache := metadata.NewCache(httpClient, metadataURL)
 
 	// We instantiate a context here since the tailer is used by two other components.
 	// The context will be used in the lifecycle of prometheusReader further down.

@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"go.opencensus.io/plugin/ocgrpc"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/balancer/roundrobin"
@@ -103,10 +103,8 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 		grpc.WithBalancerName(roundrobin.Name),
 		grpc.WithBlock(), // Wait for the connection to be established before using it.
 		grpc.WithUserAgent(userAgent),
-		grpc.WithUnaryInterceptor(grpc_prometheus.UnaryClientInterceptor),
+		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
 	}
-	grpc_prometheus.EnableClientHandlingTimeHistogram()
-
 	if useAuth {
 		rpcCreds, err := oauth.NewApplicationDefault(context.Background(), MonitoringWriteScope)
 		if err != nil {
