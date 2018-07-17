@@ -22,12 +22,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/scrape"
 )
@@ -38,10 +36,6 @@ import (
 type Cache struct {
 	promURL *url.URL
 	client  *http.Client
-
-	requests *prometheus.CounterVec
-	errors   *prometheus.CounterVec
-	latency  *prometheus.HistogramVec
 
 	metadata map[string]*metadataEntry
 	seenJobs map[string]struct{}
@@ -54,7 +48,7 @@ const DefaultEndpointPath = "/api/v1/targets/metadata"
 // NewCache returns a new cache that gets populated by the metadata endpoint
 // at the given URL.
 // It uses the default endpoint path if no specific path is provided.
-func NewCache(reg prometheus.Registerer, client *http.Client, promURL *url.URL) *Cache {
+func NewCache(client *http.Client, promURL *url.URL) *Cache {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -63,25 +57,6 @@ func NewCache(reg prometheus.Registerer, client *http.Client, promURL *url.URL) 
 		client:   client,
 		metadata: map[string]*metadataEntry{},
 		seenJobs: map[string]struct{}{},
-	}
-
-	c.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "sidecar_metadata_requests_total",
-		Help: "Total requests made to the target metadata API",
-	}, []string{"type", "status"})
-
-	c.errors = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "sidecar_metadata_request_errors_total",
-		Help: "Total failing requests to the target metadata API",
-	}, []string{"type", "status"})
-
-	c.latency = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name: "sidecar_metadata_reuqest_latency",
-		Help: "Reuqest latency to the target metadata API",
-	}, []string{"type", "status"})
-
-	if reg != nil {
-		reg.MustRegister(c.requests, c.errors, c.latency)
 	}
 	return c
 }
@@ -145,20 +120,12 @@ func (c *Cache) fetch(ctx context.Context, typ string, q url.Values) (*apiRespon
 		return nil, errors.Wrap(err, "build request")
 	}
 	req = req.WithContext(ctx)
-	start := time.Now()
 
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "query Prometheus")
 	}
 	defer resp.Body.Close()
-
-	code := strconv.Itoa(resp.StatusCode)
-	if err != nil {
-		c.errors.WithLabelValues(typ, code).Inc()
-	}
-	c.requests.WithLabelValues(typ, code).Inc()
-	c.latency.WithLabelValues(typ, code).Observe(time.Since(start).Seconds())
 
 	var apiResp apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {

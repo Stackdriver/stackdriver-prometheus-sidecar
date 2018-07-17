@@ -928,6 +928,84 @@
 			"revisionTime": "2016-09-30T00:14:02Z"
 		},
 		{
+			"checksumSHA1": "rrTaYIL5Ljr5KLwrNYGKGKBZai8=",
+			"path": "go.opencensus.io/exporter/prometheus",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "LOW01td+oPZdr/Hkff1si4RPz24=",
+			"path": "go.opencensus.io/internal",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "Vcwr4P/uIN4haoJPglU7liURepM=",
+			"path": "go.opencensus.io/internal/tagencoding",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "eI5fdKqeO5GreSenlx5/28XGcIY=",
+			"path": "go.opencensus.io/plugin/ocgrpc",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "BkvseOC+irx2BA7/goHqJUvPOYk=",
+			"path": "go.opencensus.io/plugin/ochttp",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "0OVZlXVUMGzf8ddlnjg2yMZI4ao=",
+			"path": "go.opencensus.io/plugin/ochttp/propagation/b3",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "uMIlbT86FQsxwB8w2u1qMDm2MeA=",
+			"path": "go.opencensus.io/stats",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "R0Glq4iKrvXHiHzbvt+5+Aqo6sY=",
+			"path": "go.opencensus.io/stats/internal",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "1PMqmF+67ReViUshob8eCUT97Cg=",
+			"path": "go.opencensus.io/stats/view",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "ZWdN4cT8j9RFeFkTolXi4hvacwM=",
+			"path": "go.opencensus.io/tag",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "R9E+Gh0GgSgCYWrxDttcmDKsArE=",
+			"path": "go.opencensus.io/trace",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "0P3BycP6CFnFNRCnF4dTlMEJgEI=",
+			"path": "go.opencensus.io/trace/internal",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
+			"checksumSHA1": "FHJParRi8f1GHO7Cx+lk3bMWBq0=",
+			"path": "go.opencensus.io/trace/propagation",
+			"revision": "1b1dcef61d739190527eb01380a75e6f91dea7a9",
+			"revisionTime": "2018-05-30T20:34:25Z"
+		},
+		{
 			"checksumSHA1": "Y+HGqEkYM15ir+J93MEaHdyFy0c=",
 			"path": "golang.org/x/net/context",
 			"revision": "054b33e6527139ad5b1ec2f6232c3b175bd9a30c",
