@@ -111,15 +111,15 @@ func TestReader_Progress(t *testing.T) {
 		}
 	}()
 	// Proess the WAL until the writing goroutine completes.
-	r.Run(ctx)
+	r.Run(ctx, 0)
 
-	progress, err := readProgressFile(dir)
+	progressOffset, err := ReadProgressFile(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// We should've head enough time to have save a reasonably large offset.
-	if progress.Offset <= 2*progressBufferMargin {
-		t.Fatalf("saved offset too low at %d", progress.Offset)
+	if progressOffset <= 2*progressBufferMargin {
+		t.Fatalf("saved offset too low at %d", progressOffset)
 	}
 	writeOffset := tailer.Offset()
 
@@ -137,7 +137,7 @@ func TestReader_Progress(t *testing.T) {
 
 	recorder := &nopAppender{}
 	r = NewPrometheusReader(nil, dir, tailer, targetMap, metadataMap, recorder)
-	go r.Run(ctx)
+	go r.Run(ctx, progressOffset)
 
 	// Wait for reader to process until the end.
 	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
@@ -156,7 +156,7 @@ func TestReader_Progress(t *testing.T) {
 		t.Fatal("expected records but got none")
 	}
 	for i, s := range recorder.samples {
-		if ts := s.Points[0].Interval.EndTime.Seconds; ts <= int64(progress.Offset)-progressBufferMargin {
+		if ts := s.Points[0].Interval.EndTime.Seconds; ts <= int64(progressOffset)-progressBufferMargin {
 			t.Fatalf("unexpected record %d for offset %d", i, ts)
 		}
 	}
@@ -170,22 +170,22 @@ func TestReader_ProgressFile(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	p, err := readProgressFile(dir)
+	offset, err := ReadProgressFile(dir)
 	if err != nil {
 		t.Fatalf("read progress: %s", err)
 	}
-	if p.Offset != 0 {
-		t.Fatalf("expected offset %d but got %d", 0, p.Offset)
+	if offset != 0 {
+		t.Fatalf("expected offset %d but got %d", 0, offset)
 	}
-	if err := saveProgressFile(dir, progressBufferMargin+12345); err != nil {
+	if err := SaveProgressFile(dir, progressBufferMargin+12345); err != nil {
 		t.Fatalf("save progress: %s", err)
 	}
-	p, err = readProgressFile(dir)
+	offset, err = ReadProgressFile(dir)
 	if err != nil {
 		t.Fatalf("read progress: %s", err)
 	}
-	if p.Offset != 12345 {
-		t.Fatalf("expected progress offset %d but got %d", 12345, p.Offset)
+	if offset != 12345 {
+		t.Fatalf("expected progress offset %d but got %d", 12345, offset)
 	}
 }
 
