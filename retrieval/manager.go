@@ -26,9 +26,10 @@ import (
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
@@ -108,13 +109,30 @@ type PrometheusReader struct {
 	progressSaveInterval time.Duration
 }
 
-var samplesProcessed = prometheus.NewCounter(prometheus.CounterOpts{
-	Name: "prometheus_sidecar_wal_samples_processed_total",
-	Help: "Total number of samples processed from the WAL",
-})
+var (
+	samplesProcessed = stats.Int64("stackdriver.com/prometheus_sidecar/samples_processed", "Number of WAL samples processed", stats.UnitDimensionless)
+	samplesProduced  = stats.Int64("stackdriver.com/prometheus_sidecar/samples_produced", "Number of Stackdriver samples produced", stats.UnitDimensionless)
+)
 
 func init() {
-	prometheus.MustRegister(samplesProcessed)
+	view.Register(&view.View{
+		Name:        "stackdriver.com/prometheus_sidecar/batches_processed",
+		Description: "Total number of sample batches processed",
+		Measure:     samplesProcessed,
+		Aggregation: view.Count(),
+	})
+	view.Register(&view.View{
+		Name:        "stackdriver.com/prometheus_sidecar/samples_processed",
+		Description: "Number of WAL samples processed",
+		Measure:     samplesProcessed,
+		Aggregation: view.Sum(),
+	})
+	view.Register(&view.View{
+		Name:        "stackdriver.com/prometheus_sidecar/samples_produced",
+		Description: "Number of Stackdriver samples produced",
+		Measure:     samplesProduced,
+		Aggregation: view.Sum(),
+	})
 }
 
 func (r *PrometheusReader) Run(ctx context.Context, startOffset int) error {
@@ -178,6 +196,11 @@ Outer:
 				level.Error(r.logger).Log("error", err)
 				continue
 			}
+			// Do not increment the metric for produced samples each time but rather
+			// once at the end.
+			// Otherwise it will increase CPU usage by ~10%.
+			processed, produced := len(samples), 0
+
 			for len(samples) > 0 {
 				select {
 				case <-ctx.Done():
@@ -195,8 +218,10 @@ Outer:
 					continue
 				}
 				r.appender.Append(hash, outputSample)
-				samplesProcessed.Inc()
+				produced++
 			}
+			stats.Record(ctx, samplesProcessed.M(int64(processed)), samplesProduced.M(int64(produced)))
+
 		case tsdb.RecordTombstones:
 		}
 	}
