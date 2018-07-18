@@ -38,7 +38,7 @@ import (
 )
 
 var (
-	droppedSeries = stats.Int64("stackdriver.com/prometheus_sidecar/dropped_series",
+	droppedSeries = stats.Int64("prometheus_sidecar/dropped_series",
 		"Number of series that were dropped instead of being sent to Stackdriver", stats.UnitDimensionless)
 
 	keyReason, _ = tag.NewKey("reason")
@@ -46,7 +46,7 @@ var (
 
 func init() {
 	if err := view.Register(&view.View{
-		Name:        "stackdriver.com/prometheus_sidecar/dropped_series",
+		Name:        "prometheus_sidecar/dropped_series",
 		Description: "Number of series that were dropped instead of being sent to Stackdriver",
 		Measure:     droppedSeries,
 		TagKeys:     []tag.Key{keyReason},

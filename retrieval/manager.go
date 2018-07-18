@@ -110,25 +110,25 @@ type PrometheusReader struct {
 }
 
 var (
-	samplesProcessed = stats.Int64("stackdriver.com/prometheus_sidecar/samples_processed", "Number of WAL samples processed", stats.UnitDimensionless)
-	samplesProduced  = stats.Int64("stackdriver.com/prometheus_sidecar/samples_produced", "Number of Stackdriver samples produced", stats.UnitDimensionless)
+	samplesProcessed = stats.Int64("prometheus_sidecar/samples_processed", "Number of WAL samples processed", stats.UnitDimensionless)
+	samplesProduced  = stats.Int64("prometheus_sidecar/samples_produced", "Number of Stackdriver samples produced", stats.UnitDimensionless)
 )
 
 func init() {
 	view.Register(&view.View{
-		Name:        "stackdriver.com/prometheus_sidecar/batches_processed",
+		Name:        "prometheus_sidecar/batches_processed",
 		Description: "Total number of sample batches processed",
 		Measure:     samplesProcessed,
 		Aggregation: view.Count(),
 	})
 	view.Register(&view.View{
-		Name:        "stackdriver.com/prometheus_sidecar/samples_processed",
+		Name:        "prometheus_sidecar/samples_processed",
 		Description: "Number of WAL samples processed",
 		Measure:     samplesProcessed,
 		Aggregation: view.Sum(),
 	})
 	view.Register(&view.View{
-		Name:        "stackdriver.com/prometheus_sidecar/samples_produced",
+		Name:        "prometheus_sidecar/samples_produced",
 		Description: "Number of Stackdriver samples produced",
 		Measure:     samplesProduced,
 		Aggregation: view.Sum(),
