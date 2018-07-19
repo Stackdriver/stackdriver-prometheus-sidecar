@@ -1,0 +1,102 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-exporter
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: node-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: node-exporter
+subjects:
+- kind: ServiceAccount
+  name: node-exporter
+  namespace: ${KUBE_NAMESPACE}
+---
+apiVersion: apps/v1beta2
+kind: DaemonSet
+metadata:
+  labels:
+    app: node-exporter
+  name: node-exporter
+  namespace: ${KUBE_NAMESPACE}
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      containers:
+      - args:
+        - --web.listen-address=0.0.0.0:9101
+        - --path.procfs=/host/proc
+        - --path.sysfs=/host/sys
+        image: quay.io/prometheus/node-exporter:v0.15.2
+        name: node-exporter
+        resources:
+          limits:
+            cpu: 102m
+            memory: 180Mi
+          requests:
+            cpu: 102m
+            memory: 180Mi
+        volumeMounts:
+        - mountPath: /host/proc
+          name: proc
+          readOnly: false
+        - mountPath: /host/sys
+          name: sys
+          readOnly: false
+      hostNetwork: true
+      hostPID: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      serviceAccountName: node-exporter
+      volumes:
+      - hostPath:
+          path: /proc
+        name: proc
+      - hostPath:
+          path: /sys
+        name: sys
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: node-exporter
+  name: node-exporter
+  namespace: ${KUBE_NAMESPACE}
+spec:
+  clusterIP: None
+  ports:
+  - name: web
+    port: 9101
+  selector:
+    app: node-exporter
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node-exporter
+  namespace: ${KUBE_NAMESPACE}
