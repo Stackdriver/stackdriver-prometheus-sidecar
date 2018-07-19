@@ -52,6 +52,9 @@ spec:
         - --path.sysfs=/host/sys
         image: quay.io/prometheus/node-exporter:v0.15.2
         name: node-exporter
+        ports:
+        - name: metrics
+          containerPort: 9101
         resources:
           limits:
             cpu: 102m

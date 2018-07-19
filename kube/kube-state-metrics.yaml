@@ -161,6 +161,11 @@ spec:
         - --telemetry-port=8082
         image: quay.io/coreos/kube-state-metrics:v1.3.1
         name: kube-state-metrics
+        ports:
+        - name: metrics
+          containerPort: 8081
+        - name: metrics-self
+          containerPort: 8082
         resources:
           limits:
             cpu: 100m
