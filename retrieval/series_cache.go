@@ -29,10 +29,32 @@ import (
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
+	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredres_pb "google.golang.org/genproto/googleapis/api/monitoredres"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
+
+var (
+	droppedSeries = stats.Int64("prometheus_sidecar/dropped_series",
+		"Number of series that were dropped instead of being sent to Stackdriver", stats.UnitDimensionless)
+
+	keyReason, _ = tag.NewKey("reason")
+)
+
+func init() {
+	if err := view.Register(&view.View{
+		Name:        "prometheus_sidecar/dropped_series",
+		Description: "Number of series that were dropped instead of being sent to Stackdriver",
+		Measure:     droppedSeries,
+		TagKeys:     []tag.Key{keyReason},
+		Aggregation: view.Count(),
+	}); err != nil {
+		panic(err)
+	}
+}
 
 type seriesGetter interface {
 	// Same interface as the standard map getter.
@@ -285,7 +307,8 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		return errors.Wrap(err, "retrieving target failed")
 	}
 	if target == nil {
-		// TODO(fabxc): increment a metric.
+		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "target_not_found"))
+		stats.Record(ctx, droppedSeries.M(1))
 		return nil
 	}
 	// Remove target labels and __name__ label.
@@ -298,13 +321,15 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	}
 	// Drop series with too many labels.
 	if len(finalLabels) > maxLabelCount {
-		// TODO(fabxc): increment a metric
+		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "too_many_labels"))
+		stats.Record(ctx, droppedSeries.M(1))
 		return nil
 	}
 
 	resource, ok := c.getResource(target.DiscoveredLabels)
 	if !ok {
-		// TODO(fabxc): increment a metric
+		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "unknown_resource"))
+		stats.Record(ctx, droppedSeries.M(1))
 		return nil
 	}
 	var (
@@ -329,7 +354,8 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 			}
 		}
 		if metadata == nil {
-			// TODO(fabxc): increment a metric.
+			ctx, _ = tag.New(ctx, tag.Insert(keyReason, "metadata_not_found"))
+			stats.Record(ctx, droppedSeries.M(1))
 			return nil
 		}
 	}
