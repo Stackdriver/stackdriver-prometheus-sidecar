@@ -1,5 +1,7 @@
-# You need the cloud-admin role to apply this file.
-# On GKE try `kubectl apply -f rbac-setup.yaml --as=admin --as-group=system:masters`
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${KUBE_NAMESPACE}
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
@@ -26,12 +28,12 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: prometheus
-  namespace: default
+  namespace: ${KUBE_NAMESPACE}
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
 metadata:
-  name: prometheus-loadtest
+  name: prometheus
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -39,4 +41,30 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: prometheus
-  namespace: default
+  namespace: ${KUBE_NAMESPACE}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: prometheus-meta
+  name: prometheus-meta
+  namespace: ${KUBE_NAMESPACE}
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  ports:
+  - name: prometheus
+    nodePort: 32387
+    port: 9090
+    protocol: TCP
+    targetPort: 9090
+  - name: sidecar
+    nodePort: 30182
+    port: 9091
+    protocol: TCP
+    targetPort: 9091
+  selector:
+    app: prometheus
+    prometheus: meta
+  sessionAffinity: None
