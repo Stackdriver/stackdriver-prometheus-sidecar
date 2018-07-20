@@ -1,0 +1,73 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  labels:
+    prometheus: meta
+  name: meta
+  namespace: ${KUBE_NAMESPACE}
+spec:
+  baseImage: gcr.io/prometheus-to-sd/prometheus
+  replicas: 1
+  resources:
+    requests:
+      memory: 200Mi
+  serviceAccountName: prometheus
+  serviceMonitorSelector:
+    matchExpressions:
+    - key: app
+      operator: Exists
+  version: v2.3.1
+  # Inject the sidecar container.
+  containers:
+  - name: sidecar
+    image: gcr.io/prometheus-to-sd/stackdriver-prometheus-sidecar:freinartz
+    imagePullPolicy: Always
+    args:
+    - "--stackdriver.project-id=${GCP_PROJECT}"
+    - "--prometheus.wal-directory=/data/wal"
+    - "--stackdriver.global-label=_kubernetes_location=${GCP_REGION}"
+    - "--stackdriver.global-label=_kubernetes_cluster_name=${KUBE_CLUSTER}"
+    ports:
+    - name: sidecar
+      containerPort: 9091
+    volumeMounts:
+    - mountPath: /data
+      name: prometheus-meta-db
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: any
+  name: meta
+  namespace: ${KUBE_NAMESPACE}
+spec:
+  endpoints:
+  - interval: 30s
+    port: web
+  - interval: 30s
+    port: metrics
+  - interval: 30s
+    port: metrics-self
+  selector:
+    matchExpression:
+    - key: app
+      operator: Exists
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: prometheus-meta
+  name: prometheus-meta-sidecar
+  namespace: ${KUBE_NAMESPACE}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: web
+    port: 9091
+    protocol: TCP
+    targetPort: sidecar
+  selector:
+    app: prometheus

@@ -3,14 +3,23 @@
 set -e
 set -u
 
-echo "Deploy to namespace ${KUBE_NAMESPACE} for Stackdriver project ${GCP_PROJECT} (location=${GCP_REGION}, cluster=${KUBE_CLUSTER})"
+USE_OPERATOR=${USE_OPERATOR:-''}
 
+echo "Deploy to namespace ${KUBE_NAMESPACE} for Stackdriver project ${GCP_PROJECT} (location=${GCP_REGION}, cluster=${KUBE_CLUSTER}), operator=${USE_OPERATOR}"
+
+envsubst < prometheus-base.yaml > _prometheus-base.yaml.tmp
+envsubst < prometheus-meta-operated.yaml > _prometheus-meta-operated.yaml.tmp
 envsubst < prometheus-meta.yaml > _prometheus-meta.yaml.tmp
 envsubst < node-exporter.yaml > _node-exporter.yaml.tmp
 envsubst < kube-state-metrics.yaml > _kube-state-metrics.yaml.tmp
 
-kubectl apply -f _prometheus-meta.yaml.tmp --as=admin --as-group=system:masters
-kubectl -n "${KUBE_NAMESPACE}" expose deployment prometheus-meta --type=LoadBalancer --name=prometheus-meta || true
+kubectl apply -f _prometheus-base.yaml.tmp --as=admin --as-group=system:masters
+
+if [ -n "${USE_OPERATOR}" ]; then
+  kubectl apply -f _prometheus-meta-operated.yaml.tmp
+else
+  kubectl apply -f _prometheus-meta.yaml.tmp
+fi
 
 kubectl apply -f _node-exporter.yaml.tmp
 kubectl apply -f _kube-state-metrics.yaml.tmp --as=admin --as-group=system:masters
