@@ -196,6 +196,7 @@ Outer:
 				level.Error(r.logger).Log("error", err)
 				continue
 			}
+			backoff := time.Duration(0)
 			// Do not increment the metric for produced samples each time but rather
 			// once at the end.
 			// Otherwise it will increase CPU usage by ~10%.
@@ -207,11 +208,19 @@ Outer:
 					break Outer
 				default:
 				}
+				// We intentionally don't use time.After in the select statement above
+				// since we'd unnecessarily spawn a new goroutine for each sample
+				// we process even when there are no errors.
+				if backoff > 0 {
+					time.Sleep(backoff)
+				}
+
 				var outputSample *monitoring_pb.TimeSeries
 				var hash uint64
 				outputSample, hash, samples, err = builder.next(ctx, samples)
 				if err != nil {
 					level.Warn(r.logger).Log("msg", "Failed to build sample", "err", err)
+					backoff = exponential(backoff)
 					continue
 				}
 				if outputSample == nil {
@@ -308,4 +317,19 @@ func hashSeries(s *monitoring_pb.TimeSeries) uint64 {
 		h = hashAdd(h, l.Value)
 	}
 	return h
+}
+
+func exponential(d time.Duration) time.Duration {
+	const (
+		min = 10 * time.Millisecond
+		max = 2 * time.Second
+	)
+	d *= 2
+	if d < min {
+		d = min
+	}
+	if d > max {
+		d = max
+	}
+	return d
 }
