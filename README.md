@@ -6,6 +6,45 @@ design](https://docs.google.com/document/d/1TEqqE_Stq04drhjSU1I7Ctmuy0dpsvlPL1AK
 to the design document requires membership on
 prometheus-developers@googlegroups.com.
 
+## Installation
+
+To install the sidecar on a local machine run:
+
+```
+go get github.com/Stackdriver/stackdriver-prometheus-sidecar/...
+```
+
+## Deployment
+
+The sidecar is deployed next to an already running Prometheus server. It can stream
+sample data into Stackdriver that is associated with a Kubernetes target in Prometheus.
+
+The following information must be provided:
+
+* `GCP_PROJECT`: The ID of the GCP project the data is written to.
+* `WAL_DIR`: the `./wal` directory within Prometheus's data directory.
+* `API_ADDRESS`: Prometheus's API address, typically `127.0.0.1:9090` like the default
+* `REGION`: a valid GCP or AWS region with which the [Stackdriver monitored resources](https://cloud.google.com/monitoring/api/resources) are associated. Maps to the resource's `location` label (sometimes also called `region`).
+* `CLUSTER`: a custom name for the monitored Kubernetes cluster. Maps to the monitored resource's `cluster_name` label.
+
+```
+stackdriver-prometheus-sidecar \
+  --stackdriver.project-id=${GCP_PROJECT} \
+  --prometheus.wal-directory=${WAL_DIR}" \
+  --prometheus.api-address=${API_ADDRESS} \
+  --stackdriver.global-label=_kubernetes_location=${REGION} \ 
+  --stackdriver.global-label=_kubernetes_cluster_name=${CLUSTER}
+```
+
+The sidecar requires write access to the directory to store its progress between restarts.
+
+If your Prometheus server itself is running inside of Kubernetes, the example manifests
+can be used as a reference for setup:
+
+* [Standard deployment](./kube/prometheus-meta.yaml)
+* [Deployment with the Prometheus Operator](./kube/prometheus-meta-operated.yaml)
+
+
 ## Source Code Headers
 
 Every file containing source code must include copyright and license
