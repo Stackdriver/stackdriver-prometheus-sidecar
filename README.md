@@ -24,8 +24,8 @@ The following information must be provided:
 * `GCP_PROJECT`: The ID of the GCP project the data is written to.
 * `WAL_DIR`: the `./wal` directory within Prometheus's data directory.
 * `API_ADDRESS`: Prometheus's API address, typically `127.0.0.1:9090` like the default
-* `REGION`: a valid GCP or AWS region with which the monitored resources are associated
-* `CLUSTER`: a custom name for the monitored Kubernetes cluster
+* `REGION`: a valid GCP or AWS region with which the [Stackdriver monitored resources](https://cloud.google.com/monitoring/api/resources) are associated. Maps to the resource's `location` label.
+* `CLUSTER`: a custom name for the monitored Kubernetes cluster. Maps to the monitored resource's `cluster_name` label.
 
 ```
 stackdriver-prometheus-sidecar \
