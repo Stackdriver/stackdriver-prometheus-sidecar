@@ -64,7 +64,7 @@ func TestCache_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewCache(nil, nil, u)
+	c := NewCache(nil, u)
 
 	// First get for the job, we expect an initial batch request.
 	handler = func(qMetric, qMatch string) *apiResponse {
