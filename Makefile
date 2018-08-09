@@ -21,7 +21,7 @@ pkgs          = $(shell $(GO) list ./... | grep -v /vendor/)
 PREFIX                  ?= $(shell pwd)
 BIN_DIR                 ?= $(shell pwd)
 # Private repo.
-DOCKER_IMAGE_NAME       ?= gcr.io/prometheus-to-sd/stackdriver-prometheus
+DOCKER_IMAGE_NAME       ?= gcr.io/prometheus-to-sd/stackdriver-prometheus-sidecar
 DOCKER_IMAGE_TAG        ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))
 
 ifdef DEBUG
