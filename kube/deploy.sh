@@ -3,6 +3,8 @@
 set -e
 set -u
 
+# Override to use a different Docker image version for the sidecar.
+SIDECAR_IMAGE_TAG=${SIDECAR_IMAGE_TAG:-'master'}
 USE_OPERATOR=${USE_OPERATOR:-''}
 
 echo "Deploy to namespace ${KUBE_NAMESPACE} for Stackdriver project ${GCP_PROJECT} (location=${GCP_REGION}, cluster=${KUBE_CLUSTER}), operator=${USE_OPERATOR}"
@@ -21,7 +23,7 @@ else
   kubectl apply -f _prometheus-meta.yaml.tmp
 fi
 
-kubectl apply -f _node-exporter.yaml.tmp
+kubectl apply -f _node-exporter.yaml.tmp --as=admin --as-group=system:masters
 kubectl apply -f _kube-state-metrics.yaml.tmp --as=admin --as-group=system:masters
 
 rm _*.tmp
