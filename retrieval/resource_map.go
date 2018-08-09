@@ -16,6 +16,8 @@ package retrieval
 import "github.com/prometheus/prometheus/pkg/labels"
 
 const ProjectIDLabel = "_stackdriver_project_id"
+const KubernetesLocationLabel = "_kubernetes_location"
+const KubernetesClusterNameLabel = "_kubernetes_cluster_name"
 
 type ResourceMap struct {
 	// The name of the Stackdriver MonitoredResource.
@@ -38,8 +40,8 @@ var ResourceMappings = []ResourceMap{
 		Type: "k8s_container",
 		LabelMap: map[string]string{
 			ProjectIDLabel:                         "project_id",
-			"_kubernetes_location":                 "location",
-			"_kubernetes_cluster_name":             "cluster_name",
+			KubernetesLocationLabel:                "location",
+			KubernetesClusterNameLabel:             "cluster_name",
 			"__meta_kubernetes_namespace":          "namespace_name",
 			"__meta_kubernetes_pod_name":           "pod_name",
 			"__meta_kubernetes_pod_container_name": "container_name",
@@ -49,8 +51,8 @@ var ResourceMappings = []ResourceMap{
 		Type: "k8s_pod",
 		LabelMap: map[string]string{
 			ProjectIDLabel:                "project_id",
-			"_kubernetes_location":        "location",
-			"_kubernetes_cluster_name":    "cluster_name",
+			KubernetesLocationLabel:       "location",
+			KubernetesClusterNameLabel:    "cluster_name",
 			"__meta_kubernetes_namespace": "namespace_name",
 			"__meta_kubernetes_pod_name":  "pod_name",
 		},
@@ -59,8 +61,8 @@ var ResourceMappings = []ResourceMap{
 		Type: "k8s_node",
 		LabelMap: map[string]string{
 			ProjectIDLabel:                "project_id",
-			"_kubernetes_location":        "location",
-			"_kubernetes_cluster_name":    "cluster_name",
+			KubernetesLocationLabel:       "location",
+			KubernetesClusterNameLabel:    "cluster_name",
 			"__meta_kubernetes_node_name": "node_name",
 		},
 	},
