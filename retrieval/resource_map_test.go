@@ -58,8 +58,8 @@ func BenchmarkTranslate(b *testing.B) {
 		Type: "gke_container",
 		LabelMap: map[string]string{
 			ProjectIDLabel:                   "project_id",
-			"_kubernetes_location":           "zone",
-			"_kubernetes_cluster_name":       "cluster_name",
+			KubernetesLocationLabel:          "zone",
+			KubernetesClusterNameLabel:       "cluster_name",
 			"_kubernetes_namespace":          "namespace_id",
 			"_kubernetes_pod_name":           "pod_id",
 			"_kubernetes_pod_node_name":      "instance_id",
@@ -68,8 +68,8 @@ func BenchmarkTranslate(b *testing.B) {
 	}
 	targetLabels := labels.Labels{
 		{ProjectIDLabel, "1:anoeuh oeusoeh uasoeuh"},
-		{"_kubernetes_location", "2:anoeuh oeusoeh uasoeuh"},
-		{"_kubernetes_cluster_name", "3:anoeuh oeusoeh uasoeuh"},
+		{KubernetesLocationLabel, "2:anoeuh oeusoeh uasoeuh"},
+		{KubernetesClusterNameLabel, "3:anoeuh oeusoeh uasoeuh"},
 		{"_kubernetes_namespace", "4:anoeuh oeusoeh uasoeuh"},
 		{"_kubernetes_pod_name", "5:anoeuh oeusoeh uasoeuh"},
 		{"_kubernetes_pod_node_name", "6:anoeuh oeusoeh uasoeuh"},
