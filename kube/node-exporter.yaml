@@ -1,34 +1,3 @@
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: node-exporter
-rules:
-- apiGroups:
-  - authentication.k8s.io
-  resources:
-  - tokenreviews
-  verbs:
-  - create
-- apiGroups:
-  - authorization.k8s.io
-  resources:
-  - subjectaccessreviews
-  verbs:
-  - create
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: node-exporter
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: node-exporter
-subjects:
-- kind: ServiceAccount
-  name: node-exporter
-  namespace: ${KUBE_NAMESPACE}
----
 apiVersion: apps/v1beta2
 kind: DaemonSet
 metadata:
@@ -74,7 +43,6 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
-      serviceAccountName: node-exporter
       volumes:
       - hostPath:
           path: /proc
@@ -97,9 +65,3 @@ spec:
     port: 9101
   selector:
     app: node-exporter
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: node-exporter
-  namespace: ${KUBE_NAMESPACE}
