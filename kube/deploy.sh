@@ -23,7 +23,7 @@ else
   kubectl apply -f _prometheus-meta.yaml.tmp
 fi
 
-kubectl apply -f _node-exporter.yaml.tmp --as=admin --as-group=system:masters
+kubectl apply -f _node-exporter.yaml.tmp
 kubectl apply -f _kube-state-metrics.yaml.tmp --as=admin --as-group=system:masters
 
 rm _*.tmp
