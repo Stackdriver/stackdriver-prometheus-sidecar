@@ -23,9 +23,9 @@ import (
 func TestTranslate(t *testing.T) {
 	r := ResourceMap{
 		Type: "my_type",
-		LabelMap: map[string]string{
-			"__target1": "sdt1",
-			"__target2": "sdt2",
+		LabelMap: map[string]labelTranslation{
+			"__target1": constValue("sdt1"),
+			"__target2": constValue("sdt2"),
 		},
 	}
 	// This target is missing label "__target1".
@@ -53,17 +53,35 @@ func TestTranslate(t *testing.T) {
 	}
 }
 
+func TestTranslateGceInstance(t *testing.T) {
+	target := labels.Labels{
+		{"__meta_gce_project", "my-project"},
+		{"__meta_gce_zone", "https://www.googleapis.com/compute/v1/projects/my-project/zones/us-central1-a"},
+		{"__meta_gce_instance_id", "1234110975759588"},
+	}
+	expectedLabels := map[string]string{
+		"project_id":  "my-project",
+		"zone":        "us-central1-a",
+		"instance_id": "1234110975759588",
+	}
+	if labels := GCEResourceMap.Translate(target); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else if !reflect.DeepEqual(labels, expectedLabels) {
+		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	}
+}
+
 func BenchmarkTranslate(b *testing.B) {
 	r := ResourceMap{
 		Type: "gke_container",
-		LabelMap: map[string]string{
-			ProjectIDLabel:                   "project_id",
-			KubernetesLocationLabel:          "zone",
-			KubernetesClusterNameLabel:       "cluster_name",
-			"_kubernetes_namespace":          "namespace_id",
-			"_kubernetes_pod_name":           "pod_id",
-			"_kubernetes_pod_node_name":      "instance_id",
-			"_kubernetes_pod_container_name": "container_name",
+		LabelMap: map[string]labelTranslation{
+			ProjectIDLabel:                   constValue("project_id"),
+			KubernetesLocationLabel:          constValue("zone"),
+			KubernetesClusterNameLabel:       constValue("cluster_name"),
+			"_kubernetes_namespace":          constValue("namespace_id"),
+			"_kubernetes_pod_name":           constValue("pod_id"),
+			"_kubernetes_pod_node_name":      constValue("instance_id"),
+			"_kubernetes_pod_container_name": constValue("container_name"),
 		},
 	}
 	targetLabels := labels.Labels{

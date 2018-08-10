@@ -53,11 +53,16 @@ func (m metadataMap) Get(ctx context.Context, job, instance, metric string) (*sc
 func TestSampleBuilder(t *testing.T) {
 	resourceMaps := []ResourceMap{
 		{
-			Type:     "resource1",
-			LabelMap: map[string]string{"__resource_a": "resource_a", "__resource_b": "resource_b"},
+			Type: "resource1",
+			LabelMap: map[string]labelTranslation{
+				"__resource_a": constValue("resource_a"),
+				"__resource_b": constValue("resource_b"),
+			},
 		}, {
-			Type:     "resource2",
-			LabelMap: map[string]string{"__resource_a": "resource_a"},
+			Type: "resource2",
+			LabelMap: map[string]labelTranslation{
+				"__resource_a": constValue("resource_a"),
+			},
 		},
 	}
 	cases := []struct {
@@ -422,8 +427,8 @@ func TestSampleBuilder(t *testing.T) {
 						Value: &monitoring_pb.TypedValue{
 							Value: &monitoring_pb.TypedValue_DistributionValue{
 								&distribution_pb.Distribution{
-									Count: 11,
-									Mean:  6.20909090909091,
+									Count:                 11,
+									Mean:                  6.20909090909091,
 									SumOfSquaredDeviation: 270.301590909091,
 									BucketOptions: &distribution_pb.Distribution_BucketOptions{
 										Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
@@ -458,8 +463,8 @@ func TestSampleBuilder(t *testing.T) {
 						Value: &monitoring_pb.TypedValue{
 							Value: &monitoring_pb.TypedValue_DistributionValue{
 								&distribution_pb.Distribution{
-									Count: 3,
-									Mean:  5,
+									Count:                 3,
+									Mean:                  5,
 									SumOfSquaredDeviation: 0,
 									BucketOptions: &distribution_pb.Distribution_BucketOptions{
 										Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{

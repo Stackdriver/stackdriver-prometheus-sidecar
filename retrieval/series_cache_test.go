@@ -47,7 +47,7 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 		targetMap{"/": &targets.Target{}},
 		metadataMap{"//": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge}},
 		[]ResourceMap{
-			{Type: "resource1", LabelMap: map[string]string{}},
+			{Type: "resource1", LabelMap: map[string]labelTranslation{}},
 		},
 	)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -176,7 +176,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	resourceMaps := []ResourceMap{
 		{
 			Type:     "resource2",
-			LabelMap: map[string]string{"__resource_a": "resource_a"},
+			LabelMap: map[string]labelTranslation{"__resource_a": constValue("resource_a")},
 		},
 	}
 	targetMap := targetMap{}
