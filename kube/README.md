@@ -12,5 +12,5 @@ Setting `USE_OPERATOR=1` will deploy Prometheus via the [coreos/prometheus-opera
 
 To tear down everything:
 
-`kubectl delete -n "${KUBE_NAMESPACE}"`
+`kubectl delete namespace "${KUBE_NAMESPACE}"`
 
