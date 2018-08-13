@@ -136,6 +136,11 @@ func init() {
 	}
 }
 
+type kubernetesConfig struct {
+	location    string
+	clusterName string
+}
+
 func main() {
 	if os.Getenv("DEBUG") != "" {
 		runtime.SetBlockProfileRate(20)
@@ -144,16 +149,14 @@ func main() {
 
 	cfg := struct {
 		projectIdResource  string
-		globalLabels       map[string]string
+		kubernetesLabels   kubernetesConfig
 		stackdriverAddress *url.URL
 		walDirectory       string
 		prometheusURL      *url.URL
 		listenAddress      string
 
 		logLevel promlog.AllowedLevel
-	}{
-		globalLabels: make(map[string]string),
-	}
+	}{}
 
 	a := kingpin.New(filepath.Base(os.Args[0]), "The Prometheus monitoring server")
 
@@ -168,9 +171,11 @@ func main() {
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
 
-	// TODO(jkohen): Document this flag better.
-	a.Flag("stackdriver.global-label", "Global labels used for the Stackdriver MonitoredResource.").
-		StringMapVar(&cfg.globalLabels)
+	a.Flag("stackdriver.kubernetes.location", "Value of the 'location' label in the Kubernetes Stackdriver MonitoredResources.").
+		StringVar(&cfg.kubernetesLabels.location)
+
+	a.Flag("stackdriver.kubernetes.cluster-name", "Value of the 'cluster_name' label in the Kubernetes Stackdriver MonitoredResources.").
+		StringVar(&cfg.kubernetesLabels.clusterName)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -208,7 +213,12 @@ func main() {
 
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
-	cfg.globalLabels[retrieval.ProjectIDLabel] = *projectId
+	var staticLabels = map[string]string{
+		retrieval.ProjectIDLabel:             *projectId,
+		retrieval.KubernetesLocationLabel:    cfg.kubernetesLabels.location,
+		retrieval.KubernetesClusterNameLabel: cfg.kubernetesLabels.clusterName,
+	}
+
 	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
 	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {
@@ -262,7 +272,7 @@ func main() {
 		log.With(logger, "component", "Prometheus reader"),
 		cfg.walDirectory,
 		tailer,
-		retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(cfg.globalLabels)),
+		retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(staticLabels)),
 		metadataCache,
 		queueManager,
 	)

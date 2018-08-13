@@ -44,8 +44,8 @@ spec:
         args:
         - "--stackdriver.project-id=${GCP_PROJECT}"
         - "--prometheus.wal-directory=/data/wal"
-        - "--stackdriver.global-label=_kubernetes_location=${GCP_REGION}"
-        - "--stackdriver.global-label=_kubernetes_cluster_name=${KUBE_CLUSTER}"
+        - "--stackdriver.kubernetes.location=${GCP_REGION}"
+        - "--stackdriver.kubernetes.cluster-name=${KUBE_CLUSTER}"
         ports:
         - name: sidecar
           containerPort: 9091

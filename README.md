@@ -32,8 +32,8 @@ stackdriver-prometheus-sidecar \
   --stackdriver.project-id=${GCP_PROJECT} \
   --prometheus.wal-directory=${WAL_DIR}" \
   --prometheus.api-address=${API_ADDRESS} \
-  --stackdriver.global-label=_kubernetes_location=${REGION} \ 
-  --stackdriver.global-label=_kubernetes_cluster_name=${CLUSTER}
+  --stackdriver.kubernetes.location=${REGION} \ 
+  --stackdriver.kubernetes.cluster-name=${CLUSTER}
 ```
 
 The sidecar requires write access to the directory to store its progress between restarts.
