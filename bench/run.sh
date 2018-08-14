@@ -24,7 +24,7 @@ echo "Starting sidecar"
 ./stackdriver-prometheus-sidecar \
   --stackdriver.project-id=test \
   --web.listen-address="0.0.0.0:9091" \
-  --stackdriver.global-label=_debug=debug \
+  --stackdriver.debug \
   --stackdriver.api-address="http://127.0.0.1:9092/?auth=false" \
   2>&1 | sed -e "s/^/[sidecar] /" &
 
@@ -35,7 +35,7 @@ if [ -n "${SIDECAR_OLD}" ]; then
     --log.level=debug \
     --stackdriver.project-id=test \
     --web.listen-address="0.0.0.0:9093" \
-    --stackdriver.global-label=_debug=debug \
+    --stackdriver.debug \
     --stackdriver.api-address="http://127.0.0.1:9092/?auth=false" \
     2>&1 | sed -e "s/^/[sidecar-old] /" &
 fi
