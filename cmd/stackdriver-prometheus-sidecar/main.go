@@ -151,6 +151,7 @@ func main() {
 		projectIdResource  string
 		kubernetesLabels   kubernetesConfig
 		stackdriverAddress *url.URL
+		stackdriverDebug   bool
 		walDirectory       string
 		prometheusURL      *url.URL
 		listenAddress      string
@@ -176,6 +177,9 @@ func main() {
 
 	a.Flag("stackdriver.kubernetes.cluster-name", "Value of the 'cluster_name' label in the Kubernetes Stackdriver MonitoredResources.").
 		StringVar(&cfg.kubernetesLabels.clusterName)
+
+	a.Flag("stackdriver.debug", "Use the debug monitored resource to send data to a fake receiver.").
+		BoolVar(&cfg.stackdriverDebug)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -217,6 +221,9 @@ func main() {
 		retrieval.ProjectIDLabel:             *projectId,
 		retrieval.KubernetesLocationLabel:    cfg.kubernetesLabels.location,
 		retrieval.KubernetesClusterNameLabel: cfg.kubernetesLabels.clusterName,
+	}
+	if cfg.stackdriverDebug {
+		staticLabels["_debug"] = "debug"
 	}
 
 	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)

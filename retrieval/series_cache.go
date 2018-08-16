@@ -157,6 +157,9 @@ func (c *seriesCache) run(ctx context.Context) {
 // recent checkpoint.
 func (c *seriesCache) garbageCollect() error {
 	cpDir, cpNum, err := tsdb.LastCheckpoint(c.dir)
+	if errors.Cause(err) == tsdb.ErrNotFound {
+		return nil // Nothing to do.
+	}
 	if err != nil {
 		return errors.Wrap(err, "find last checkpoint")
 	}
