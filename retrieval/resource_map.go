@@ -42,6 +42,21 @@ type ResourceMap struct {
 	LabelMap map[string]labelTranslation
 }
 
+var EC2ResourceMap = ResourceMap{
+	Type: "aws_ec2_instance",
+	LabelMap: map[string]labelTranslation{
+		ProjectIDLabel:           constValue("project_id"),
+		"__meta_ec2_instance_id": constValue("instance_id"),
+		"__meta_ec2_availability_zone": labelTranslation{
+			stackdriverLabelName: "region",
+			convert: func(s string) string {
+				return "aws:" + s
+			},
+		},
+		"__meta_ec2_owner_id": constValue("aws_account"),
+	},
+}
+
 var GCEResourceMap = ResourceMap{
 	Type: "gce_instance",
 	LabelMap: map[string]labelTranslation{
@@ -96,6 +111,7 @@ var ResourceMappings = []ResourceMap{
 			"__meta_kubernetes_node_name": constValue("node_name"),
 		},
 	},
+	EC2ResourceMap,
 	GCEResourceMap,
 }
 

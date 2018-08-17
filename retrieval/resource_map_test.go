@@ -53,6 +53,26 @@ func TestTranslate(t *testing.T) {
 	}
 }
 
+func TestTranslateEc2Instance(t *testing.T) {
+	target := labels.Labels{
+		{ProjectIDLabel, "my-project"},
+		{"__meta_ec2_availability_zone", "us-east-1b"},
+		{"__meta_ec2_instance_id", "i-040c37401c02cb03b"},
+		{"__meta_ec2_owner_id", "12345678"},
+	}
+	expectedLabels := map[string]string{
+		"project_id":  "my-project",
+		"instance_id": "i-040c37401c02cb03b",
+		"region":      "aws:us-east-1b",
+		"aws_account": "12345678",
+	}
+	if labels := EC2ResourceMap.Translate(target); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else if !reflect.DeepEqual(labels, expectedLabels) {
+		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	}
+}
+
 func TestTranslateGceInstance(t *testing.T) {
 	target := labels.Labels{
 		{"__meta_gce_project", "my-project"},
