@@ -43,7 +43,7 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 	// Initialize the series cache with "empty" target and metadata maps.
 	// The series we use below have no job, instance, and __name__ labels set, which
 	// will result in those empty lookup keys.
-	c := newSeriesCache(nil, dir,
+	c := newSeriesCache(nil, dir, nil,
 		targetMap{"/": &targets.Target{}},
 		metadataMap{"//": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge}},
 		[]ResourceMap{
@@ -181,7 +181,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	}
 	targetMap := targetMap{}
 	metadataMap := metadataMap{}
-	c := newSeriesCache(nil, "", targetMap, metadataMap, resourceMaps)
+	c := newSeriesCache(nil, "", nil, targetMap, metadataMap, resourceMaps)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -223,5 +223,52 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	entry, ok, err = c.get(ctx, 1)
 	if entry == nil || !ok || err != nil {
 		t.Errorf("expected metadata but got none, error: %s", err)
+	}
+}
+
+func TestSeriesCache_Filter(t *testing.T) {
+	resourceMaps := []ResourceMap{
+		{
+			Type:     "resource2",
+			LabelMap: map[string]labelTranslation{"__resource_a": constValue("resource_a")},
+		},
+	}
+	// Populate the getters with data.
+	targetMap := targetMap{
+		"job1/inst1": &targets.Target{
+			Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
+			DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+		},
+	}
+	metadataMap := metadataMap{
+		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+	}
+	c := newSeriesCache(nil, "", []*promlabels.Matcher{
+		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "a", Value: "a1"},
+		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"},
+	}, targetMap, metadataMap, resourceMaps)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Test base case of metric that passes all filters. This primarily
+	// ensures that our setup is correct and metrics aren't dropped for reasons
+	// other than the filter.
+	err := c.set(ctx, 1, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a1", "b", "b1"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := c.get(ctx, 1); !ok || err != nil {
+		t.Fatalf("metric not found: %s", err)
+	}
+	// Test filtered metric.
+	err = c.set(ctx, 2, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a1", "b", "b2"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := c.get(ctx, 2); err != nil {
+		t.Fatalf("error retrieving metric: %s", err)
+	} else if ok {
+		t.Fatalf("metric was not filtered")
 	}
 }

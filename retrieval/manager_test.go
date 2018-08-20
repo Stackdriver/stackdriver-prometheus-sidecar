@@ -81,7 +81,7 @@ func TestReader_Progress(t *testing.T) {
 		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
 	}
 
-	r := NewPrometheusReader(nil, dir, tailer, targetMap, metadataMap, &nopAppender{})
+	r := NewPrometheusReader(nil, dir, tailer, nil, targetMap, metadataMap, &nopAppender{})
 	r.progressSaveInterval = 200 * time.Millisecond
 
 	// Populate sample data
@@ -136,7 +136,7 @@ func TestReader_Progress(t *testing.T) {
 	}
 
 	recorder := &nopAppender{}
-	r = NewPrometheusReader(nil, dir, tailer, targetMap, metadataMap, recorder)
+	r = NewPrometheusReader(nil, dir, tailer, nil, targetMap, metadataMap, recorder)
 	go r.Run(ctx, progressOffset)
 
 	// Wait for reader to process until the end.

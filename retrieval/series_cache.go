@@ -75,6 +75,7 @@ type seriesGetter interface {
 type seriesCache struct {
 	logger       log.Logger
 	dir          string
+	filters      []*promlabels.Matcher
 	targets      TargetGetter
 	metadata     MetadataGetter
 	resourceMaps []ResourceMap
@@ -122,13 +123,21 @@ func (e *seriesCacheEntry) shouldRefresh() bool {
 	return !e.populated() && time.Since(e.lastRefresh) > refreshInterval
 }
 
-func newSeriesCache(logger log.Logger, dir string, targets TargetGetter, metadata MetadataGetter, resourceMaps []ResourceMap) *seriesCache {
+func newSeriesCache(
+	logger log.Logger,
+	dir string,
+	filters []*promlabels.Matcher,
+	targets TargetGetter,
+	metadata MetadataGetter,
+	resourceMaps []ResourceMap,
+) *seriesCache {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &seriesCache{
 		logger:       logger,
 		dir:          dir,
+		filters:      filters,
 		targets:      targets,
 		metadata:     metadata,
 		resourceMaps: resourceMaps,
@@ -285,6 +294,11 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 // set the label set for the given reference.
 // maxSegment indicates the the highest segment at which the series was possibly defined.
 func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, maxSegment int) error {
+	for _, m := range c.filters {
+		if v := lset.Get(m.Name); !m.Matches(v) {
+			return nil
+		}
+	}
 	c.mtx.Lock()
 	c.entries[ref] = &seriesCacheEntry{
 		maxSegment: maxSegment,

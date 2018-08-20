@@ -81,6 +81,7 @@ func NewPrometheusReader(
 	logger log.Logger,
 	walDirectory string,
 	tailer *tail.Tailer,
+	filters []*labels.Matcher,
 	targetGetter TargetGetter,
 	metadataGetter MetadataGetter,
 	appender Appender,
@@ -92,6 +93,7 @@ func NewPrometheusReader(
 		appender:             appender,
 		logger:               logger,
 		tailer:               tailer,
+		filters:              filters,
 		walDirectory:         walDirectory,
 		targetGetter:         targetGetter,
 		metadataGetter:       metadataGetter,
@@ -103,6 +105,7 @@ type PrometheusReader struct {
 	logger               log.Logger
 	walDirectory         string
 	tailer               *tail.Tailer
+	filters              []*labels.Matcher
 	targetGetter         TargetGetter
 	metadataGetter       MetadataGetter
 	appender             Appender
@@ -138,7 +141,14 @@ func init() {
 func (r *PrometheusReader) Run(ctx context.Context, startOffset int) error {
 	level.Info(r.logger).Log("msg", "Starting Prometheus reader...")
 
-	seriesCache := newSeriesCache(r.logger, r.walDirectory, r.targetGetter, r.metadataGetter, ResourceMappings)
+	seriesCache := newSeriesCache(
+		r.logger,
+		r.walDirectory,
+		r.filters,
+		r.targetGetter,
+		r.metadataGetter,
+		ResourceMappings,
+	)
 	go seriesCache.run(ctx)
 
 	builder := &sampleBuilder{series: seriesCache}
