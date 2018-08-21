@@ -294,8 +294,8 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 // set the label set for the given reference.
 // maxSegment indicates the the highest segment at which the series was possibly defined.
 func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, maxSegment int) error {
-	for _, m := range c.filters {
-		if v := lset.Get(m.Name); !m.Matches(v) {
+	for _, f := range c.filters {
+		if v := lset.Get(f.Name); !f.Matches(v) {
 			return nil
 		}
 	}

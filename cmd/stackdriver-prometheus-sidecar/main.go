@@ -192,7 +192,7 @@ func main() {
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry.").
 		Default("0.0.0.0:9091").StringVar(&cfg.listenAddress)
 
-	a.Flag("filter", "Label matcher which must pass for a series to be forwarded to Stackdriver,").
+	a.Flag("filter", "PromQL-style label matcher which must pass for a series to be forwarded to Stackdriver. May be repeated.").
 		StringsVar(&cfg.filters)
 
 	promlogflag.AddFlags(a, &cfg.logLevel)
@@ -231,7 +231,7 @@ func main() {
 		staticLabels["_debug"] = "debug"
 	}
 
-	filters, err := parseFilters(cfg.filters)
+	filters, err := parseFilters(cfg.filters...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error parsing filters:", err)
 		os.Exit(2)
@@ -469,7 +469,9 @@ func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL)
 	}
 }
 
-func parseFilters(strs []string) (matchers []*labels.Matcher, err error) {
+// parseFilters parses a list of strings that contain PromQL-style label matchers and
+// returns a list of the resulting matchers.
+func parseFilters(strs ...string) (matchers []*labels.Matcher, err error) {
 	pattern := regexp.MustCompile(`^([a-zA-Z0-9_]+)(=|!=|=~|!~)"(.+)"$`)
 
 	for _, s := range strs {
