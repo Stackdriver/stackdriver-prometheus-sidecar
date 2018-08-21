@@ -24,6 +24,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"syscall"
 	"time"
@@ -155,6 +156,7 @@ func main() {
 		walDirectory       string
 		prometheusURL      *url.URL
 		listenAddress      string
+		filters            []string
 
 		logLevel promlog.AllowedLevel
 	}{}
@@ -190,6 +192,9 @@ func main() {
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry.").
 		Default("0.0.0.0:9091").StringVar(&cfg.listenAddress)
 
+	a.Flag("filter", "PromQL-style label matcher which must pass for a series to be forwarded to Stackdriver. May be repeated.").
+		StringsVar(&cfg.filters)
+
 	promlogflag.AddFlags(a, &cfg.logLevel)
 
 	_, err := a.Parse(os.Args[1:])
@@ -224,6 +229,12 @@ func main() {
 	}
 	if cfg.stackdriverDebug {
 		staticLabels["_debug"] = "debug"
+	}
+
+	filters, err := parseFilters(cfg.filters...)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error parsing filters:", err)
+		os.Exit(2)
 	}
 
 	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
@@ -279,6 +290,7 @@ func main() {
 		log.With(logger, "component", "Prometheus reader"),
 		cfg.walDirectory,
 		tailer,
+		filters,
 		retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(staticLabels)),
 		metadataCache,
 		queueManager,
@@ -455,4 +467,34 @@ func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL)
 			level.Warn(logger).Log("msg", "Prometheus not ready", "status", resp.Status)
 		}
 	}
+}
+
+// parseFilters parses a list of strings that contain PromQL-style label matchers and
+// returns a list of the resulting matchers.
+func parseFilters(strs ...string) (matchers []*labels.Matcher, err error) {
+	pattern := regexp.MustCompile(`^([a-zA-Z0-9_]+)(=|!=|=~|!~)"(.+)"$`)
+
+	for _, s := range strs {
+		parts := pattern.FindStringSubmatch(s)
+		if len(parts) != 4 {
+			return nil, fmt.Errorf("invalid filter %q", s)
+		}
+		var matcherType labels.MatchType
+		switch parts[2] {
+		case "=":
+			matcherType = labels.MatchEqual
+		case "!=":
+			matcherType = labels.MatchNotEqual
+		case "=~":
+			matcherType = labels.MatchRegexp
+		case "!~":
+			matcherType = labels.MatchNotRegexp
+		}
+		matcher, err := labels.NewMatcher(matcherType, parts[1], parts[3])
+		if err != nil {
+			return nil, fmt.Errorf("invalid filter %q: %s", s, err)
+		}
+		matchers = append(matchers, matcher)
+	}
+	return matchers, nil
 }

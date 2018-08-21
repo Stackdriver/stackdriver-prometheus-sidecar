@@ -113,3 +113,41 @@ Loop:
 		t.Errorf("prometheus exited with an unexpected error:%v", stoppedErr)
 	}
 }
+
+func TestParseFilters(t *testing.T) {
+	input := []string{
+		`__name__="test1"`,
+		`a1=~"test2.+"`,
+		`a2!="test3"`,
+		`a3!~"test4.*"`,
+	}
+	// Test success cases.
+	filters, err := parseFilters(input...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We verify by comparing the serializiation produced by the parsed matchers again.
+	// Deep equal comparison doesn't work since some fields deep down in the produced regexes differ
+	// even though everything being equal semantically.
+	if len(filters) != len(input) {
+		t.Fatalf("unexpected result length %d", len(filters))
+	}
+	for i, f := range filters {
+		if f.String() != input[i] {
+			t.Fatalf("unexpected parsed filter %v, want %v", f, input[i])
+		}
+	}
+	// Test failure cases.
+	cases := []string{
+		`a-b="1"`, // Invalid character in key.
+		`a="1`,    // Missing trailing quote.
+		`a=1"`,    // Missing leading quote.
+		`a!=="1"`, // Invalid operator.
+	}
+	for _, c := range cases {
+		if _, err := parseFilters(c); err == nil {
+			t.Fatalf("expected error for %q but got none", c)
+		}
+	}
+
+}
