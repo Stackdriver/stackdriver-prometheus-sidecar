@@ -24,7 +24,8 @@ echo "Starting sidecar"
 ./stackdriver-prometheus-sidecar \
   --stackdriver.project-id=test \
   --web.listen-address="0.0.0.0:9091" \
-  --stackdriver.debug \
+  --stackdriver.generic.location="test-cluster" \
+  --stackdriver.generic.namespace="test-namespace" \
   --stackdriver.api-address="http://127.0.0.1:9092/?auth=false" \
   2>&1 | sed -e "s/^/[sidecar] /" &
 

@@ -142,6 +142,11 @@ type kubernetesConfig struct {
 	clusterName string
 }
 
+type genericConfig struct {
+	location  string
+	namespace string
+}
+
 func main() {
 	if os.Getenv("DEBUG") != "" {
 		runtime.SetBlockProfileRate(20)
@@ -151,8 +156,8 @@ func main() {
 	cfg := struct {
 		projectIdResource  string
 		kubernetesLabels   kubernetesConfig
+		genericLabels      genericConfig
 		stackdriverAddress *url.URL
-		stackdriverDebug   bool
 		walDirectory       string
 		prometheusURL      *url.URL
 		listenAddress      string
@@ -180,8 +185,11 @@ func main() {
 	a.Flag("stackdriver.kubernetes.cluster-name", "Value of the 'cluster_name' label in the Kubernetes Stackdriver MonitoredResources.").
 		StringVar(&cfg.kubernetesLabels.clusterName)
 
-	a.Flag("stackdriver.debug", "Use the debug monitored resource to send data to a fake receiver.").
-		BoolVar(&cfg.stackdriverDebug)
+	a.Flag("stackdriver.generic.location", "Location for metrics written with the generic resource, e.g. a cluster or data center name.").
+		StringVar(&cfg.genericLabels.location)
+
+	a.Flag("stackdriver.generic.namespace", "Namespace for metrics written with the generic resource, e.g. a cluster or data center name.").
+		StringVar(&cfg.genericLabels.namespace)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -226,9 +234,8 @@ func main() {
 		retrieval.ProjectIDLabel:             *projectId,
 		retrieval.KubernetesLocationLabel:    cfg.kubernetesLabels.location,
 		retrieval.KubernetesClusterNameLabel: cfg.kubernetesLabels.clusterName,
-	}
-	if cfg.stackdriverDebug {
-		staticLabels["_debug"] = "debug"
+		retrieval.GenericLocationLabel:       cfg.genericLabels.location,
+		retrieval.GenericNamespaceLabel:      cfg.genericLabels.namespace,
 	}
 
 	filters, err := parseFilters(cfg.filters...)

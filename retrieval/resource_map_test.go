@@ -26,6 +26,7 @@ func TestTranslate(t *testing.T) {
 		LabelMap: map[string]labelTranslation{
 			"__target1": constValue("sdt1"),
 			"__target2": constValue("sdt2"),
+			"__target3": constValue("sdt3"),
 		},
 	}
 	// This target is missing label "__target1".
@@ -33,20 +34,24 @@ func TestTranslate(t *testing.T) {
 		{"ignored", "x"},
 		{"__target2", "y"},
 	}
-	matchTarget := labels.Labels{
+	if labels := r.Translate(noMatchTarget, nil); labels != nil {
+		t.Errorf("Expected no match, matched %v", labels)
+	}
+	matchTargetDiscovered := labels.Labels{
 		{"ignored", "x"},
 		{"__target2", "y"},
 		{"__target1", "z"},
 	}
-	if labels := r.Translate(noMatchTarget); labels != nil {
-		t.Errorf("Expected no match, matched %v", labels)
+	matchTargetFinal := labels.Labels{
+		{"__target1", "z2"},
+		{"__target3", "v"},
 	}
-
 	expectedLabels := map[string]string{
-		"sdt1": "z",
+		"sdt1": "z2",
 		"sdt2": "y",
+		"sdt3": "v",
 	}
-	if labels := r.Translate(matchTarget); labels == nil {
+	if labels := r.Translate(matchTargetDiscovered, matchTargetFinal); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
@@ -66,7 +71,7 @@ func TestTranslateEc2Instance(t *testing.T) {
 		"region":      "aws:us-east-1b",
 		"aws_account": "12345678",
 	}
-	if labels := EC2ResourceMap.Translate(target); labels == nil {
+	if labels := EC2ResourceMap.Translate(target, nil); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
@@ -84,7 +89,7 @@ func TestTranslateGceInstance(t *testing.T) {
 		"zone":        "us-central1-a",
 		"instance_id": "1234110975759588",
 	}
-	if labels := GCEResourceMap.Translate(target); labels == nil {
+	if labels := GCEResourceMap.Translate(target, nil); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
@@ -104,7 +109,7 @@ func BenchmarkTranslate(b *testing.B) {
 			"_kubernetes_pod_container_name": constValue("container_name"),
 		},
 	}
-	targetLabels := labels.Labels{
+	discoveredLabels := labels.Labels{
 		{ProjectIDLabel, "1:anoeuh oeusoeh uasoeuh"},
 		{KubernetesLocationLabel, "2:anoeuh oeusoeh uasoeuh"},
 		{KubernetesClusterNameLabel, "3:anoeuh oeusoeh uasoeuh"},
@@ -114,11 +119,15 @@ func BenchmarkTranslate(b *testing.B) {
 		{"_kubernetes_pod_container_name", "7:anoeuh oeusoeh uasoeuh"},
 		{"ignored", "8:anoeuh oeusoeh uasoeuh"},
 	}
+	finalLabels := labels.Labels{
+		{"job", "example"},
+		{"instance", "1.2.3.4:80"},
+	}
 
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		if labels := r.Translate(targetLabels); labels == nil {
+		if labels := r.Translate(discoveredLabels, finalLabels); labels == nil {
 			b.Fail()
 		}
 	}

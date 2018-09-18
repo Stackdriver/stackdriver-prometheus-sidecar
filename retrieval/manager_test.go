@@ -73,8 +73,11 @@ func TestReader_Progress(t *testing.T) {
 	// Populate the getters with data.
 	targetMap := targetMap{
 		"job1/inst1": &targets.Target{
-			Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
-			DiscoveredLabels: promlabels.FromStrings("_debug", "debug", "job", "job1", "__address__", "inst1"),
+			Labels: promlabels.FromStrings("job", "job1", "instance", "inst1"),
+			DiscoveredLabels: promlabels.FromStrings(
+				ProjectIDLabel, "proj1",
+				GenericNamespaceLabel, "ns1", GenericLocationLabel, "loc1",
+				"job", "job1", "__address__", "inst1"),
 		},
 	}
 	metadataMap := metadataMap{
