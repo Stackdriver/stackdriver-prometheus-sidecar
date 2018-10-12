@@ -45,6 +45,14 @@ can be used as a reference for setup:
 * [Deployment with the Prometheus Operator](./kube/prometheus-meta-operated.yaml)
 
 
+## Compatibility
+
+The matrix below lists the versions of Prometheus Server and other dependencies that have been qualified to work with releases of `stackdriver-prometheus-sidecar`.
+
+| sidecar version | prometheus version |
+| --- | --- |
+| 0.1.x | 2.4.3 |
+
 ## Source Code Headers
 
 Every file containing source code must include copyright and license
