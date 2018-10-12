@@ -51,7 +51,7 @@ The matrix below lists the versions of Prometheus Server and other dependencies 
 
 | sidecar version | prometheus version |
 | --- | --- |
-| 0.1.x | 2.4.0 |
+| 0.1.x | 2.4.3 |
 
 ## Source Code Headers
 
