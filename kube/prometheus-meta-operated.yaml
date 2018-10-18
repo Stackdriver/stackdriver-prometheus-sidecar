@@ -6,7 +6,6 @@ metadata:
   name: meta
   namespace: ${KUBE_NAMESPACE}
 spec:
-  baseImage: gcr.io/prometheus-to-sd/prometheus
   replicas: 1
   resources:
     requests:
@@ -16,7 +15,7 @@ spec:
     matchExpressions:
     - key: app
       operator: Exists
-  version: v2.3.1
+  version: v2.4.3
   # Inject the sidecar container.
   containers:
   - name: sidecar

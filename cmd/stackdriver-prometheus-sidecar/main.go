@@ -237,6 +237,11 @@ func main() {
 		retrieval.GenericLocationLabel:       cfg.genericLabels.location,
 		retrieval.GenericNamespaceLabel:      cfg.genericLabels.namespace,
 	}
+	for k, v := range staticLabels {
+		if v == "" {
+			delete(staticLabels, k)
+		}
+	}
 
 	filters, err := parseFilters(cfg.filters...)
 	if err != nil {

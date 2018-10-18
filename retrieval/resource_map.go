@@ -116,7 +116,7 @@ var ResourceMappings = []ResourceMap{
 			GenericLocationLabel:  constValue("location"),
 			GenericNamespaceLabel: constValue("namespace"),
 			"job":                 constValue("job"),
-			"instance":            constValue("id"),
+			"instance":            constValue("task_id"),
 		},
 	},
 }
