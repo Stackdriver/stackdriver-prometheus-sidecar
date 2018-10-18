@@ -343,7 +343,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		return nil
 	}
 
-	resource, ok := c.getResource(target.DiscoveredLabels)
+	resource, ok := c.getResource(target.DiscoveredLabels, target.Labels)
 	if !ok {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "unknown_resource"))
 		stats.Record(ctx, droppedSeries.M(1))
@@ -431,9 +431,9 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	return nil
 }
 
-func (c *seriesCache) getResource(lset promlabels.Labels) (*monitoredres_pb.MonitoredResource, bool) {
+func (c *seriesCache) getResource(discovered, final promlabels.Labels) (*monitoredres_pb.MonitoredResource, bool) {
 	for _, m := range c.resourceMaps {
-		if lset := m.Translate(lset); lset != nil {
+		if lset := m.Translate(discovered, final); lset != nil {
 			return &monitoredres_pb.MonitoredResource{
 				Type:   m.Type,
 				Labels: lset,

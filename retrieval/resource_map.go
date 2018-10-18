@@ -19,9 +19,13 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-const ProjectIDLabel = "_stackdriver_project_id"
-const KubernetesLocationLabel = "_kubernetes_location"
-const KubernetesClusterNameLabel = "_kubernetes_cluster_name"
+const (
+	ProjectIDLabel             = "_stackdriver_project_id"
+	KubernetesLocationLabel    = "_kubernetes_location"
+	KubernetesClusterNameLabel = "_kubernetes_cluster_name"
+	GenericNamespaceLabel      = "_generic_namespace"
+	GenericLocationLabel       = "_generic_location"
+)
 
 type labelTranslation struct {
 	stackdriverLabelName string
@@ -74,14 +78,6 @@ var GCEResourceMap = ResourceMap{
 // TODO(jkohen): ensure these are sorted from more specific to less specific.
 var ResourceMappings = []ResourceMap{
 	{
-		Type: "debug",
-		LabelMap: map[string]labelTranslation{
-			"_debug":      constValue("debug"),
-			"__address__": constValue("address"),
-			"job":         constValue("job"),
-		},
-	},
-	{
 		Type: "k8s_container",
 		LabelMap: map[string]labelTranslation{
 			ProjectIDLabel:                         constValue("project_id"),
@@ -113,11 +109,29 @@ var ResourceMappings = []ResourceMap{
 	},
 	EC2ResourceMap,
 	GCEResourceMap,
+	{
+		Type: "generic_task",
+		LabelMap: map[string]labelTranslation{
+			ProjectIDLabel:        constValue("project_id"),
+			GenericLocationLabel:  constValue("location"),
+			GenericNamespaceLabel: constValue("namespace"),
+			"job":                 constValue("job"),
+			"instance":            constValue("task_id"),
+		},
+	},
 }
 
-func (m *ResourceMap) Translate(lset labels.Labels) map[string]string {
+func (m *ResourceMap) Translate(discovered, final labels.Labels) map[string]string {
 	stackdriverLabels := make(map[string]string, len(m.LabelMap))
-	for _, l := range lset {
+	for _, l := range discovered {
+		if translator, ok := m.LabelMap[l.Name]; ok {
+			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
+		}
+	}
+	// The final labels are applied second so they overwrite mappings from discovered labels.
+	// This ensures, that the Prometheus's relabeling rules are respected for labels that
+	// appear in both label sets, e.g. the "job" label for generic resources.
+	for _, l := range final {
 		if translator, ok := m.LabelMap[l.Name]; ok {
 			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
 		}

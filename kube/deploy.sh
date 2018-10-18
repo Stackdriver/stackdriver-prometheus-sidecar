@@ -4,8 +4,9 @@ set -e
 set -u
 
 # Override to use a different Docker image version for the sidecar.
-SIDECAR_IMAGE_TAG=${SIDECAR_IMAGE_TAG:-'master'}
-USE_OPERATOR=${USE_OPERATOR:-''}
+export SIDECAR_IMAGE_TAG=${SIDECAR_IMAGE_TAG:-'master'}
+export USE_OPERATOR=${USE_OPERATOR:-''}
+export KUBE_NAMESPACE=${KUBE_NAMESPACE:-'default'}
 
 echo "Deploy to namespace ${KUBE_NAMESPACE} for Stackdriver project ${GCP_PROJECT} (location=${GCP_REGION}, cluster=${KUBE_CLUSTER}), operator=${USE_OPERATOR}"
 
