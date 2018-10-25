@@ -96,6 +96,24 @@ func TestTranslateGceInstance(t *testing.T) {
 	}
 }
 
+func TestBestEffortTranslate(t *testing.T) {
+	target := labels.Labels{
+		{ProjectIDLabel, "my-project"},
+		{KubernetesLocationLabel, "us-central1-a"},
+		{KubernetesClusterNameLabel, "cluster"},
+	}
+	expectedLabels := map[string]string{
+		"project_id":   "my-project",
+		"zone":         "us-central1-a",
+		"cluster_name": "cluster",
+	}
+	if labels := GKEResourceMap.TryTranslate(target, nil); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else if !reflect.DeepEqual(labels, expectedLabels) {
+		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	}
+}
+
 func BenchmarkTranslate(b *testing.B) {
 	r := ResourceMap{
 		Type: "gke_container",

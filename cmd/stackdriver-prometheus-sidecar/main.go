@@ -26,10 +26,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
+
+	md "cloud.google.com/go/compute/metadata"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -147,6 +150,12 @@ type genericConfig struct {
 	namespace string
 }
 
+type gceMetadata struct {
+	projectID string
+	location  string
+	cluster   string
+}
+
 func main() {
 	if os.Getenv("DEBUG") != "" {
 		runtime.SetBlockProfileRate(20)
@@ -158,6 +167,8 @@ func main() {
 		kubernetesLabels   kubernetesConfig
 		genericLabels      genericConfig
 		stackdriverAddress *url.URL
+		metricsPrefix      string
+		useGkeResource     bool
 		walDirectory       string
 		prometheusURL      *url.URL
 		listenAddress      string
@@ -175,6 +186,9 @@ func main() {
 	projectId := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
 		Required().
 		String()
+	if *projectId == "" {
+		*projectId = getGCEProjectID()
+	}
 
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
@@ -190,6 +204,13 @@ func main() {
 
 	a.Flag("stackdriver.generic.namespace", "Namespace for metrics written with the generic resource, e.g. a cluster or data center name.").
 		StringVar(&cfg.genericLabels.namespace)
+
+	a.Flag("stackdriver.metrics-prefix", "Customized prefix for Stackdriver metrics. If not set, external.googleapis.com/prometheus will be used").
+		StringVar(&cfg.metricsPrefix)
+
+	a.Flag("stackdriver.use-gke-resource",
+		"Whether to consider legacy gke_container MR for resource detection. If true, gke_container will be matched first, then other resources").
+		Default("false").BoolVar(&cfg.useGkeResource)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -237,6 +258,7 @@ func main() {
 		retrieval.GenericLocationLabel:       cfg.genericLabels.location,
 		retrieval.GenericNamespaceLabel:      cfg.genericLabels.namespace,
 	}
+	fillMetadata(&staticLabels)
 	for k, v := range staticLabels {
 		if v == "" {
 			delete(staticLabels, k)
@@ -306,6 +328,8 @@ func main() {
 		retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(staticLabels)),
 		metadataCache,
 		queueManager,
+		cfg.metricsPrefix,
+		cfg.useGkeResource,
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.
@@ -509,4 +533,38 @@ func parseFilters(strs ...string) (matchers []*labels.Matcher, err error) {
 		matchers = append(matchers, matcher)
 	}
 	return matchers, nil
+}
+
+func getGCEProjectID() string {
+	if !md.OnGCE() {
+		return ""
+	}
+	if id, err := md.ProjectID(); err == nil {
+		return strings.TrimSpace(id)
+	}
+	return ""
+}
+
+func fillMetadata(staticConfig *map[string]string) {
+	if !md.OnGCE() {
+		return
+	}
+	if (*staticConfig)[retrieval.ProjectIDLabel] == "" {
+		if id, err := md.ProjectID(); err == nil {
+			id = strings.TrimSpace(id)
+			(*staticConfig)[retrieval.ProjectIDLabel] = id
+		}
+	}
+	if (*staticConfig)[retrieval.KubernetesLocationLabel] == "" {
+		if l, err := md.InstanceAttributeValue("cluster-location"); err == nil {
+			l = strings.TrimSpace(l)
+			(*staticConfig)[retrieval.KubernetesLocationLabel] = l
+		}
+	}
+	if (*staticConfig)[retrieval.KubernetesClusterNameLabel] == "" {
+		if cn, err := md.InstanceAttributeValue("cluster-name"); err == nil {
+			cn = strings.TrimSpace(cn)
+			(*staticConfig)[retrieval.KubernetesClusterNameLabel] = cn
+		}
+	}
 }

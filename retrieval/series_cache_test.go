@@ -49,6 +49,7 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 		[]ResourceMap{
 			{Type: "resource1", LabelMap: map[string]labelTranslation{}},
 		},
+		"", false,
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -181,7 +182,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	}
 	targetMap := targetMap{}
 	metadataMap := metadataMap{}
-	c := newSeriesCache(nil, "", nil, targetMap, metadataMap, resourceMaps)
+	c := newSeriesCache(nil, "", nil, targetMap, metadataMap, resourceMaps, "", false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -246,7 +247,7 @@ func TestSeriesCache_Filter(t *testing.T) {
 	c := newSeriesCache(nil, "", []*promlabels.Matcher{
 		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "a", Value: "a1"},
 		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"},
-	}, targetMap, metadataMap, resourceMaps)
+	}, targetMap, metadataMap, resourceMaps, "", false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
