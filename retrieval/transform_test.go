@@ -636,7 +636,7 @@ func TestSampleBuilder(t *testing.T) {
 		var err error
 		var result []*monitoring_pb.TimeSeries
 
-		series := newSeriesCache(nil, "", nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false)
+		series := newSeriesCache(nil, "", nil, nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false)
 		for ref, s := range c.series {
 			series.set(ctx, ref, s, 0)
 		}

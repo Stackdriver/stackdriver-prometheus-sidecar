@@ -64,7 +64,11 @@ func TestCache_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewCache(nil, u)
+	// Create cache with static metadata.
+	c := NewCache(nil, u, []scrape.MetricMetadata{
+		{Metric: "static_metric1", Type: textparse.MetricTypeCounter, Help: "help_static1"},
+		{Metric: "static_metric2", Type: textparse.MetricTypeCounter, Help: "help_static2"},
+	})
 
 	// First get for the job, we expect an initial batch request.
 	handler = func(qMetric, qMatch string) *apiResponse {
@@ -176,4 +180,20 @@ func TestCache_Get(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Test fallthrough to static metadata.
+	handler = func(qMetric, qMatch string) *apiResponse {
+		return nil
+	}
+	md, err = c.Get(ctx, "prometheus", "localhost:9090", "static_metric2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &scrape.MetricMetadata{
+		Metric: "static_metric2",
+		Type:   textparse.MetricTypeCounter,
+		Help:   "help_static2",
+	}
+	if !reflect.DeepEqual(md, want) {
+		t.Fatalf("expected metadata %v but got %v", want, md)
+	}
 }

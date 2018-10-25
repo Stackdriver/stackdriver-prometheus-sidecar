@@ -26,16 +26,15 @@ import (
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
-
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/fileutil"
 	tsdblabels "github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
+	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
+	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 type TargetGetter interface {
@@ -82,6 +81,7 @@ func NewPrometheusReader(
 	walDirectory string,
 	tailer *tail.Tailer,
 	filters []*labels.Matcher,
+	metricRenames map[string]string,
 	targetGetter TargetGetter,
 	metadataGetter MetadataGetter,
 	appender Appender,
@@ -100,6 +100,7 @@ func NewPrometheusReader(
 		targetGetter:         targetGetter,
 		metadataGetter:       metadataGetter,
 		progressSaveInterval: time.Minute,
+		metricRenames:        metricRenames,
 		metricsPrefix:        metricsPrefix,
 		useGkeResource:       useGkeResource,
 	}
@@ -110,6 +111,7 @@ type PrometheusReader struct {
 	walDirectory         string
 	tailer               *tail.Tailer
 	filters              []*labels.Matcher
+	metricRenames        map[string]string
 	targetGetter         TargetGetter
 	metadataGetter       MetadataGetter
 	appender             Appender
@@ -151,6 +153,7 @@ func (r *PrometheusReader) Run(ctx context.Context, startOffset int) error {
 		r.logger,
 		r.walDirectory,
 		r.filters,
+		r.metricRenames,
 		r.targetGetter,
 		r.metadataGetter,
 		ResourceMappings,

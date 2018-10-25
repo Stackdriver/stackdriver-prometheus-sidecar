@@ -22,6 +22,7 @@ sleep 2
 echo "Starting sidecar"
 
 ./stackdriver-prometheus-sidecar \
+  --config-file="sidecar.yml" \
   --stackdriver.project-id=test \
   --web.listen-address="0.0.0.0:9091" \
   --stackdriver.generic.location="test-cluster" \

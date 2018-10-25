@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof" // Comment this line to disable pprof endpoint.
 	"net/url"
@@ -30,10 +31,13 @@ import (
 	"syscall"
 	"time"
 
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
-
 	md "cloud.google.com/go/compute/metadata"
-
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
+	"github.com/ghodss/yaml"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	conntrack "github.com/mwitkow/go-conntrack"
@@ -41,22 +45,19 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/promlog"
+	promlogflag "github.com/prometheus/common/promlog/flag"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/scrape"
 	oc_prometheus "go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
-
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
-	"github.com/prometheus/common/promlog"
-	promlogflag "github.com/prometheus/common/promlog/flag"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -156,6 +157,19 @@ type gceMetadata struct {
 	cluster   string
 }
 
+type fileConfig struct {
+	MetricRenames []struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	} `json:"metric_renames"`
+
+	StaticMetadata []struct {
+		Metric string `json:"metric"`
+		Type   string `json:"type"`
+		Help   string `json:"help"`
+	} `json:"static_metadata"`
+}
+
 func main() {
 	if os.Getenv("DEBUG") != "" {
 		runtime.SetBlockProfileRate(20)
@@ -163,6 +177,7 @@ func main() {
 	}
 
 	cfg := struct {
+		configFilename     string
 		projectIdResource  string
 		kubernetesLabels   kubernetesConfig
 		genericLabels      genericConfig
@@ -173,6 +188,8 @@ func main() {
 		prometheusURL      *url.URL
 		listenAddress      string
 		filters            []string
+		metricRenames      map[string]string
+		staticMetadata     []scrape.MetricMetadata
 
 		logLevel promlog.AllowedLevel
 	}{}
@@ -182,6 +199,8 @@ func main() {
 	a.Version(version.Print("prometheus"))
 
 	a.HelpFlag.Short('h')
+
+	a.Flag("config-file", "A configuration file.").StringVar(&cfg.configFilename)
 
 	projectId := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
 		Required().
@@ -228,6 +247,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "Error parsing commandline arguments"))
 		a.Usage(os.Args[1:])
 		os.Exit(2)
+	}
+
+	if cfg.configFilename != "" {
+		cfg.metricRenames, cfg.staticMetadata, err = parseConfigFile(cfg.configFilename)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, errors.Wrapf(err, "parse config file %s", cfg.configFilename))
+			os.Exit(2)
+		}
 	}
 
 	logger := promlog.New(cfg.logLevel)
@@ -282,7 +309,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	metadataCache := metadata.NewCache(httpClient, metadataURL)
+	metadataCache := metadata.NewCache(httpClient, metadataURL, cfg.staticMetadata)
 
 	// We instantiate a context here since the tailer is used by two other components.
 	// The context will be used in the lifecycle of prometheusReader further down.
@@ -325,6 +352,7 @@ func main() {
 		cfg.walDirectory,
 		tailer,
 		filters,
+		cfg.metricRenames,
 		retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(staticLabels)),
 		metadataCache,
 		queueManager,
@@ -567,4 +595,34 @@ func fillMetadata(staticConfig *map[string]string) {
 			(*staticConfig)[retrieval.KubernetesClusterNameLabel] = cn
 		}
 	}
+}
+
+func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadata, error) {
+	b, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "reading file")
+	}
+	var fc fileConfig
+	if err := yaml.Unmarshal(b, &fc); err != nil {
+		return nil, nil, errors.Wrap(err, "invalid YAML")
+	}
+	renameMapping := map[string]string{}
+	for _, r := range fc.MetricRenames {
+		renameMapping[r.From] = r.To
+	}
+	var staticMetadata []scrape.MetricMetadata
+	for _, sm := range fc.StaticMetadata {
+		switch sm.Type {
+		case textparse.MetricTypeCounter, textparse.MetricTypeGauge,
+			textparse.MetricTypeHistogram, textparse.MetricTypeSummary, textparse.MetricTypeUntyped:
+		default:
+			return nil, nil, errors.Errorf("invalid metric type %q", sm.Type)
+		}
+		staticMetadata = append(staticMetadata, scrape.MetricMetadata{
+			Metric: sm.Metric,
+			Type:   textparse.MetricType(sm.Type),
+			Help:   sm.Help,
+		})
+	}
+	return renameMapping, staticMetadata, nil
 }

@@ -1,0 +1,11 @@
+groups:
+- name: test
+  rules:
+  # A recording rule that statically defines job/instance labels for an actual
+  # target. With added metadata in sidecar.yml, it can be ingested like a
+  # regular metric.
+  - record: metric_without_metadata
+    labels:
+      job: prometheus
+      instance: 127.0.0.1:9090
+    expr: vector(1)
