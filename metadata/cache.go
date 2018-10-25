@@ -111,10 +111,22 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.
 		}
 		md = c.metadata[metric]
 	}
-	if md == nil || !md.found {
-		return c.staticMetadata[metric], nil
+	if md != nil && md.found {
+		return &md.MetricMetadata, nil
 	}
-	return &md.MetricMetadata, nil
+	if md, ok := c.staticMetadata[metric]; ok {
+		return md, nil
+	}
+	// The metric might also be produced by a recording rule, which by convention
+	// contain at least one `:` character. In that case we can generally assume that
+	// it is a gauge. We leave the help text empty.
+	if strings.Contains(metric, ":") {
+		return &scrape.MetricMetadata{
+			Metric: metric,
+			Type:   textparse.MetricTypeGauge,
+		}, nil
+	}
+	return nil, nil
 }
 
 func (c *Cache) fetch(ctx context.Context, typ string, q url.Values) (*apiResponse, error) {

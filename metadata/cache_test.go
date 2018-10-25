@@ -196,4 +196,17 @@ func TestCache_Get(t *testing.T) {
 	if !reflect.DeepEqual(md, want) {
 		t.Fatalf("expected metadata %v but got %v", want, md)
 	}
+
+	// Test recording rule.
+	md, err = c.Get(ctx, "prometheus", "localhost:9090", "some:recording:rule")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = &scrape.MetricMetadata{
+		Metric: "some:recording:rule",
+		Type:   textparse.MetricTypeGauge,
+	}
+	if !reflect.DeepEqual(md, want) {
+		t.Fatalf("expected metadata %v but got %v", want, md)
+	}
 }

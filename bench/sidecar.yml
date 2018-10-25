@@ -3,6 +3,6 @@ metric_renames:
   to: go_info_renamed
 
 static_metadata:
-- metric: metric_without_metadata
+- metric: metric:without:metadata
   type: counter
   help: "some help text"
