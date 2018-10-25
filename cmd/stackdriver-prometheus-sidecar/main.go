@@ -209,7 +209,7 @@ func main() {
 		StringVar(&cfg.metricsPrefix)
 
 	a.Flag("stackdriver.use-gke-resource",
-		"Whether to consider legacy gke_container MR for resource detection. If true, gke_container will be matched first, then other resources").
+		"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
 		Default("false").BoolVar(&cfg.useGkeResource)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
