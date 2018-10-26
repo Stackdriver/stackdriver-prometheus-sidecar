@@ -39,7 +39,7 @@ type Cache struct {
 
 	metadata       map[string]*metadataEntry
 	seenJobs       map[string]struct{}
-	staticMetadata map[string]*scrape.MetricMetadata
+	staticMetadata map[string]scrape.MetricMetadata
 }
 
 // DefaultEndpointPath is the default HTTP path on which Prometheus serves
@@ -56,12 +56,12 @@ func NewCache(client *http.Client, promURL *url.URL, staticMetadata []scrape.Met
 	c := &Cache{
 		promURL:        promURL,
 		client:         client,
-		staticMetadata: map[string]*scrape.MetricMetadata{},
+		staticMetadata: map[string]scrape.MetricMetadata{},
 		metadata:       map[string]*metadataEntry{},
 		seenJobs:       map[string]struct{}{},
 	}
 	for _, m := range staticMetadata {
-		c.staticMetadata[m.Metric] = &m
+		c.staticMetadata[m.Metric] = m
 	}
 	return c
 }
@@ -115,7 +115,7 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.
 		return &md.MetricMetadata, nil
 	}
 	if md, ok := c.staticMetadata[metric]; ok {
-		return md, nil
+		return &md, nil
 	}
 	// The metric might also be produced by a recording rule, which by convention
 	// contain at least one `:` character. In that case we can generally assume that

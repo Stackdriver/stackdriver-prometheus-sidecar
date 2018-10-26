@@ -210,3 +210,19 @@ func TestCache_Get(t *testing.T) {
 		t.Fatalf("expected metadata %v but got %v", want, md)
 	}
 }
+
+func TestNewCache(t *testing.T) {
+	static := []scrape.MetricMetadata{
+		{Metric: "a", Help: "a"},
+		{Metric: "b", Help: "b"},
+	}
+	c := NewCache(nil, nil, static)
+
+	want := map[string]scrape.MetricMetadata{
+		"a": {Metric: "a", Help: "a"},
+		"b": {Metric: "b", Help: "b"},
+	}
+	if !reflect.DeepEqual(c.staticMetadata, want) {
+		t.Fatalf("expected metadata %v but got %v", want, c.staticMetadata)
+	}
+}
