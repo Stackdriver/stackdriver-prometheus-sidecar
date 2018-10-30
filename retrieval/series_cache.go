@@ -439,7 +439,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 
 func (c *seriesCache) getResource(discovered, final promlabels.Labels) (*monitoredres_pb.MonitoredResource, bool) {
 	if c.useGkeResource {
-		if lset := GKEResourceMap.TryTranslate(discovered, final); lset != nil {
+		if lset := GKEResourceMap.BestEffortTranslate(discovered, final); lset != nil {
 			return &monitoredres_pb.MonitoredResource{
 				Type:   GKEResourceMap.Type,
 				Labels: lset,

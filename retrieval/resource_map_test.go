@@ -103,11 +103,15 @@ func TestBestEffortTranslate(t *testing.T) {
 		{KubernetesClusterNameLabel, "cluster"},
 	}
 	expectedLabels := map[string]string{
-		"project_id":   "my-project",
-		"zone":         "us-central1-a",
-		"cluster_name": "cluster",
+		"project_id":     "my-project",
+		"zone":           "us-central1-a",
+		"cluster_name":   "cluster",
+		"namespace_id":   "",
+		"instance_id":    "",
+		"pod_id":         "",
+		"container_name": "",
 	}
-	if labels := GKEResourceMap.TryTranslate(target, nil); labels == nil {
+	if labels := GKEResourceMap.BestEffortTranslate(target, nil); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)

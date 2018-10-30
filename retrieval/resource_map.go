@@ -135,15 +135,26 @@ var ResourceMappings = []ResourceMap{
 }
 
 func (m *ResourceMap) Translate(discovered, final labels.Labels) map[string]string {
-	stackdriverLabels := m.TryTranslate(discovered, final)
+	stackdriverLabels := m.tryTranslate(discovered, final)
 	if len(m.LabelMap) == len(stackdriverLabels) {
 		return stackdriverLabels
 	}
 	return nil
 }
 
-// TryTranslate translates labels to resource with best effort.
-func (m *ResourceMap) TryTranslate(discovered, final labels.Labels) map[string]string {
+// BestEffortTranslate translates labels to resource with best effort. If the resource label
+// cannot be filled, use empty string instead.
+func (m *ResourceMap) BestEffortTranslate(discovered, final labels.Labels) map[string]string {
+	stackdriverLabels := m.tryTranslate(discovered, final)
+	for _, t := range m.LabelMap {
+		if _, ok := stackdriverLabels[t.stackdriverLabelName]; !ok {
+			stackdriverLabels[t.stackdriverLabelName] = ""
+		}
+	}
+	return stackdriverLabels
+}
+
+func (m *ResourceMap) tryTranslate(discovered, final labels.Labels) map[string]string {
 	stackdriverLabels := make(map[string]string, len(m.LabelMap))
 	for _, l := range discovered {
 		if translator, ok := m.LabelMap[l.Name]; ok {

@@ -186,9 +186,6 @@ func main() {
 	projectId := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
 		Required().
 		String()
-	if *projectId == "" {
-		*projectId = getGCEProjectID()
-	}
 
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
@@ -251,6 +248,9 @@ func main() {
 
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
+	if *projectId == "" {
+		*projectId = getGCEProjectID()
+	}
 	var staticLabels = map[string]string{
 		retrieval.ProjectIDLabel:             *projectId,
 		retrieval.KubernetesLocationLabel:    cfg.kubernetesLabels.location,
