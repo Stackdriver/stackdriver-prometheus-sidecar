@@ -75,6 +75,19 @@ var GCEResourceMap = ResourceMap{
 	},
 }
 
+var GKEResourceMap = ResourceMap{
+	Type: "gke_container",
+	LabelMap: map[string]labelTranslation{
+		ProjectIDLabel:                         constValue("project_id"),
+		KubernetesLocationLabel:                constValue("zone"),
+		KubernetesClusterNameLabel:             constValue("cluster_name"),
+		"__meta_kubernetes_namespace":          constValue("namespace_id"),
+		"__meta_kubernetes_node_name":          constValue("instance_id"),
+		"__meta_kubernetes_pod_name":           constValue("pod_id"),
+		"__meta_kubernetes_pod_container_name": constValue("container_name"),
+	},
+}
+
 // TODO(jkohen): ensure these are sorted from more specific to less specific.
 var ResourceMappings = []ResourceMap{
 	{
@@ -122,6 +135,26 @@ var ResourceMappings = []ResourceMap{
 }
 
 func (m *ResourceMap) Translate(discovered, final labels.Labels) map[string]string {
+	stackdriverLabels := m.tryTranslate(discovered, final)
+	if len(m.LabelMap) == len(stackdriverLabels) {
+		return stackdriverLabels
+	}
+	return nil
+}
+
+// BestEffortTranslate translates labels to resource with best effort. If the resource label
+// cannot be filled, use empty string instead.
+func (m *ResourceMap) BestEffortTranslate(discovered, final labels.Labels) map[string]string {
+	stackdriverLabels := m.tryTranslate(discovered, final)
+	for _, t := range m.LabelMap {
+		if _, ok := stackdriverLabels[t.stackdriverLabelName]; !ok {
+			stackdriverLabels[t.stackdriverLabelName] = ""
+		}
+	}
+	return stackdriverLabels
+}
+
+func (m *ResourceMap) tryTranslate(discovered, final labels.Labels) map[string]string {
 	stackdriverLabels := make(map[string]string, len(m.LabelMap))
 	for _, l := range discovered {
 		if translator, ok := m.LabelMap[l.Name]; ok {
@@ -136,8 +169,5 @@ func (m *ResourceMap) Translate(discovered, final labels.Labels) map[string]stri
 			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
 		}
 	}
-	if len(m.LabelMap) == len(stackdriverLabels) {
-		return stackdriverLabels
-	}
-	return nil
+	return stackdriverLabels
 }

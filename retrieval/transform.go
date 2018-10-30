@@ -145,8 +145,11 @@ const (
 	metricsPrefix = "external.googleapis.com/prometheus"
 )
 
-func getMetricType(promName string) string {
-	return metricsPrefix + "/" + promName
+func getMetricType(prefix string, promName string) string {
+	if prefix == "" {
+		return metricsPrefix + "/" + promName
+	}
+	return prefix + "/" + promName
 }
 
 func getMetricKind(t textparse.MetricType) metric_pb.MetricDescriptor_MetricKind {
@@ -297,8 +300,8 @@ Loop:
 		values = append(values, val)
 	}
 	d := &distribution_pb.Distribution{
-		Count: int64(count),
-		Mean:  mean,
+		Count:                 int64(count),
+		Mean:                  mean,
 		SumOfSquaredDeviation: dev,
 		BucketOptions: &distribution_pb.Distribution_BucketOptions{
 			Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
