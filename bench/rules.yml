@@ -1,0 +1,15 @@
+groups:
+- name: test
+  rules:
+  # A recording rule that sticks to the convention to use `:` in recording rule
+  # names. The sidecar will automatically infer default metadata.
+  - record: instance:node_buddyinfo_blocks:sum
+    expr: sum by(job, instance) (node_buddyinfo_blocks)
+  # A recording rule that statically defines job/instance labels for an actual
+  # target. With added metadata in sidecar.yml, it can be ingested like a
+  # regular metric.
+  - record: metric:without:metadata
+    labels:
+      job: prometheus
+      instance: 127.0.0.1:9090
+    expr: vector(1)

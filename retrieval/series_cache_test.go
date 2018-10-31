@@ -43,7 +43,7 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 	// Initialize the series cache with "empty" target and metadata maps.
 	// The series we use below have no job, instance, and __name__ labels set, which
 	// will result in those empty lookup keys.
-	c := newSeriesCache(nil, dir, nil,
+	c := newSeriesCache(nil, dir, nil, nil,
 		targetMap{"/": &targets.Target{}},
 		metadataMap{"//": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge}},
 		[]ResourceMap{
@@ -182,7 +182,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	}
 	targetMap := targetMap{}
 	metadataMap := metadataMap{}
-	c := newSeriesCache(nil, "", nil, targetMap, metadataMap, resourceMaps, "", false)
+	c := newSeriesCache(nil, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -247,7 +247,7 @@ func TestSeriesCache_Filter(t *testing.T) {
 	c := newSeriesCache(nil, "", []*promlabels.Matcher{
 		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "a", Value: "a1"},
 		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"},
-	}, targetMap, metadataMap, resourceMaps, "", false)
+	}, nil, targetMap, metadataMap, resourceMaps, "", false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -271,5 +271,58 @@ func TestSeriesCache_Filter(t *testing.T) {
 		t.Fatalf("error retrieving metric: %s", err)
 	} else if ok {
 		t.Fatalf("metric was not filtered")
+	}
+}
+
+func TestSeriesCache_RenameMetric(t *testing.T) {
+	resourceMaps := []ResourceMap{
+		{
+			Type:     "resource2",
+			LabelMap: map[string]labelTranslation{"__resource_a": constValue("resource_a")},
+		},
+	}
+	// Populate the getters with data.
+	targetMap := targetMap{
+		"job1/inst1": &targets.Target{
+			Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
+			DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+		},
+	}
+	metadataMap := metadataMap{
+		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+		"job1/inst1/metric2": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric2"},
+	}
+	c := newSeriesCache(nil, "", nil,
+		map[string]string{"metric2": "metric3"},
+		targetMap, metadataMap, resourceMaps, "", false)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Test base case of metric that's not renamed.
+	err := c.set(ctx, 1, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok, err := c.get(ctx, 1)
+	if !ok || err != nil {
+		t.Fatalf("metric not found: %s", err)
+	}
+	if !entry.lset.Equals(labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1")) {
+		t.Fatalf("unexpected labels %q", entry.lset)
+	}
+	if want := getMetricType("", "metric1"); entry.proto.Metric.Type != want {
+		t.Fatalf("want proto metric type %q but got %q", want, entry.proto.Metric.Type)
+	}
+	err = c.set(ctx, 2, labels.FromStrings("__name__", "metric2", "job", "job1", "instance", "inst1"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok, err = c.get(ctx, 2)
+	if !ok || err != nil {
+		t.Fatalf("metric not found: %s", err)
+	}
+	if want := getMetricType("", "metric3"); entry.proto.Metric.Type != want {
+		t.Fatalf("want proto metric type %q but got %q", want, entry.proto.Metric.Type)
 	}
 }

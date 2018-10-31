@@ -81,6 +81,7 @@ type seriesCache struct {
 	resourceMaps   []ResourceMap
 	metricsPrefix  string
 	useGkeResource bool
+	renames        map[string]string
 
 	// lastCheckpoint holds the index of the last checkpoint we garbage collected for.
 	// We don't have to redo garbage collection until a higher checkpoint appears.
@@ -129,6 +130,7 @@ func newSeriesCache(
 	logger log.Logger,
 	dir string,
 	filters []*promlabels.Matcher,
+	renames map[string]string,
 	targets TargetGetter,
 	metadata MetadataGetter,
 	resourceMaps []ResourceMap,
@@ -149,6 +151,7 @@ func newSeriesCache(
 		intervals:      map[uint64]sampleInterval{},
 		metricsPrefix:  metricsPrefix,
 		useGkeResource: useGkeResource,
+		renames:        renames,
 	}
 }
 
@@ -394,7 +397,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	}
 	ts := &monitoring_pb.TimeSeries{
 		Metric: &metric_pb.Metric{
-			Type:   getMetricType(c.metricsPrefix, metricName),
+			Type:   c.getMetricType(c.metricsPrefix, metricName),
 			Labels: finalLabels.Map(),
 		},
 		Resource: resource,
@@ -422,7 +425,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 			return errors.Errorf("unexpected metric name suffix %q", suffix)
 		}
 	case textparse.MetricTypeHistogram:
-		ts.Metric.Type = getMetricType(c.metricsPrefix, baseMetricName)
+		ts.Metric.Type = c.getMetricType(c.metricsPrefix, baseMetricName)
 		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 		ts.ValueType = metric_pb.MetricDescriptor_DISTRIBUTION
 	default:
@@ -435,6 +438,13 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	entry.hash = hashSeries(ts)
 
 	return nil
+}
+
+func (c *seriesCache) getMetricType(prefix, name string) string {
+	if repl, ok := c.renames[name]; ok {
+		name = repl
+	}
+	return getMetricType(prefix, name)
 }
 
 func (c *seriesCache) getResource(discovered, final promlabels.Labels) (*monitoredres_pb.MonitoredResource, bool) {

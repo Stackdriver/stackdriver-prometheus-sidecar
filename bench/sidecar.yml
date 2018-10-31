@@ -1,0 +1,8 @@
+metric_renames:
+- from: go_info
+  to: go_info_renamed
+
+static_metadata:
+- metric: metric:without:metadata
+  type: counter
+  help: "some help text"

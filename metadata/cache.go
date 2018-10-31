@@ -37,8 +37,9 @@ type Cache struct {
 	promURL *url.URL
 	client  *http.Client
 
-	metadata map[string]*metadataEntry
-	seenJobs map[string]struct{}
+	metadata       map[string]*metadataEntry
+	seenJobs       map[string]struct{}
+	staticMetadata map[string]scrape.MetricMetadata
 }
 
 // DefaultEndpointPath is the default HTTP path on which Prometheus serves
@@ -48,15 +49,19 @@ const DefaultEndpointPath = "/api/v1/targets/metadata"
 // NewCache returns a new cache that gets populated by the metadata endpoint
 // at the given URL.
 // It uses the default endpoint path if no specific path is provided.
-func NewCache(client *http.Client, promURL *url.URL) *Cache {
+func NewCache(client *http.Client, promURL *url.URL, staticMetadata []scrape.MetricMetadata) *Cache {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	c := &Cache{
-		promURL:  promURL,
-		client:   client,
-		metadata: map[string]*metadataEntry{},
-		seenJobs: map[string]struct{}{},
+		promURL:        promURL,
+		client:         client,
+		staticMetadata: map[string]scrape.MetricMetadata{},
+		metadata:       map[string]*metadataEntry{},
+		seenJobs:       map[string]struct{}{},
+	}
+	for _, m := range staticMetadata {
+		c.staticMetadata[m.Metric] = m
 	}
 	return c
 }
@@ -76,7 +81,8 @@ func (e *metadataEntry) shouldRefetch() bool {
 
 // Get returns metadata for the given metric and job. If the metadata
 // is not in the cache, it blocks until we have retrieved it from the Prometheus server.
-// If the metadata cannot be found, nil is returned.
+// If no metadata is found in the Prometheus server, a matching entry from the
+// static metadata or nil is returned.
 func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error) {
 	md, ok := c.metadata[metric]
 	if !ok || md.shouldRefetch() {
@@ -105,10 +111,22 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.
 		}
 		md = c.metadata[metric]
 	}
-	if md == nil || !md.found {
-		return nil, nil
+	if md != nil && md.found {
+		return &md.MetricMetadata, nil
 	}
-	return &md.MetricMetadata, nil
+	if md, ok := c.staticMetadata[metric]; ok {
+		return &md, nil
+	}
+	// The metric might also be produced by a recording rule, which by convention
+	// contain at least one `:` character. In that case we can generally assume that
+	// it is a gauge. We leave the help text empty.
+	if strings.Contains(metric, ":") {
+		return &scrape.MetricMetadata{
+			Metric: metric,
+			Type:   textparse.MetricTypeGauge,
+		}, nil
+	}
+	return nil, nil
 }
 
 func (c *Cache) fetch(ctx context.Context, typ string, q url.Values) (*apiResponse, error) {

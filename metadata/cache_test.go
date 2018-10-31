@@ -64,7 +64,11 @@ func TestCache_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := NewCache(nil, u)
+	// Create cache with static metadata.
+	c := NewCache(nil, u, []scrape.MetricMetadata{
+		{Metric: "static_metric1", Type: textparse.MetricTypeCounter, Help: "help_static1"},
+		{Metric: "static_metric2", Type: textparse.MetricTypeCounter, Help: "help_static2"},
+	})
 
 	// First get for the job, we expect an initial batch request.
 	handler = func(qMetric, qMatch string) *apiResponse {
@@ -176,4 +180,49 @@ func TestCache_Get(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Test fallthrough to static metadata.
+	handler = func(qMetric, qMatch string) *apiResponse {
+		return nil
+	}
+	md, err = c.Get(ctx, "prometheus", "localhost:9090", "static_metric2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &scrape.MetricMetadata{
+		Metric: "static_metric2",
+		Type:   textparse.MetricTypeCounter,
+		Help:   "help_static2",
+	}
+	if !reflect.DeepEqual(md, want) {
+		t.Fatalf("expected metadata %v but got %v", want, md)
+	}
+
+	// Test recording rule.
+	md, err = c.Get(ctx, "prometheus", "localhost:9090", "some:recording:rule")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = &scrape.MetricMetadata{
+		Metric: "some:recording:rule",
+		Type:   textparse.MetricTypeGauge,
+	}
+	if !reflect.DeepEqual(md, want) {
+		t.Fatalf("expected metadata %v but got %v", want, md)
+	}
+}
+
+func TestNewCache(t *testing.T) {
+	static := []scrape.MetricMetadata{
+		{Metric: "a", Help: "a"},
+		{Metric: "b", Help: "b"},
+	}
+	c := NewCache(nil, nil, static)
+
+	want := map[string]scrape.MetricMetadata{
+		"a": {Metric: "a", Help: "a"},
+		"b": {Metric: "b", Help: "b"},
+	}
+	if !reflect.DeepEqual(c.staticMetadata, want) {
+		t.Fatalf("expected metadata %v but got %v", want, c.staticMetadata)
+	}
 }
