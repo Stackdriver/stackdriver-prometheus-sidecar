@@ -15,7 +15,7 @@ spec:
     matchExpressions:
     - key: app
       operator: Exists
-  version: v2.4.3
+  version: v2.5.0
   # Inject the sidecar container.
   containers:
   - name: sidecar
