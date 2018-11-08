@@ -780,10 +780,10 @@
 			"revisionTime": "2018-06-05T10:30:19Z"
 		},
 		{
-			"checksumSHA1": "zkMYxyNMJLOL05bHwKpzzFNrWgk=",
+			"checksumSHA1": "Gryza0KJX4i6dS6UYr/DBtvEWa0=",
 			"path": "github.com/prometheus/prometheus/pkg/textparse",
-			"revision": "ae96914199b4e1e47b27a3789c3044ee8a14e796",
-			"revisionTime": "2018-06-05T10:30:19Z"
+			"revision": "67dc912ac8b24f94a1fc478f352d25179c94ab9b",
+			"revisionTime": "2018-11-06T11:38:56Z"
 		},
 		{
 			"checksumSHA1": "aBxiHq8WBoLD+8U0/PxdWufs64o=",
@@ -798,10 +798,10 @@
 			"revisionTime": "2018-06-05T10:30:19Z"
 		},
 		{
-			"checksumSHA1": "AJaBokB3sohb8Cv+QJAaJq9ysfU=",
+			"checksumSHA1": "+MySwSXOb6nwbb3tQi3GaVxDHbM=",
 			"path": "github.com/prometheus/prometheus/scrape",
-			"revision": "ae96914199b4e1e47b27a3789c3044ee8a14e796",
-			"revisionTime": "2018-06-05T10:30:19Z"
+			"revision": "67dc912ac8b24f94a1fc478f352d25179c94ab9b",
+			"revisionTime": "2018-11-06T11:38:56Z"
 		},
 		{
 			"checksumSHA1": "xYVbgwVChu2859wdb9cwqEokcR4=",

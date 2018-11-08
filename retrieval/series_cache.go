@@ -407,7 +407,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	case textparse.MetricTypeCounter:
 		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 		ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
-	case textparse.MetricTypeGauge, textparse.MetricTypeUntyped:
+	case textparse.MetricTypeGauge, textparse.MetricTypeUnknown:
 		ts.MetricKind = metric_pb.MetricDescriptor_GAUGE
 		ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
 	case textparse.MetricTypeSummary:

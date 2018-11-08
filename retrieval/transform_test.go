@@ -94,7 +94,7 @@ func TestSampleBuilder(t *testing.T) {
 			metadata: metadataMap{
 				"job1/instance1/metric1":      &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
 				"job1/instance1/metric2":      &scrape.MetricMetadata{Type: textparse.MetricTypeCounter, Metric: "metric2"},
-				"job1/instance1/labelnum_ok":  &scrape.MetricMetadata{Type: textparse.MetricTypeUntyped, Metric: "labelnum_ok"},
+				"job1/instance1/labelnum_ok":  &scrape.MetricMetadata{Type: textparse.MetricTypeUnknown, Metric: "labelnum_ok"},
 				"job1/instance1/labelnum_bad": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "labelnum_bad"},
 			},
 			input: []tsdb.RefSample{

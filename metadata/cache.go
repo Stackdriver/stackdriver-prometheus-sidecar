@@ -46,6 +46,10 @@ type Cache struct {
 // the target metadata endpoint.
 const DefaultEndpointPath = "/api/v1/targets/metadata"
 
+// The old metric type value for textparse.MetricTypeUnknown that is used in
+// Prometheus 2.4 and earlier.
+const MetricTypeUntyped = "untyped"
+
 // NewCache returns a new cache that gets populated by the metadata endpoint
 // at the given URL.
 // It uses the default endpoint path if no specific path is provided.
@@ -176,6 +180,10 @@ func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (
 	}
 	d := apiResp.Data[0]
 
+	// Convert legacy "untyped" type used before Prometheus 2.5.
+	if d.Type == MetricTypeUntyped {
+		d.Type = textparse.MetricTypeUnknown
+	}
 	return &metadataEntry{
 		MetricMetadata: scrape.MetricMetadata{
 			Metric: metric,
@@ -212,6 +220,10 @@ func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[strin
 	result := make(map[string]*metadataEntry, len(apiResp.Data)+len(internalMetrics))
 
 	for _, md := range apiResp.Data {
+		// Convert legacy "untyped" type used before Prometheus 2.5.
+		if md.Type == MetricTypeUntyped {
+			md.Type = textparse.MetricTypeUnknown
+		}
 		result[md.Metric] = &metadataEntry{
 			MetricMetadata: scrape.MetricMetadata{
 				Metric: md.Metric,

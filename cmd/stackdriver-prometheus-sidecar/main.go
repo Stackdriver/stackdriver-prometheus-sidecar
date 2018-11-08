@@ -613,8 +613,11 @@ func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadat
 	var staticMetadata []scrape.MetricMetadata
 	for _, sm := range fc.StaticMetadata {
 		switch sm.Type {
-		case textparse.MetricTypeCounter, textparse.MetricTypeGauge,
-			textparse.MetricTypeHistogram, textparse.MetricTypeSummary, textparse.MetricTypeUntyped:
+		case metadata.MetricTypeUntyped:
+			// Convert "untyped" to the "unknown" type used internally as of Prometheus 2.5.
+			sm.Type = textparse.MetricTypeUnknown
+		case textparse.MetricTypeCounter, textparse.MetricTypeGauge, textparse.MetricTypeHistogram,
+			textparse.MetricTypeSummary, textparse.MetricTypeUnknown:
 		default:
 			return nil, nil, errors.Errorf("invalid metric type %q", sm.Type)
 		}

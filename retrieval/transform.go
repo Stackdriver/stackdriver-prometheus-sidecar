@@ -70,7 +70,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		point.Interval.StartTime = getTimestamp(resetTimestamp)
 		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
 
-	case textparse.MetricTypeGauge, textparse.MetricTypeUntyped:
+	case textparse.MetricTypeGauge, textparse.MetricTypeUnknown:
 		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{sample.V}}
 
 	case textparse.MetricTypeSummary:
