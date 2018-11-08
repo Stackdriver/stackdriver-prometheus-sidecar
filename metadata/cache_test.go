@@ -35,7 +35,8 @@ func TestCache_Get(t *testing.T) {
 		{Metric: "metric2", Type: textparse.MetricTypeGauge, Help: "help_metric2"},
 		{Metric: "metric3", Type: textparse.MetricTypeHistogram, Help: "help_metric3"},
 		{Metric: "metric4", Type: textparse.MetricTypeSummary, Help: "help_metric4"},
-		{Metric: "metric5", Type: textparse.MetricTypeUntyped, Help: "help_metric5"},
+		{Metric: "metric5", Type: textparse.MetricTypeUnknown, Help: "help_metric5"},
+		{Metric: "metric6", Type: MetricTypeUntyped, Help: "help_metric6"},
 	}
 	var handler func(qMetric, qMatch string) *apiResponse
 
@@ -128,6 +129,22 @@ func TestCache_Get(t *testing.T) {
 		t.Fatal(err)
 	}
 	expect(metrics[4], md)
+
+	// Test "untyped" metric type from Prometheus 2.4.
+	handler = func(qMetric, qMatch string) *apiResponse {
+		if qMetric != "metric6" {
+			t.Fatalf("unexpected metric %q in request", qMetric)
+		}
+		if qMatch != `{job="prometheus",instance="localhost:9090"}` {
+			t.Fatalf("unexpected matcher %q in request", qMatch)
+		}
+		return &apiResponse{Status: "success", Data: metrics[5:6]}
+	}
+	md, err = c.Get(ctx, "prometheus", "localhost:9090", "metric6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(apiMetadata{Metric: "metric6", Type: textparse.MetricTypeUnknown, Help: "help_metric6"}, md)
 
 	// The scrape layer's metrics should not fire off requests.
 	md, err = c.Get(ctx, "prometheus", "localhost:9090", "up")
