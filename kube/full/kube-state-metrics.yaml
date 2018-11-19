@@ -124,6 +124,10 @@ kind: Service
 metadata:
   labels:
     k8s-app: kube-state-metrics
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '8081'
+    prometheus.io/port2: '8082'
   name: kube-state-metrics
   namespace: ${KUBE_NAMESPACE}
 spec:

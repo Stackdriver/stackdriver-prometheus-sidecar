@@ -56,6 +56,10 @@ kind: Service
 metadata:
   labels:
     app: node-exporter
+  annotations:
+    a: b
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '9101'
   name: node-exporter
   namespace: ${KUBE_NAMESPACE}
 spec:
