@@ -47,12 +47,12 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: prometheus-meta
+    app: prometheus-k8s
   annotations:
     prometheus.io/scrape: 'true'
     prometheus.io/port: '9090'
     prometheus.io/port2: '9091'
-  name: prometheus-meta
+  name: prometheus-k8s
   namespace: ${KUBE_NAMESPACE}
 spec:
   type: LoadBalancer
@@ -70,27 +70,28 @@ spec:
     targetPort: 9091
   selector:
     app: prometheus
-    prometheus: meta
+    prometheus: k8s
   sessionAffinity: None
 ---
 apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
-  name: prometheus-meta
+  name: prometheus-k8s
   namespace: ${KUBE_NAMESPACE}
   labels:
-    app: prometheus-meta
+    app: prometheus
+    prometheus: k8s
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: prometheus
-      prometheus: meta
+      prometheus: k8s
   template:
     metadata:
       labels:
         app: prometheus
-        prometheus: meta
+        prometheus: k8s
     spec:
       serviceAccount: prometheus
       securityContext:
@@ -116,7 +117,7 @@ spec:
       volumes:
       - name: config-volume
         configMap:
-          name: prometheus-meta
+          name: prometheus-k8s
       - name: data-volume
         emptyDir: {}
       terminationGracePeriodSeconds: 300
@@ -124,7 +125,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: prometheus-meta
+  name: prometheus-k8s
   namespace: ${KUBE_NAMESPACE}
 data:
   prometheus.yaml: |

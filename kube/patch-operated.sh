@@ -3,6 +3,11 @@
 set -e
 set -u
 
+if [  $# -le 1 ]; then
+  echo -e "Usage: $0 <prometheus_name>\n"
+  exit 1
+fi
+
 kubectl -n "${KUBE_NAMESPACE}" patch prometheus "$1" --type merge --patch "
 spec:
   containers:

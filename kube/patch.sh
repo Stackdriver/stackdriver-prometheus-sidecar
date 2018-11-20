@@ -3,6 +3,15 @@
 set -e
 set -u
 
+usage() {
+  echo -e "Usage: $0 <deployment|statefulset> <name>\n"
+}
+
+if [  $# -le 1 ]; then
+  usage
+  exit 1
+fi
+
 kubectl -n "${KUBE_NAMESPACE}" patch "$1" "$2" --type strategic --patch "
 spec:
   template:
