@@ -103,13 +103,15 @@ func TestReader_Progress(t *testing.T) {
 			// that encodes the record's offset in its timestamp.
 			sz, err := tailer.Size()
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
+				break
 			}
 			samples := make([]tsdb.RefSample, 1000)
 			samples[0] = tsdb.RefSample{Ref: 1, T: int64(sz) * 1000}
 
 			if err := w.Log(enc.Samples(samples, nil)); err != nil {
-				t.Fatal(err)
+				t.Error(err)
+				break
 			}
 		}
 	}()
