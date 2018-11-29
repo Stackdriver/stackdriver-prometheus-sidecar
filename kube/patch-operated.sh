@@ -12,7 +12,7 @@ kubectl -n "${KUBE_NAMESPACE}" patch prometheus "$1" --type merge --patch "
 spec:
   containers:
   - name: sidecar
-    image: gcr.io/prometheus-to-sd/stackdriver-prometheus-sidecar:${SIDECAR_IMAGE_TAG}
+    image: gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar:${SIDECAR_IMAGE_TAG}
     imagePullPolicy: Always
     args:
     - \"--stackdriver.project-id=${GCP_PROJECT}\"
