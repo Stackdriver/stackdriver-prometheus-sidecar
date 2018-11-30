@@ -25,5 +25,4 @@ git checkout -b "release-${version}"
 
 # 3. Run `DOCKER_IMAGE_NAME={public_docker_image} make push`.
 # TODO(jkohen): This is the public repo. It should replace the line below when we go public. 
-#DOCKER_IMAGE_NAME="gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar" make push
-DOCKER_IMAGE_NAME="gcr.io/prometheus-to-sd/stackdriver-prometheus-sidecar" make push
+DOCKER_IMAGE_NAME="gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar" make push
