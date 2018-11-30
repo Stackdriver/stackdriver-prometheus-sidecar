@@ -49,10 +49,10 @@ can be used as a reference for setup:
 
 The matrix below lists the versions of Prometheus Server and other dependencies that have been qualified to work with releases of `stackdriver-prometheus-sidecar`.
 
-| sidecar version | **Prometheus 2.4.3** | **Prometheus 2.5.x** |
-|------------|------------------|-------------------|
-| **0.2.x**  |        ✓         |         -         |
-| **master** |        ✓         |         ✓         |
+| sidecar version | **Prometheus 2.4.3** | **Prometheus 2.5.x** | **Prometheus 2.5.x** |
+|------------|------------------|-------------------|-------------------|
+| **0.2.x**  |        ✓         |         -         |         -         |
+| **0.3.x**  |        ✓         |         -         |         ✓         |
 
 ## Source Code Headers
 
