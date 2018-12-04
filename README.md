@@ -44,6 +44,40 @@ can be used as a reference for setup:
 * [Standard deployment](./kube/prometheus-meta.yaml)
 * [Deployment with the Prometheus Operator](./kube/prometheus-meta-operated.yaml)
 
+### Configuration
+
+The majority of configuration options for the sidecar are set through flags. To see all available flags, run:
+
+```
+stackdriver-prometheus-sidecar --help
+```
+
+#### Filters
+
+The `--filter` flag allows to provide filters which all series have to pass before being sent to Stackdriver. The flag may be repeated to provide several filters. Filters use the same syntax as the well-known PromQL label matchers, e.g.:
+
+```
+stackdriver-prometheus-sidecar --filter='job="k8s"' --filter='__name__!~"cadvisor_.+"' ...
+```
+
+This drops all series which do not have a `job` label `k8s` and all metrics that have a name starting with `cadvisor_`.
+
+#### File
+
+The sidecar can also be provided with a configuration file. It allows to define static metric renames and to overwrite metric metadata which is usually provided by Prometheus. A configuration file should not be required for the majority of users.
+
+```yaml
+metric_renames:
+  - from: original_metric_name
+    to: new_metric_name
+# - ...
+
+static_metadata:
+  - metric: some_metric_name
+    type: counter # or gauge/histogram
+    help: an arbitrary help string
+# - ...
+```
 
 ## Compatibility
 
