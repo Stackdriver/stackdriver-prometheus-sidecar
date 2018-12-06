@@ -19,7 +19,7 @@ kubectl apply -f _prometheus.yaml.tmp
 kubectl apply -f _node-exporter.yaml.tmp
 kubectl apply -f _kube-state-metrics.yaml.tmp --as=admin --as-group=system:masters
 
-DATA_DIR=/data DATA_VOLUME=data-volume ../patch.sh deploy prometheus-meta
+DATA_DIR=/data DATA_VOLUME=data-volume ../patch.sh deploy prometheus-k8s
 
 rm _*.tmp
 popd
