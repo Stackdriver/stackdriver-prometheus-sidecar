@@ -27,7 +27,7 @@ The following information must be provided:
 ```
 stackdriver-prometheus-sidecar \
   --stackdriver.project-id=${GCP_PROJECT} \
-  --prometheus.wal-directory=${WAL_DIR}" \
+  --prometheus.wal-directory=${WAL_DIR} \
   --prometheus.api-address=${API_ADDRESS} \
   --stackdriver.kubernetes.location=${REGION} \ 
   --stackdriver.kubernetes.cluster-name=${CLUSTER}
