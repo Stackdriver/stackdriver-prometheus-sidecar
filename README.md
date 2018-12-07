@@ -1,10 +1,7 @@
 # Stackdriver Prometheus sidecar
 
 This repository contains a sidecar for the Prometheus server that can send
-metrics to Stackdriver. This is based on [this
-design](https://docs.google.com/document/d/1TEqqE_Stq04drhjSU1I7Ctmuy0dpsvlPL1AKxqEQoSg/edit). Access
-to the design document requires membership on
-prometheus-developers@googlegroups.com.
+metrics to Stackdriver. This is based on [this design](docs/design.md).
 
 ## Installation
 
