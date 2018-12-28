@@ -11,3 +11,5 @@ kubectl delete namespace $USER
 `START_PROMETHEUS=false` prevents the old Prometheus integration from starting as part of the test.
 
 If OK, then release by running `./release.sh {VERSION}`
+
+To promote a container image to stable, so it will be picked up by default by our sample scripts, tag it with `stable`.
