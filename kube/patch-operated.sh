@@ -8,6 +8,9 @@ if [  $# -le 1 ]; then
   exit 1
 fi
 
+# Override to use a different Docker image version for the sidecar.
+export SIDECAR_IMAGE_TAG=${SIDECAR_IMAGE_TAG:-'stable'}
+
 kubectl -n "${KUBE_NAMESPACE}" patch prometheus "$1" --type merge --patch "
 spec:
   containers:
