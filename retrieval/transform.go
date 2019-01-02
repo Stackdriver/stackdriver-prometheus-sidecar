@@ -27,7 +27,6 @@ import (
 	"github.com/prometheus/tsdb"
 	tsdbLabels "github.com/prometheus/tsdb/labels"
 	distribution_pb "google.golang.org/genproto/googleapis/api/distribution"
-	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
@@ -150,20 +149,6 @@ func getMetricType(prefix string, promName string) string {
 		return metricsPrefix + "/" + promName
 	}
 	return prefix + "/" + promName
-}
-
-func getMetricKind(t textparse.MetricType) metric_pb.MetricDescriptor_MetricKind {
-	if t == textparse.MetricTypeCounter || t == textparse.MetricTypeHistogram {
-		return metric_pb.MetricDescriptor_CUMULATIVE
-	}
-	return metric_pb.MetricDescriptor_GAUGE
-}
-
-func getValueType(t textparse.MetricType) metric_pb.MetricDescriptor_ValueType {
-	if t == textparse.MetricTypeHistogram {
-		return metric_pb.MetricDescriptor_DISTRIBUTION
-	}
-	return metric_pb.MetricDescriptor_DOUBLE
 }
 
 // getTimestamp converts a millisecond timestamp into a protobuf timestamp.
