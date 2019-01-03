@@ -14,6 +14,4 @@ make DOCKER_IMAGE_TAG=$USER push
 kubectl delete namespace ${KUBE_NAMESPACE}
 ```
 
-`START_PROMETHEUS=false` prevents the old Prometheus integration from starting as part of the test.
-
 If OK, then release by running `./release.sh {VERSION}`
