@@ -41,7 +41,6 @@ func newLocalListener() net.Listener {
 
 func TestStoreErrorHandling(t *testing.T) {
 	tests := []struct {
-		code        int
 		status      *status.Status
 		recoverable bool
 	}{

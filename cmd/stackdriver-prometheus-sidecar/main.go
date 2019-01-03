@@ -151,12 +151,6 @@ type genericConfig struct {
 	namespace string
 }
 
-type gceMetadata struct {
-	projectID string
-	location  string
-	cluster   string
-}
-
 type fileConfig struct {
 	MetricRenames []struct {
 		From string `json:"from"`

@@ -37,7 +37,6 @@ import (
 )
 
 const (
-	metricsPrefix             = "external.googleapis.com/prometheus"
 	MaxTimeseriesesPerRequest = 200
 	MonitoringWriteScope      = "https://www.googleapis.com/auth/monitoring.write"
 )

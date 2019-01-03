@@ -408,7 +408,6 @@ func newShard(cfg config.QueueConfig) shard {
 
 type shardCollection struct {
 	qm     *QueueManager
-	client StorageClient
 	shards []shard
 	done   chan struct{}
 	wg     sync.WaitGroup
@@ -426,10 +425,6 @@ func (t *QueueManager) newShardCollection(numShards int) *shardCollection {
 	}
 	s.wg.Add(numShards)
 	return s
-}
-
-func (s *shardCollection) len() int {
-	return len(s.shards)
 }
 
 func (s *shardCollection) start() {
