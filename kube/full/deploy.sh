@@ -15,7 +15,7 @@ envsubst < prometheus.yaml > _prometheus.yaml.tmp
 envsubst < node-exporter.yaml > _node-exporter.yaml.tmp
 envsubst < kube-state-metrics.yaml > _kube-state-metrics.yaml.tmp
 
-kubectl apply -f _prometheus.yaml.tmp
+kubectl apply -f _prometheus.yaml.tmp --as=admin --as-group=system:masters
 kubectl apply -f _node-exporter.yaml.tmp
 kubectl apply -f _kube-state-metrics.yaml.tmp --as=admin --as-group=system:masters
 
