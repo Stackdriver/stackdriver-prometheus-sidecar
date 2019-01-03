@@ -27,7 +27,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-const DefaultAPIEndpoint = "/api/v1/targets"
+const DefaultAPIEndpoint = "api/v1/targets"
 
 func cacheKey(job, instance string) string {
 	return job + "\xff" + instance
