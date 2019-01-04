@@ -35,11 +35,8 @@ stackdriver-prometheus-sidecar \
 
 The sidecar requires write access to the directory to store its progress between restarts.
 
-If your Prometheus server itself is running inside of Kubernetes, the example manifests
-can be used as a reference for setup:
-
-* [Standard deployment](./kube/prometheus-meta.yaml)
-* [Deployment with the Prometheus Operator](./kube/prometheus-meta-operated.yaml)
+If your Prometheus server itself is running inside of Kubernetes, the example [Kubernetes setup](./kube/README.md)
+can be used as a reference for setup.
 
 ### Configuration
 
