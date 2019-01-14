@@ -12,7 +12,7 @@ if [  $# -le 1 ]; then
   exit 1
 fi
 
-kubectl -n "${KUBE_NAMESPACE}" patch "$1" "$2" --type strategic --patch "
+kubectl --context="${KUBE_CLUSTER}" -n "${KUBE_NAMESPACE}" patch "$1" "$2" --type strategic --patch "
 spec:
   template:
     spec:
