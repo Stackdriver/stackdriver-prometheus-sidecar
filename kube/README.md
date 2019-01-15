@@ -10,6 +10,9 @@ Required environment variables:
 * `GCP_PROJECT`: GCP project parameter for the sidecar
 * `SIDECAR_IMAGE_TAG`: Version parameter for the sidecar
 
+If your cluster is not the default context:
+kubectl config use-context `KUBERNETES_CONTEXT`
+
 ## `patch.sh`
 
 Inject sidecar into Deployments or StatefulSets:
