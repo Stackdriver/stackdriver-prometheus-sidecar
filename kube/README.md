@@ -13,6 +13,7 @@ Required environment variables:
 If your cluster is not the default context:
 kubectl config use-context `KUBERNETES_CONTEXT`
 
+
 ## `patch.sh`
 
 Inject sidecar into Deployments or StatefulSets:
