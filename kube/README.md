@@ -11,8 +11,10 @@ Required environment variables:
 * `SIDECAR_IMAGE_TAG`: Version parameter for the sidecar
 
 If your cluster is not the default context:
-kubectl config use-context `KUBERNETES_CONTEXT`
 
+```sh
+kubectl config use-context `KUBERNETES_CONTEXT`
+```
 
 ## `patch.sh`
 
