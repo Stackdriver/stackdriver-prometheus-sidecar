@@ -13,7 +13,7 @@ Required environment variables:
 If your cluster is not the default context:
 
 ```sh
-kubectl config use-context `KUBERNETES_CONTEXT`
+kubectl config use-context <KUBERNETES_CONTEXT>
 ```
 
 ## `patch.sh`
