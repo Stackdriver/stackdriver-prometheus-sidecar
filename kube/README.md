@@ -8,13 +8,20 @@ Required environment variables:
 * `KUBE_CLUSTER`: cluster name parameter for the sidecar
 * `GCP_REGION`: GCP region parameter for the sidecar
 * `GCP_PROJECT`: GCP project parameter for the sidecar
+* `SIDECAR_IMAGE_TAG`: Version parameter for the sidecar
+
+If your cluster is not the default context:
+
+```sh
+kubectl config use-context <kubernetes_context>
+```
 
 ## `patch.sh`
 
 Inject sidecar into Deployments or StatefulSets:
 
 ```sh
-./patch.sh <deployment|statefulset> <name> 
+./patch.sh <deployment|statefulset> <name>
 ```
 
 Additional environment variables:
