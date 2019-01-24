@@ -1,46 +1,65 @@
 #!/bin/sh
 
-version="$1"
-versioned_release_branch="release-${version}"
-versioned_release_tag="v${version}"
+set -e
+set -x
+set -o pipefail
 
-if [[ -z "${version}" ]]; then
-    echo "Please provide a version: ./release.sh {VERSION}"
+# Git commit from which the image was built.
+COMMIT_HASH="$1"
+# Hash of the image to be released.
+IMAGE_HASH="$2"
+# The targeting release version.
+RELEASE_VERSION="$3"
+
+GITHUB_RELEASE_BRANCH="release-${RELEASE_VERSION}"
+GIT_TAG_VERSION="v${RELEASE_VERSION}"
+STAGING_CONTAINER_REGISTRY="gcr.io/container-monitoring-storage/stackdriver-prometheus-sidecar"
+PUBLIC_CONTAINER_REGISTRY="gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar"
+
+if [[ -z "${COMMIT_HASH}" ]]; then
+    echo "Please provide a COMMIT_HASH: ./release.sh {COMMIT_HASH} {IMAGE_HASH} {RELEASE_VERSION}"
+    echo "The current commit hash is: $(git log -n 1 --pretty=format:'%h')"
+    exit 1
+fi
+if [[ -z "${IMAGE_HASH}" ]]; then
+    echo "Please provide a IMAGE_HASH: ./release.sh {COMMIT_HASH} {IMAGE_HASH} {RELEASE_VERSION}"
+    exit 1
+fi
+if [[ -z "${RELEASE_VERSION}" ]]; then
+    echo "Please provide a RELEASE_VERSION: ./release.sh {COMMIT_HASH} {IMAGE_HASH} {RELEASE_VERSION}"
     echo "The current version is: $(cat VERSION)"
     exit 1
 fi
 
-SED_I="sed -i"
-if [[ "$(uname -s)" == "Darwin" ]]; then
-    SED_I="${SED_I} ''"
-fi
+#####################
+# Publish the image #
+#####################
+docker pull "${STAGING_CONTAINER_REGISTRY}:${IMAGE_HASH}"
+docker tag "${STAGING_CONTAINER_REGISTRY}:${IMAGE_HASH}" "${PUBLIC_CONTAINER_REGISTRY}:${RELEASE_VERSION}"
+docker push "${PUBLIC_CONTAINER_REGISTRY}:${RELEASE_VERSION}"
 
-################################
-# Build and release docker image
-################################
+######################################################
+# Tag, create release branch and update VERSION file #
+######################################################
 
-# 1. Update file `VERSION` with the numeric version, e.g. `0.3.1`.
-echo "${version}" > VERSION
+# Check out the commit hash from where the image is built.
+git checkout "${COMMIT_HASH}"
 
-# 2. Create a git branch for the version, e.g. `release-0.3.1`.
-git checkout -b "${versioned_release_branch}"
+# Create a git branch for the version, e.g. `release-0.3.1`.
+git checkout -b "${GITHUB_RELEASE_BRANCH}"
 
-# 3. Commit the version update.
+# Update file `VERSION` with the numeric version, e.g. `0.3.1`.
+echo "${RELEASE_VERSION}" > VERSION
 git add VERSION
-git commit -m "Update version to ${version}."
+git commit -m "Update version to ${RELEASE_VERSION}."
 
-# 4. Run `DOCKER_IMAGE_NAME={public_docker_image} make push`.
-DOCKER_IMAGE_NAME="gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar" make push
+# Tag the commit to a specific version, e.g. `v0.3.1`.
+git tag "${GIT_TAG_VERSION}"
 
-################################
-# Push branch and tag to GitHub
-################################
-# 1. Tag the commit to a specific version, e.g. `v0.3.1`. 
-git tag "${versioned_release_tag}"
+# Push release branch to GitHub.
+git push https://github.com/Stackdriver/stackdriver-prometheus-sidecar.git "${GITHUB_RELEASE_BRANCH}"
 
-# 2. Push release branch to GitHub.
-git push https://github.com/Stackdriver/stackdriver-prometheus-sidecar.git "${versioned_release_branch}"
+# Push tag to GitHub.
+git push https://github.com/Stackdriver/stackdriver-prometheus-sidecar.git "${GIT_TAG_VERSION}"
 
-# 3. Push tag to GitHub.
-git push https://github.com/Stackdriver/stackdriver-prometheus-sidecar.git "${versioned_release_tag}"
 
