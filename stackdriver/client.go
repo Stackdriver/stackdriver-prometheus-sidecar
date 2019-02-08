@@ -83,8 +83,8 @@ type recoverableError struct {
 var userAgent = fmt.Sprintf("StackdriverPrometheus/%s", version.Version)
 
 var counter = 0
-var ips = []string{"199.36.153.4:443", "199.36.153.5:443",
-	"199.36.153.6:443", "199.36.153.7:443"}
+var ips = []string{"199.36.153.4", "199.36.153.5", "199.36.153.6",
+	"199.36.153.7"}
 
 func ChooseIPs() string {
   ip := ips[counter%len(ips)]
@@ -126,7 +126,7 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	} else {
 		dopts = append(dopts, grpc.WithInsecure())
 	}
-	conn, err := grpc.DialContext(ctx, "dns:" + ChooseIPs(), dopts...)
+	conn, err := grpc.DialContext(ctx, "dns:" + ChooseIPs() + ":443", dopts...)
 	c.conn = conn
 	return conn, err
 }
