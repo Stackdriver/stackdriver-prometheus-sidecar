@@ -87,7 +87,7 @@ var ips = []string{"199.36.153.4:443", "199.36.153.5:443",
 	"199.36.153.6:443", "199.36.153.7:443"}
 
 func ChooseIPs() string {
-  ip := ips[i%len(ips)]
+  ip := ips[counter%len(ips)]
   counter++
   return ip
 }
