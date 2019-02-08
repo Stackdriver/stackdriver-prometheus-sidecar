@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"sync"
@@ -82,6 +83,16 @@ type recoverableError struct {
 // version.* is populated for 'promu' builds, so this will look broken in unit tests.
 var userAgent = fmt.Sprintf("StackdriverPrometheus/%s", version.Version)
 
+var counter = 0
+var ips = []string{"199.36.153.4:443", "199.36.153.5:443",
+	"199.36.153.6:443", "199.36.153.7:443"}
+
+func ChooseIPs() string {
+  ip := ips[i%len(ips)]
+  counter++
+  return ip
+}
+
 func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if c.conn != nil {
 		return c.conn, nil
@@ -116,11 +127,7 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	} else {
 		dopts = append(dopts, grpc.WithInsecure())
 	}
-	address := c.url.Hostname()
-	if len(c.url.Port()) > 0 {
-		address = fmt.Sprintf("%s:%s", address, c.url.Port())
-	}
-	conn, err := grpc.DialContext(ctx, address, dopts...)
+	conn, err := grpc.DialContext(ctx, "dns:" + ChooseIPs(), dopts...)
 	c.conn = conn
 	return conn, err
 }
