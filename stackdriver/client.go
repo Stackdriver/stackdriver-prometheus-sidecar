@@ -82,14 +82,21 @@ type recoverableError struct {
 // version.* is populated for 'promu' builds, so this will look broken in unit tests.
 var userAgent = fmt.Sprintf("StackdriverPrometheus/%s", version.Version)
 
-var counter = 0
+// SafeCounter is safe to use concurrently.
+type SafeCounter struct {
+	counter int64
+	mux     sync.Mutex
+}
+
 var ips = []string{"199.36.153.4", "199.36.153.5", "199.36.153.6",
 	"199.36.153.7"}
 
-func ChooseIPs() string {
-  ip := ips[counter%len(ips)]
-  counter++
-  return ip
+// ChooseIP round robins the IPs to select one of the four.
+func (c *SafeCounter) ChooseIP() string {
+	c.mux.Lock()
+	c.counter = (c.counter + 1) % int64(len(ips))
+	defer c.mux.Unlock()
+	return ips[c.counter]
 }
 
 func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
@@ -126,7 +133,17 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	} else {
 		dopts = append(dopts, grpc.WithInsecure())
 	}
-	conn, err := grpc.DialContext(ctx, "dns:" + ChooseIPs() + ":443", dopts...)
+	if stackdriver.configure-ips {
+		c := SafeCounter{counter: rand.NewSource(time.Now().UnixNano()).Int63()}
+		conn, err := grpc.DialContext(ctx, "dns:" + c.ChooseIP() + ":443", dopts...)
+	}
+	else{
+		address := c.url.Hostname()
+		if len(c.url.Port()) > 0 {
+			address = fmt.Sprintf("%s:%s", address, c.url.Port())
+		}
+		conn, err := grpc.DialContext(ctx, address, dopts...)
+	}
 	c.conn = conn
 	return conn, err
 }

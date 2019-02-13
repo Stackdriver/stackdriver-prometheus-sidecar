@@ -203,6 +203,9 @@ func main() {
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
 
+	a.Flag("stackdriver.configure-ips", "Flag to configure IP addresses.").
+		StringVar(&cfg.configureIPs)
+
 	a.Flag("stackdriver.kubernetes.location", "Value of the 'location' label in the Kubernetes Stackdriver MonitoredResources.").
 		StringVar(&cfg.kubernetesLabels.location)
 
