@@ -184,6 +184,7 @@ func main() {
 		filters            []string
 		metricRenames      map[string]string
 		staticMetadata     []scrape.MetricMetadata
+		configureIPs       bool
 
 		logLevel promlog.AllowedLevel
 	}{}
