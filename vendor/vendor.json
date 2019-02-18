@@ -977,6 +977,18 @@
 			"revisionTime": "2018-05-30T20:34:25Z"
 		},
 		{
+			"checksumSHA1": "GtamqiJoL7PGHsN454AoffBFMa8=",
+			"path": "golang.org/x/net/context",
+			"revision": "3a22650c66bd7f4fb6d1e8072ffd7b75c8a27898",
+			"revisionTime": "2019-02-11T12:35:32Z"
+		},
+		{
+			"checksumSHA1": "aFpql3G+Nw8zkzfqLWQJNZC8pu0=",
+			"path": "golang.org/x/net/context/ctxhttp",
+			"revision": "3a22650c66bd7f4fb6d1e8072ffd7b75c8a27898",
+			"revisionTime": "2019-02-11T12:35:32Z"
+		},
+		{
 			"checksumSHA1": "kKuxyoDujo5CopTxAvvZ1rrLdd0=",
 			"path": "golang.org/x/net/http2",
 			"revision": "054b33e6527139ad5b1ec2f6232c3b175bd9a30c",
