@@ -13,8 +13,9 @@ limitations under the License.
 package stackdriver
 
 import (
+	"context"
+
 	empty_pb "github.com/golang/protobuf/ptypes/empty"
-	context "golang.org/x/net/context"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredres_pb "google.golang.org/genproto/googleapis/api/monitoredres"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
