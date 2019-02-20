@@ -82,6 +82,12 @@ The matrix below lists the versions of Prometheus Server and other dependencies 
 | **0.2.x**  |        ✓         |         -         |         -         |
 | **0.3.x**  |        ✓         |         -         |         ✓         |
 
+## Alternatives
+
+Google develops **stackdriver-prometheus** primarily for Stackdriver users and gives support to Stackdriver users. We designed the user experience to meet the expectations of Prometheus users and to make it easy to run with Prometheus server. stackdriver-prometheus is intended to monitor all your applications, Kubernetes and beyond.
+
+Google develops **prometheus-to-sd** primarily for Google Kubernetes Engine to collect metrics from system services in order to support Kubernetes users. We designed the tool to be lean when deployed as a sidecar in your pod. It's intended to support only the metrics the Kubernetes team at Google needs; you can use it to monitor your applications, but the user experience could be rough.
+
 ## Source Code Headers
 
 Every file containing source code must include copyright and license
