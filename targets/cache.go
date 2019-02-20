@@ -109,11 +109,11 @@ func (c *Cache) refresh(ctx context.Context) error {
 	defer c.mtx.Unlock()
 
 	for _, target := range apiResp.Data.ActiveTargets {
-		key := cacheKey(t.Labels.Get("job"), t.Labels.Get("instance"))
+		key := cacheKey(target.Labels.Get("job"), target.Labels.Get("instance"))
 
 		// If the exact target already exists, reuse the same memory object.
 		for _, prev := range c.targets[key] {
-			if labelsEqual(t.Labels, prev.Labels) {
+			if labelsEqual(target.Labels, prev.Labels) {
 				target = prev
 				break
 			}
