@@ -205,6 +205,73 @@ func TestTargetCache_Success(t *testing.T) {
 	}
 }
 
+func TestTargetCache_EmptyEntry(t *testing.T) {
+	var handler func() []*Target
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var resp apiResponse
+		resp.Status = "success"
+		resp.Data.ActiveTargets = handler()
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatal(err)
+		}
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := NewCache(nil, nil, u)
+	// Initialize cache with negative-cached target.
+	c.targets[cacheKey("job1", "instance-not-exists")] = nil
+
+	// No target in initial response.
+	handler = func() []*Target {
+		return []*Target{}
+	}
+	c.Get(ctx, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "instance1"))
+
+	// Empty entry should be kept in cache.
+	val, ok := c.targets[cacheKey("job1", "instance-not-exists")]
+	if !ok {
+		t.Fatalf("Negative cache should be kept.")
+	}
+	if val != nil {
+		t.Fatalf("Unexpected value job1/instance-not-exists: %v", val)
+	}
+
+	// Create a new empty entry by querying job/instance pair not available.
+	c.Get(ctx, labels.FromStrings("__name__", "metric2", "job", "job2", "instance", "instance-not-exists"))
+	val, ok = c.targets[cacheKey("job2", "instance-not-exists")]
+	if !ok {
+		t.Fatalf("Negative cache should be kept.")
+	}
+	if val != nil {
+		t.Fatalf("Unexpected value job2/instance-not-exists: %v", val)
+	}
+
+	// Add a new instance into response, which will trigger replacing cache.
+	handler = func() []*Target {
+		return []*Target{
+			{Labels: labels.FromStrings("job", "job1", "instance", "instance1")},
+		}
+	}
+	c.Get(ctx, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "instance1"))
+
+	// Empty entry created should be kept in cache.
+	val, ok = c.targets[cacheKey("job2", "instance-not-exists")]
+	if !ok {
+		t.Fatalf("Negative cache should be kept.")
+	}
+	if val != nil {
+		t.Fatalf("Unexpected value job2/instance-not-exists: %v", val)
+	}
+}
+
 func TestDropTargetLabels(t *testing.T) {
 	cases := []struct {
 		series, target, result labels.Labels

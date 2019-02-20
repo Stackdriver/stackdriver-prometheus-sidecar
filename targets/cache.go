@@ -121,6 +121,16 @@ func (c *Cache) refresh(ctx context.Context) error {
 		repl[key] = append(repl[key], t)
 	}
 
+	// Carry over cached lookups for targets that could not be found.
+	for key, t := range c.targets {
+		if t != nil {
+			continue
+		}
+		if _, ok := repl[key]; !ok {
+			repl[key] = nil
+		}
+	}
+
 	c.targets = repl
 
 	return nil
