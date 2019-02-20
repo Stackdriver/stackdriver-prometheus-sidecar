@@ -108,22 +108,24 @@ func (c *Cache) refresh(ctx context.Context) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	for _, t := range apiResp.Data.ActiveTargets {
+	for _, target := range apiResp.Data.ActiveTargets {
 		key := cacheKey(t.Labels.Get("job"), t.Labels.Get("instance"))
 
 		// If the exact target already exists, reuse the same memory object.
 		for _, prev := range c.targets[key] {
 			if labelsEqual(t.Labels, prev.Labels) {
-				t = prev
+				target = prev
 				break
 			}
 		}
-		repl[key] = append(repl[key], t)
+		repl[key] = append(repl[key], target)
 	}
 
-	// Carry over cached lookups for targets that could not be found.
-	for key, t := range c.targets {
-		if t != nil {
+	// If negative lookups still cannot be found in retrieved response,
+	// the negative lookups should be carried over to the new cache, so when
+	// Get is called, it won't aggressively call refresh() again.
+	for key, target := range c.targets {
+		if target != nil {
 			continue
 		}
 		if _, ok := repl[key]; !ok {
