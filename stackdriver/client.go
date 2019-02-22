@@ -29,6 +29,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
+	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/resolver/manual"
 	"google.golang.org/grpc/status"
 
 	"github.com/go-kit/kit/log"
@@ -59,6 +61,7 @@ type ClientConfig struct {
 	ProjectId string // The Stackdriver project id in "projects/name-or-number" format.
 	URL       *url.URL
 	Timeout   time.Duration
+
 }
 
 // NewClient creates a new Client.
@@ -82,23 +85,6 @@ type recoverableError struct {
 // version.* is populated for 'promu' builds, so this will look broken in unit tests.
 var userAgent = fmt.Sprintf("StackdriverPrometheus/%s", version.Version)
 
-// SafeCounter is safe to use concurrently.
-type SafeCounter struct {
-	counter int64
-	mux     sync.Mutex
-}
-
-var ips = []string{"199.36.153.4", "199.36.153.5", "199.36.153.6",
-	"199.36.153.7"}
-
-// ChooseIP round robins the IPs to select one of the four.
-func (c *SafeCounter) ChooseIP() string {
-	c.mux.Lock()
-	c.counter = (c.counter + 1) % int64(len(ips))
-	defer c.mux.Unlock()
-	return ips[c.counter]
-}
-
 func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if c.conn != nil {
 		return c.conn, nil
@@ -115,6 +101,14 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	// Google APIs currently return a single IP for the whole service.  gRPC
 	// client-side load-balancing won't spread the load across backends
 	// while that's true, but it also doesn't hurt.
+	rb, rbcleanup := manual.GenerateAndRegisterManualResolver()
+	defer rbcleanup()
+	rb.InitialAddrs([]resolver.Address{
+		{Addr: "199.36.153.4:443"},
+		{Addr: "199.36.153.5:443"},
+		{Addr: "199.36.153.6:443"},
+		{Addr: "199.36.153.7:443"},
+	})
 	dopts := []grpc.DialOption{
 		grpc.WithBalancerName(roundrobin.Name),
 		grpc.WithBlock(), // Wait for the connection to be established before using it.
@@ -133,19 +127,20 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	} else {
 		dopts = append(dopts, grpc.WithInsecure())
 	}
-	if stackdriver.configure-ips {
-		c := SafeCounter{counter: rand.NewSource(time.Now().UnixNano()).Int63()}
-		conn, err := grpc.DialContext(ctx, "dns:" + c.ChooseIP() + ":443", dopts...)
-	}
-	else{
+	if ipOverride != false {
+		address := c.url.Hostname()
+		conn, err := grpc.DialContext(ctx, rb.Scheme()+":"+address, dopts...)
+		c.conn = conn
+		return conn, err
+	} else {
 		address := c.url.Hostname()
 		if len(c.url.Port()) > 0 {
 			address = fmt.Sprintf("%s:%s", address, c.url.Port())
 		}
-		conn, err := grpc.DialContext(ctx, address, dopts...)
+		conn, err := grpc.DialContext(ctx, "dns:"+address, dopts...)
+		c.conn = conn
+		return conn, err
 	}
-	c.conn = conn
-	return conn, err
 }
 
 // Store sends a batch of samples to the HTTP endpoint.
