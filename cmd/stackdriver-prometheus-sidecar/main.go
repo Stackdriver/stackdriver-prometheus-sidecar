@@ -184,7 +184,6 @@ func main() {
 		filters            []string
 		metricRenames      map[string]string
 		staticMetadata     []scrape.MetricMetadata
-		ipOverride         bool
 
 		logLevel promlog.AllowedLevel
 	}{}
@@ -212,9 +211,6 @@ func main() {
 
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
-
-	a.Flag("stackdriver.api-ip-override", "List of IP addresses. If not empty, stackdriver.api-address will resolve to one of these addresses.").
-		StringVar(&cfg.ipOverride)
 
 	a.Flag("stackdriver.kubernetes.location", "Value of the 'location' label in the Kubernetes Stackdriver MonitoredResources.").
 		StringVar(&cfg.kubernetesLabels.location)
