@@ -106,13 +106,6 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	// Google APIs currently return a single IP for the whole service.  gRPC
 	// client-side load-balancing won't spread the load across backends
 	// while that's true, but it also doesn't hurt.
-	c.resolver.InitialAddrs([]resolver.Address{
-		{Addr: "199.36.153.4:443"},
-		{Addr: "199.36.153.5:443"},
-		{Addr: "199.36.153.6:443"},
-		{Addr: "199.36.153.7:443"},
-	})
-	defer c.resCleanup()
 	dopts := []grpc.DialOption{
 		grpc.WithBalancerName(roundrobin.Name),
 		grpc.WithBlock(), // Wait for the connection to be established before using it.
