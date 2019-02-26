@@ -184,11 +184,21 @@ func main() {
 		filters            []string
 		metricRenames      map[string]string
 		staticMetadata     []scrape.MetricMetadata
+		ipOverride         bool
 
 		logLevel promlog.AllowedLevel
 	}{}
 
 	a := kingpin.New(filepath.Base(os.Args[0]), "The Prometheus monitoring server")
+
+	a.resolver.InitialAddrs([]resolver.Address{
+		{Addr: "199.36.153.4:443"},
+		{Addr: "199.36.153.5:443"},
+		{Addr: "199.36.153.6:443"},
+		{Addr: "199.36.153.7:443"},
+	})
+
+	defer a.resCleanup()
 
 	a.Version(version.Print("prometheus"))
 
@@ -202,6 +212,9 @@ func main() {
 
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
+
+	a.Flag("stackdriver.api-ip-override", "List of IP addresses. If not empty, stackdriver.api-address will resolve to one of these addresses.").
+		StringVar(&cfg.ipOverride)
 
 	a.Flag("stackdriver.kubernetes.location", "Value of the 'location' label in the Kubernetes Stackdriver MonitoredResources.").
 		StringVar(&cfg.kubernetesLabels.location)
@@ -487,14 +500,19 @@ type clientFactory struct {
 	projectIdResource string
 	url               *url.URL
 	timeout           time.Duration
+	resolver          *manual.Resolver
+	resCleanup        func()
 }
 
 func (f *clientFactory) New() stackdriver.StorageClient {
+	rb, rbcleanup := manual.GenerateAndRegisterManualResolver()
 	return stackdriver.NewClient(&stackdriver.ClientConfig{
-		Logger:    f.logger,
-		ProjectId: f.projectIdResource,
-		URL:       f.url,
-		Timeout:   f.timeout,
+		Logger:     f.logger,
+		ProjectId:  f.projectIdResource,
+		URL:        f.url,
+		Timeout:    f.timeout,
+		Resolver:   rb
+		ResCleanup: rbcleanup()
 	})
 }
 
