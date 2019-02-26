@@ -511,8 +511,8 @@ func (f *clientFactory) New() stackdriver.StorageClient {
 		ProjectId:  f.projectIdResource,
 		URL:        f.url,
 		Timeout:    f.timeout,
-		Resolver:   rb
-		ResCleanup: rbcleanup()
+		Resolver:   rb,
+		ResCleanup: rbcleanup(),
 	})
 }
 
