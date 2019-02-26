@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
-	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"
 	"google.golang.org/grpc/status"
 
@@ -78,8 +77,8 @@ func NewClient(conf *ClientConfig) *Client {
 		projectId:  conf.ProjectId,
 		url:        conf.URL,
 		timeout:    conf.Timeout,
-		resolver:   Resolver,
-		resCleanup: ResCleanup,
+		resolver:   conf.Resolver,
+		resCleanup: conf.ResCleanup,
 	}
 }
 
@@ -128,15 +127,15 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if len(c.url.Port()) > 0 {
 		address = fmt.Sprintf("%s:%s", address, c.url.Port())
 	}
-	if c.resolver != nil {
-		conn, err := grpc.DialContext(ctx, c.resolver.Scheme()+":"+address, dopts...)
-		c.conn = conn
-		return conn, err
-	} else {
-		conn, err := grpc.DialContext(ctx, "dns:"+address, dopts...)
-		c.conn = conn
-		return conn, err
-	}
+	//	if c.resolver != nil {
+	//		conn, err := grpc.DialContext(ctx, c.resolver.Scheme()+":"+address, dopts...)
+	//		c.conn = conn
+	//		return conn, err
+	//	} else {
+	conn, err := grpc.DialContext(ctx, "dns:"+address, dopts...)
+	c.conn = conn
+	return conn, err
+	//	}
 }
 
 // Store sends a batch of samples to the HTTP endpoint.
@@ -150,7 +149,6 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 	defer cancel()
 
-	rb, rbcleanup := manual.GenerateAndRegisterManualResolver()
 	conn, err := c.getConnection(ctx)
 	if err != nil {
 		return err

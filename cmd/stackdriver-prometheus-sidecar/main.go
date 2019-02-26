@@ -57,6 +57,8 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/resolver/manual"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -189,15 +191,6 @@ func main() {
 	}{}
 
 	a := kingpin.New(filepath.Base(os.Args[0]), "The Prometheus monitoring server")
-
-	a.resolver.InitialAddrs([]resolver.Address{
-		{Addr: "199.36.153.4:443"},
-		{Addr: "199.36.153.5:443"},
-		{Addr: "199.36.153.6:443"},
-		{Addr: "199.36.153.7:443"},
-	})
-
-	defer a.resCleanup()
 
 	a.Version(version.Print("prometheus"))
 
@@ -496,19 +489,25 @@ type clientFactory struct {
 	projectIdResource string
 	url               *url.URL
 	timeout           time.Duration
-	resolver          *manual.Resolver
-	resCleanup        func()
 }
 
 func (f *clientFactory) New() stackdriver.StorageClient {
 	rb, rbcleanup := manual.GenerateAndRegisterManualResolver()
+	defer rbcleanup()
+	rb.InitialAddrs([]resolver.Address{
+		{Addr: "199.36.153.4:443"},
+		{Addr: "199.36.153.5:443"},
+		{Addr: "199.36.153.6:443"},
+		{Addr: "199.36.153.7:443"},
+	})
+	defer rbcleanup()
 	return stackdriver.NewClient(&stackdriver.ClientConfig{
 		Logger:     f.logger,
 		ProjectId:  f.projectIdResource,
 		URL:        f.url,
 		Timeout:    f.timeout,
 		Resolver:   rb,
-		ResCleanup: rbcleanup(),
+		ResCleanup: rbcleanup,
 	})
 }
 
