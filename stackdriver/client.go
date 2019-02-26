@@ -47,21 +47,24 @@ const (
 // implementation may hit a single backend, so the application should create a
 // number of these clients.
 type Client struct {
-	logger    log.Logger
-	projectId string
-	url       *url.URL
-	timeout   time.Duration
+	logger     log.Logger
+	projectId  string
+	url        *url.URL
+	timeout    time.Duration
+	resolver   *manual.Resolver
+	resCleanup func()
 
 	conn *grpc.ClientConn
 }
 
 // ClientConfig configures a Client.
 type ClientConfig struct {
-	Logger    log.Logger
-	ProjectId string // The Stackdriver project id in "projects/name-or-number" format.
-	URL       *url.URL
-	Timeout   time.Duration
-
+	Logger     log.Logger
+	ProjectId  string // The Stackdriver project id in "projects/name-or-number" format.
+	URL        *url.URL
+	Timeout    time.Duration
+	Resolver   *manual.Resolver
+	ResCleanup func()
 }
 
 // NewClient creates a new Client.
@@ -71,10 +74,12 @@ func NewClient(conf *ClientConfig) *Client {
 		logger = log.NewNopLogger()
 	}
 	return &Client{
-		logger:    logger,
-		projectId: conf.ProjectId,
-		url:       conf.URL,
-		timeout:   conf.Timeout,
+		logger:     logger,
+		projectId:  conf.ProjectId,
+		url:        conf.URL,
+		timeout:    conf.Timeout,
+		resolver:   Resolver,
+		resCleanup: ResCleanup,
 	}
 }
 
@@ -101,14 +106,13 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	// Google APIs currently return a single IP for the whole service.  gRPC
 	// client-side load-balancing won't spread the load across backends
 	// while that's true, but it also doesn't hurt.
-	rb, rbcleanup := manual.GenerateAndRegisterManualResolver()
-	defer rbcleanup()
-	rb.InitialAddrs([]resolver.Address{
+	c.resolver.InitialAddrs([]resolver.Address{
 		{Addr: "199.36.153.4:443"},
 		{Addr: "199.36.153.5:443"},
 		{Addr: "199.36.153.6:443"},
 		{Addr: "199.36.153.7:443"},
 	})
+	defer c.resCleanup()
 	dopts := []grpc.DialOption{
 		grpc.WithBalancerName(roundrobin.Name),
 		grpc.WithBlock(), // Wait for the connection to be established before using it.
@@ -127,16 +131,15 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	} else {
 		dopts = append(dopts, grpc.WithInsecure())
 	}
-	if ipOverride != false {
-		address := c.url.Hostname()
-		conn, err := grpc.DialContext(ctx, rb.Scheme()+":"+address, dopts...)
+	address := c.url.Hostname()
+	if len(c.url.Port()) > 0 {
+		address = fmt.Sprintf("%s:%s", address, c.url.Port())
+	}
+	if c.resolver != nil {
+		conn, err := grpc.DialContext(ctx, c.resolver.Scheme()+":"+address, dopts...)
 		c.conn = conn
 		return conn, err
 	} else {
-		address := c.url.Hostname()
-		if len(c.url.Port()) > 0 {
-			address = fmt.Sprintf("%s:%s", address, c.url.Port())
-		}
 		conn, err := grpc.DialContext(ctx, "dns:"+address, dopts...)
 		c.conn = conn
 		return conn, err
@@ -154,6 +157,7 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 	defer cancel()
 
+	rb, rbcleanup := manual.GenerateAndRegisterManualResolver()
 	conn, err := c.getConnection(ctx)
 	if err != nil {
 		return err
