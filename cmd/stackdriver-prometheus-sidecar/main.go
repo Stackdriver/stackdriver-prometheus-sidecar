@@ -305,14 +305,13 @@ func main() {
 		// It also registers the resolver. rb.InitialAddrs adds the addresses we are using
 		// to resolve GCP API calls to the resolver.
 		cfg.manualResolver, _ = manual.GenerateAndRegisterManualResolver()
+		// These IP addresses correspond to restricted.googleapis.com and are not expected to change.
 		cfg.manualResolver.InitialAddrs([]resolver.Address{
 			{Addr: "199.36.153.4:443"},
 			{Addr: "199.36.153.5:443"},
 			{Addr: "199.36.153.6:443"},
 			{Addr: "199.36.153.7:443"},
 		})
-	} else {
-		cfg.manualResolver = nil
 	}
 	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {

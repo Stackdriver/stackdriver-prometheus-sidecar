@@ -124,15 +124,13 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if len(c.url.Port()) > 0 {
 		address = fmt.Sprintf("%s:%s", address, c.url.Port())
 	}
+	scheme := "dns:"+address
 	if c.resolver != nil {
-		conn, err := grpc.DialContext(ctx, c.resolver.Scheme()+":"+address, dopts...)
-		c.conn = conn
-		return conn, err
-	} else {
-		conn, err := grpc.DialContext(ctx, "dns:"+address, dopts...)
-		c.conn = conn
-		return conn, err
+		scheme = c.resolver.Scheme()+":"+address
 	}
+	conn, err := grpc.DialContext(ctx, scheme, dopts...)
+	c.conn = conn
+	return conn, err
 }
 
 // Store sends a batch of samples to the HTTP endpoint.
