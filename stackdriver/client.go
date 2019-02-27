@@ -29,6 +29,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
+	"google.golang.org/grpc/resolver/manual"
 	"google.golang.org/grpc/status"
 
 	"github.com/go-kit/kit/log"
@@ -49,6 +50,7 @@ type Client struct {
 	projectId string
 	url       *url.URL
 	timeout   time.Duration
+	resolver  *manual.Resolver
 
 	conn *grpc.ClientConn
 }
@@ -59,6 +61,7 @@ type ClientConfig struct {
 	ProjectId string // The Stackdriver project id in "projects/name-or-number" format.
 	URL       *url.URL
 	Timeout   time.Duration
+	Resolver  *manual.Resolver
 }
 
 // NewClient creates a new Client.
@@ -72,6 +75,7 @@ func NewClient(conf *ClientConfig) *Client {
 		projectId: conf.ProjectId,
 		url:       conf.URL,
 		timeout:   conf.Timeout,
+		resolver:  conf.Resolver,
 	}
 }
 
@@ -120,9 +124,15 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if len(c.url.Port()) > 0 {
 		address = fmt.Sprintf("%s:%s", address, c.url.Port())
 	}
-	conn, err := grpc.DialContext(ctx, address, dopts...)
-	c.conn = conn
-	return conn, err
+	if c.resolver != nil {
+		conn, err := grpc.DialContext(ctx, c.resolver.Scheme()+":"+address, dopts...)
+		c.conn = conn
+		return conn, err
+	} else {
+		conn, err := grpc.DialContext(ctx, "dns:"+address, dopts...)
+		c.conn = conn
+		return conn, err
+	}
 }
 
 // Store sends a batch of samples to the HTTP endpoint.
