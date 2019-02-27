@@ -1382,12 +1382,6 @@
 			"versionExact": "v1.18.0"
 		},
 		{
-			"path": "google.golang.org/grpc/grpclb",
-			"revision": "v1.18.0",
-			"version": "v1.18.0",
-			"versionExact": "v1.18.0"
-		},
-		{
 			"checksumSHA1": "XbDzI4GeUt2/8WAS5mLKm5ghVWo=",
 			"path": "google.golang.org/grpc/grpclb/grpc_lb_v1",
 			"revision": "6c48c7f5c8d60269eb9f72197e2926cb1a6ffea8",
@@ -1544,13 +1538,6 @@
 			"path": "google.golang.org/grpc/resolver/passthrough",
 			"revision": "a02b0774206b209466313a0b525d2c738fe407eb",
 			"revisionTime": "2019-01-15T20:48:37Z",
-			"version": "v1.18.0",
-			"versionExact": "v1.18.0"
-		},
-		{
-			"path": "google.golang.org/grpc/rewsolver",
-			"revision": "v1.18.0",
-			"tree": true,
 			"version": "v1.18.0",
 			"versionExact": "v1.18.0"
 		},
