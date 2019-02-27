@@ -46,24 +46,22 @@ const (
 // implementation may hit a single backend, so the application should create a
 // number of these clients.
 type Client struct {
-	logger     log.Logger
-	projectId  string
-	url        *url.URL
-	timeout    time.Duration
-	resolver   *manual.Resolver
-	resCleanup func()
+	logger    log.Logger
+	projectId string
+	url       *url.URL
+	timeout   time.Duration
+	resolver  *manual.Resolver
 
 	conn *grpc.ClientConn
 }
 
 // ClientConfig configures a Client.
 type ClientConfig struct {
-	Logger     log.Logger
-	ProjectId  string // The Stackdriver project id in "projects/name-or-number" format.
-	URL        *url.URL
-	Timeout    time.Duration
-	Resolver   *manual.Resolver
-	ResCleanup func()
+	Logger    log.Logger
+	ProjectId string // The Stackdriver project id in "projects/name-or-number" format.
+	URL       *url.URL
+	Timeout   time.Duration
+	Resolver  *manual.Resolver
 }
 
 // NewClient creates a new Client.
@@ -73,12 +71,11 @@ func NewClient(conf *ClientConfig) *Client {
 		logger = log.NewNopLogger()
 	}
 	return &Client{
-		logger:     logger,
-		projectId:  conf.ProjectId,
-		url:        conf.URL,
-		timeout:    conf.Timeout,
-		resolver:   conf.Resolver,
-		resCleanup: conf.ResCleanup,
+		logger:    logger,
+		projectId: conf.ProjectId,
+		url:       conf.URL,
+		timeout:   conf.Timeout,
+		resolver:  conf.Resolver,
 	}
 }
 
@@ -127,15 +124,15 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if len(c.url.Port()) > 0 {
 		address = fmt.Sprintf("%s:%s", address, c.url.Port())
 	}
-	//	if c.resolver != nil {
-	//		conn, err := grpc.DialContext(ctx, c.resolver.Scheme()+":"+address, dopts...)
-	//		c.conn = conn
-	//		return conn, err
-	//	} else {
-	conn, err := grpc.DialContext(ctx, "dns:"+address, dopts...)
-	c.conn = conn
-	return conn, err
-	//	}
+	if c.resolver != nil {
+		conn, err := grpc.DialContext(ctx, c.resolver.Scheme()+":"+address, dopts...)
+		c.conn = conn
+		return conn, err
+	} else {
+		conn, err := grpc.DialContext(ctx, "dns:"+address, dopts...)
+		c.conn = conn
+		return conn, err
+	}
 }
 
 // Store sends a batch of samples to the HTTP endpoint.
