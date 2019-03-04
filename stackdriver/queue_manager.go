@@ -315,7 +315,7 @@ func (t *QueueManager) calculateDesiredShards() {
 		desiredShards *= 1 + (1-(sizeRate/offsetRate))*1.5
 	}
 
-	level.Debug(t.logger).Log("msg", "QueueManager.caclulateDesiredShards", "samplesIn", samplesIn,
+	level.Debug(t.logger).Log("msg", "QueueManager.calculateDesiredShards", "samplesIn", samplesIn,
 		"samplesOut", samplesOut, "samplesOutDuration", samplesOutDuration, "timePerSample", timePerSample,
 		"sizeRate", sizeRate, "offsetRate", offsetRate, "desiredShards", desiredShards)
 
