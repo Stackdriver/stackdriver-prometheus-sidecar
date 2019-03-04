@@ -29,7 +29,7 @@ stackdriver-prometheus-sidecar \
   --stackdriver.project-id=${GCP_PROJECT} \
   --prometheus.wal-directory=${WAL_DIR} \
   --prometheus.api-address=${API_ADDRESS} \
-  --stackdriver.kubernetes.location=${REGION} \ 
+  --stackdriver.kubernetes.location=${REGION} \
   --stackdriver.kubernetes.cluster-name=${CLUSTER}
 ```
 
@@ -79,9 +79,13 @@ The matrix below lists the versions of Prometheus Server and other dependencies 
 
 | sidecar version | **Prometheus 2.4.3**| **Prometheus 2.5.x**| **Prometheus 2.6.x**|
 |-----------------|---------------------|---------------------|---------------------|
-| **0.2.x**       |          ✓          |          -          |          -          |
-| **0.3.x**       |          ✓          |          -          |          ✓          |
-| **0.4.x**       |          -          |          -          |          ✓          |
+| **0.2.x**       |          ✓          |          ✗          |          ✗          |
+| **0.3.x**       |          ✓          |          ✗          |          ✓          |
+| **0.4.x**       |          ?          |          ✗          |          ✓          |
+
+- ✓: Verified as compatible.
+- ✗: Verified as incompatible.
+- ?: Not verified yet.
 
 ## Alternatives
 
