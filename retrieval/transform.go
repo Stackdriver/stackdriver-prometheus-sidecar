@@ -22,6 +22,8 @@ import (
 	"time"
 
 	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/tsdb"
@@ -31,6 +33,7 @@ import (
 )
 
 type sampleBuilder struct {
+	logger log.Logger
 	series seriesGetter
 }
 
@@ -39,10 +42,7 @@ type sampleBuilder struct {
 func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, uint64, []tsdb.RefSample, error) {
 	sample := samples[0]
 
-	entry, ok, err := b.series.get(ctx, sample.Ref)
-	if err != nil {
-		return nil, 0, samples, errors.Wrap(err, "get series information")
-	}
+	entry, ok := b.seriesGetWithRetry(ctx, sample)
 	if !ok {
 		return nil, 0, samples[1:], nil
 	}
@@ -65,6 +65,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	}
 	ts.Points = append(ts.Points, point)
 
+	var err error
 	var resetTimestamp int64
 
 	switch entry.metadata.Type {
@@ -126,6 +127,23 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		return nil, 0, samples[1:], nil
 	}
 	return &ts, entry.hash, samples[1:], nil
+}
+
+func (b *sampleBuilder) seriesGetWithRetry(ctx context.Context, sample tsdb.RefSample) (*seriesCacheEntry, bool) {
+	backoff := time.Duration(0)
+	entry, ok, err := b.series.get(ctx, sample.Ref)
+	for {
+		if err == nil {
+			break
+		}
+		level.Warn(b.logger).Log("msg", "failed to get seriesCacheEntry", "err", err)
+		backoff = exponential(backoff)
+		if backoff > 0 {
+			time.Sleep(backoff)
+		}
+		entry, ok, err = b.series.get(ctx, sample.Ref)
+	}
+	return entry, ok
 }
 
 const (
@@ -210,10 +228,7 @@ func (b *sampleBuilder) buildDistribution(
 	// until we hit a new metric.
 Loop:
 	for i, s := range samples {
-		e, ok, err := b.series.get(ctx, s.Ref)
-		if err != nil {
-			return nil, 0, samples, err
-		}
+		e, ok := b.seriesGetWithRetry(ctx, s)
 		if !ok {
 			consumed++
 			// TODO(fabxc): increment metric.
@@ -348,4 +363,19 @@ func histogramLabelsEqual(a, b tsdbLabels.Labels) bool {
 	}
 	// If one label set still has labels left, they are not equal.
 	return i == len(a) && j == len(b)
+}
+
+func exponential(d time.Duration) time.Duration {
+	const (
+		min = 10 * time.Millisecond
+		max = 2 * time.Second
+	)
+	d *= 2
+	if d < min {
+		d = min
+	}
+	if d > max {
+		d = max
+	}
+	return d
 }
