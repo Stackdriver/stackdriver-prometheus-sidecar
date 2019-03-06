@@ -43,7 +43,7 @@ type Tailer struct {
 	offset      int // Bytes read within the current reader.
 }
 
-// Tail the prommetheus/tsdb write ahead log in the given directory. Checkpoints
+// Tail the prometheus/tsdb write ahead log in the given directory. Checkpoints
 // are read before reading any WAL segments.
 // Tailing may fail if we are racing with the DB itself in deleting obsolete checkpoints
 // and segments. The caller should implement relevant logic to retry in those cases.
