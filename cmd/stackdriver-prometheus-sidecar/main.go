@@ -238,10 +238,7 @@ func main() {
 
 	_, err := a.Parse(os.Args[1:])
 	if err != nil {
-		logLevel := promlog.AllowedLevel{}
-		logLevel.Set("error")
-		tmpLogger := promlog.New(logLevel)
-		level.Error(tmpLogger).Log("msg", "Error parsing commandline arguments", "err", err)
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "Error parsing commandline arguments"))
 		a.Usage(os.Args[1:])
 		os.Exit(2)
 	}
