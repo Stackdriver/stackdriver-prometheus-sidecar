@@ -243,15 +243,15 @@ func main() {
 		os.Exit(2)
 	}
 
+	logger := promlog.New(cfg.logLevel)
 	if cfg.configFilename != "" {
 		cfg.metricRenames, cfg.staticMetadata, err = parseConfigFile(cfg.configFilename)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, errors.Wrapf(err, "parse config file %s", cfg.configFilename))
+			msg := fmt.Sprintf("Parse config file %s", cfg.configFilename)
+			level.Error(logger).Log("msg", msg, "err", err)
 			os.Exit(2)
 		}
 	}
-
-	logger := promlog.New(cfg.logLevel)
 
 	level.Info(logger).Log("msg", "Starting Stackdriver Prometheus sidecar", "version", version.Info())
 	level.Info(logger).Log("build_context", version.BuildContext())
@@ -262,7 +262,7 @@ func main() {
 		Registry: prometheus.DefaultRegisterer.(*prometheus.Registry),
 	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "creating Prometheus exporter failed:", err)
+		level.Error(logger).Log("msg", "Creating Prometheus exporter failed", "err", err)
 		os.Exit(1)
 	}
 	view.RegisterExporter(promExporter)
@@ -288,7 +288,7 @@ func main() {
 
 	filters, err := parseFilters(cfg.filters...)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error parsing filters:", err)
+		level.Error(logger).Log("msg", "Error parsing filters", "err", err)
 		os.Exit(2)
 	}
 
@@ -311,7 +311,7 @@ func main() {
 
 	tailer, err := tail.Tail(ctx, cfg.walDirectory)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Tailing WAL failed:", err)
+		level.Error(logger).Log("msg", "Tailing WAL failed", "err", err)
 		os.Exit(1)
 	}
 	// TODO(jkohen): Remove once we have proper translation of all metric
@@ -338,7 +338,7 @@ func main() {
 		tailer,
 	)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Creating queue manager failed:", err)
+		level.Error(logger).Log("msg", "Creating queue manager failed", "err", err)
 		os.Exit(1)
 	}
 	prometheusReader := retrieval.NewPrometheusReader(
