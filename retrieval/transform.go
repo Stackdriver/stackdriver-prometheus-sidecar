@@ -42,7 +42,10 @@ type sampleBuilder struct {
 func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, uint64, []tsdb.RefSample, error) {
 	sample := samples[0]
 
-	entry, ok := b.seriesGetWithRetry(ctx, sample)
+	entry, ok, err := b.getSeriesWithRetry(ctx, sample)
+	if err != nil {
+		return nil, 0, samples, err
+	}
 	if !ok {
 		return nil, 0, samples[1:], nil
 	}
@@ -65,7 +68,6 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	}
 	ts.Points = append(ts.Points, point)
 
-	var err error
 	var resetTimestamp int64
 
 	switch entry.metadata.Type {
@@ -129,10 +131,15 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	return &ts, entry.hash, samples[1:], nil
 }
 
-func (b *sampleBuilder) seriesGetWithRetry(ctx context.Context, sample tsdb.RefSample) (*seriesCacheEntry, bool) {
+func (b *sampleBuilder) getSeriesWithRetry(ctx context.Context, sample tsdb.RefSample) (entry *seriesCacheEntry, ok bool, err error) {
 	backoff := time.Duration(0)
-	entry, ok, err := b.series.get(ctx, sample.Ref)
 	for {
+		select {
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
+		default:
+		}
+		entry, ok, err = b.series.get(ctx, sample.Ref)
 		if err == nil {
 			break
 		}
@@ -141,9 +148,8 @@ func (b *sampleBuilder) seriesGetWithRetry(ctx context.Context, sample tsdb.RefS
 		if backoff > 0 {
 			time.Sleep(backoff)
 		}
-		entry, ok, err = b.series.get(ctx, sample.Ref)
 	}
-	return entry, ok
+	return entry, ok, nil
 }
 
 const (
@@ -228,7 +234,10 @@ func (b *sampleBuilder) buildDistribution(
 	// until we hit a new metric.
 Loop:
 	for i, s := range samples {
-		e, ok := b.seriesGetWithRetry(ctx, s)
+		e, ok, err := b.getSeriesWithRetry(ctx, s)
+		if err != nil {
+			return nil, 0, samples, err
+		}
 		if !ok {
 			consumed++
 			// TODO(fabxc): increment metric.
