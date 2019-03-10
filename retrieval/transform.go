@@ -143,6 +143,9 @@ func (b *sampleBuilder) getSeriesWithRetry(ctx context.Context, sample tsdb.RefS
 		if err == nil {
 			break
 		}
+		if _, ok := err.(unrecoverableError); ok {
+			return nil, false, err
+		}
 		level.Warn(b.logger).Log("msg", "failed to get seriesCacheEntry", "err", err)
 		backoff = exponential(backoff)
 		if backoff > 0 {

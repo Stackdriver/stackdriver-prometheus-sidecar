@@ -43,6 +43,10 @@ var (
 	keyReason, _ = tag.NewKey("reason")
 )
 
+type unrecoverableError struct {
+	error
+}
+
 func init() {
 	if err := view.Register(&view.View{
 		Name:        "prometheus_sidecar/dropped_series",
@@ -447,14 +451,14 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 			ts.MetricKind = metric_pb.MetricDescriptor_GAUGE
 			ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
 		default:
-			return errors.Errorf("unexpected metric name suffix %q", suffix)
+			return unrecoverableError{errors.Errorf("unexpected metric name suffix %q", suffix)}
 		}
 	case textparse.MetricTypeHistogram:
 		ts.Metric.Type = c.getMetricType(c.metricsPrefix, baseMetricName)
 		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 		ts.ValueType = metric_pb.MetricDescriptor_DISTRIBUTION
 	default:
-		return errors.Errorf("unexpected metric type %s", metadata.Type)
+		return unrecoverableError{errors.Errorf("unexpected metric type %s", metadata.Type)}
 	}
 
 	entry.proto = ts
