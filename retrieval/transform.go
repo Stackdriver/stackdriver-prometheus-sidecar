@@ -21,9 +21,9 @@ import (
 	"strings"
 	"time"
 
-	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/tsdb"
