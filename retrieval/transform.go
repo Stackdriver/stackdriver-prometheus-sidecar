@@ -148,9 +148,7 @@ func (b *sampleBuilder) getSeriesWithRetry(ctx context.Context, sample tsdb.RefS
 		}
 		level.Warn(b.logger).Log("msg", "failed to get seriesCacheEntry", "err", err)
 		backoff = exponential(backoff)
-		if backoff > 0 {
-			time.Sleep(backoff)
-		}
+		time.Sleep(backoff)
 	}
 	return entry, ok, nil
 }
