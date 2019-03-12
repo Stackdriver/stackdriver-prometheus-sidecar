@@ -43,7 +43,7 @@ var (
 	keyReason, _ = tag.NewKey("reason")
 )
 
-type unrecoverableError struct {
+type unknownMetricError struct {
 	error
 }
 
@@ -451,14 +451,14 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 			ts.MetricKind = metric_pb.MetricDescriptor_GAUGE
 			ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
 		default:
-			return unrecoverableError{errors.Errorf("unexpected metric name suffix %q", suffix)}
+			return unknownMetricError{errors.Errorf("unexpected metric name suffix %q", suffix)}
 		}
 	case textparse.MetricTypeHistogram:
 		ts.Metric.Type = c.getMetricType(c.metricsPrefix, baseMetricName)
 		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 		ts.ValueType = metric_pb.MetricDescriptor_DISTRIBUTION
 	default:
-		return unrecoverableError{errors.Errorf("unexpected metric type %s", metadata.Type)}
+		return unknownMetricError{errors.Errorf("unexpected metric type %s", metadata.Type)}
 	}
 
 	entry.proto = ts

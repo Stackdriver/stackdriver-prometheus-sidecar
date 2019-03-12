@@ -143,7 +143,7 @@ func (b *sampleBuilder) getSeriesWithRetry(ctx context.Context, sample tsdb.RefS
 		if err == nil {
 			break
 		}
-		if _, ok := err.(unrecoverableError); ok {
+		if _, ok := err.(unknownMetricError); ok {
 			return nil, false, err
 		}
 		level.Warn(b.logger).Log("msg", "failed to get seriesCacheEntry", "err", err)
