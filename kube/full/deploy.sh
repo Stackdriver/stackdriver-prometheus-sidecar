@@ -1,5 +1,13 @@
 #!/bin/bash
 
+if [ "$I_ACCEPT_THE_BILLING_CHARGES" != "true" ]; then
+    printf 'The default configuration of Stackdriver Prometheus Sidecar sends metrics at a rate\n'
+    printf 'billed between $25 and $50/node/day on a cluster; approximately $1500/node/month.\n\n'
+
+    printf "Please set the environment variable I_ACCEPT_THE_BILLING_CHARGES=true to continue\n"
+    exit
+fi
+
 set -e
 set -u
 
