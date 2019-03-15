@@ -260,18 +260,28 @@ func TestSeriesCache_Filter(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok, err := c.get(ctx, 1); !ok || err != nil {
-		t.Fatalf("metric not found: %s", err)
+		t.Fatalf("error retrieving metric: %s", err)
+	} else if !ok {
+		t.Fatalf("metric was filtered, though it should not")
 	}
-	// Test filtered metric.
+	// Test metric that passed one of the filters.
 	err = c.set(ctx, 2, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a1", "b", "b2"), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, err := c.get(ctx, 2); err != nil {
 		t.Fatalf("error retrieving metric: %s", err)
+	} else if !ok {
+		t.Fatalf("metric was filtered, though it should not")
+	}
+	// Test metric that does not pass any of the filters
+	err = c.set(ctx, 3, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a2", "b", "b2"), 1)
+	if _, ok, err := c.get(ctx, 3); err != nil {
+		t.Fatalf("error retrieving metric: %s", err)
 	} else if ok {
 		t.Fatalf("metric was not filtered")
 	}
+
 }
 
 func TestSeriesCache_RenameMetric(t *testing.T) {

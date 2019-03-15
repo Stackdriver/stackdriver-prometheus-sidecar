@@ -48,13 +48,13 @@ stackdriver-prometheus-sidecar --help
 
 #### Filters
 
-The `--filter` flag allows to provide filters which all series have to pass before being sent to Stackdriver. The flag may be repeated to provide several filters. Filters use the same syntax as the well-known PromQL label matchers, e.g.:
+The `--filter` flag allows to provide filters which all series have to pass before being sent to Stackdriver. The flag may be repeated to provide several filters, time series must match one of the filters .  Filters use the same syntax as the well-known PromQL label matchers, e.g.:
 
 ```
 stackdriver-prometheus-sidecar --filter='job="k8s"' --filter='__name__!~"cadvisor_.+"' ...
 ```
 
-This drops all series which do not have a `job` label `k8s` and all metrics that have a name starting with `cadvisor_`.
+This sends to Stackdriver only time series which do have a `job` label `k8s` or metrics that have a name not starting with `cadvisor_`.
 
 #### File
 
