@@ -24,6 +24,8 @@ import (
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/resolver/manual"
 	"google.golang.org/grpc/status"
 )
 
@@ -112,5 +114,31 @@ func TestEmptyRequest(t *testing.T) {
 	})
 	if err := c.Store(&monitoring.CreateTimeSeriesRequest{}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResolver(t *testing.T) {
+	serverURL, err := url.Parse("http://stackdriver.invalid:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, _ := manual.GenerateAndRegisterManualResolver()
+	res.InitialAddrs([]resolver.Address{
+		{Addr: "localhost"},
+	})
+	c := NewClient(&ClientConfig{
+		URL:      serverURL,
+		Timeout:  time.Second,
+		Resolver: res,
+	})
+	// Not sure if the following tests what I really want it to.
+	// CreateTimeSeriesRequest{} does call getConnection...
+	// In any case, it's failing with "could not find default credentials."
+	if conerr := c.Store(&monitoring.CreateTimeSeriesRequest{
+		TimeSeries: []*monitoring.TimeSeries{
+			&monitoring.TimeSeries{},
+		},
+	}); conerr != nil {
+		t.Fatal(conerr)
 	}
 }

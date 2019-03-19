@@ -124,11 +124,10 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if len(c.url.Port()) > 0 {
 		address = fmt.Sprintf("%s:%s", address, c.url.Port())
 	}
-	scheme := "dns"
 	if c.resolver != nil {
-		scheme = c.resolver.Scheme()
+		c.resolver.Scheme()
 	}
-	conn, err := grpc.DialContext(ctx, scheme+":"+address, dopts...)
+	conn, err := grpc.DialContext(ctx, address, dopts...)
 	c.conn = conn
 	return conn, err
 }
