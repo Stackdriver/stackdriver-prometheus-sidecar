@@ -3,7 +3,7 @@
 set -e
 set -u
 
-if [  $# -le 1 ]; then
+if [  $# -le 0 ]; then
   echo -e "Usage: $0 <prometheus_name>\n"
   exit 1
 fi
