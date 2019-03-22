@@ -14,15 +14,19 @@ limitations under the License.
 package retrieval
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
+	"github.com/go-kit/kit/log"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/scrape"
@@ -43,7 +47,14 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 	// Initialize the series cache with "empty" target and metadata maps.
 	// The series we use below have no job, instance, and __name__ labels set, which
 	// will result in those empty lookup keys.
-	c := newSeriesCache(nil, dir, nil, nil,
+	logBuffer := &bytes.Buffer{}
+	defer func() {
+		if logBuffer.Len() > 0 {
+			t.Log(logBuffer.String())
+		}
+	}()
+	logger := log.NewLogfmtLogger(logBuffer)
+	c := newSeriesCache(logger, dir, nil, nil,
 		targetMap{"/": &targets.Target{}},
 		metadataMap{"//": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge}},
 		[]ResourceMap{
@@ -182,13 +193,21 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	}
 	targetMap := targetMap{}
 	metadataMap := metadataMap{}
-	c := newSeriesCache(nil, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false)
+	logBuffer := &bytes.Buffer{}
+	defer func() {
+		if logBuffer.Len() > 0 {
+			t.Log(logBuffer.String())
+		}
+	}()
+	logger := log.NewLogfmtLogger(logBuffer)
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Query unset reference.
-	entry, ok, err := c.get(ctx, 1)
+	const refId = 1
+	entry, ok, err := c.get(ctx, refId)
 	if ok || entry != nil {
 		t.Fatalf("unexpected series entry found: %v", entry)
 	}
@@ -197,11 +216,14 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	}
 
 	// Set a series but the metadata and target getters won't have sufficient information for it.
-	if err := c.set(ctx, 1, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
+	if err := c.set(ctx, refId, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
+	if !strings.Contains(logBuffer.String(), "target not found") {
+		t.Errorf("expected error \"target not found\", got: %v", logBuffer)
+	}
 	// We should still not receive anything.
-	entry, ok, err = c.get(ctx, 1)
+	entry, ok, err = c.get(ctx, refId)
 	if ok || entry != nil {
 		t.Fatalf("unexpected series entry found: %v", entry)
 	}
@@ -218,12 +240,150 @@ func TestSeriesCache_Refresh(t *testing.T) {
 
 	// Hack the timestamp of the last update to be sufficiently in the past that a refresh
 	// will be triggered.
-	c.entries[1].lastRefresh = time.Now().Add(-2 * refreshInterval)
+	c.entries[refId].lastRefresh = time.Now().Add(-2 * refreshInterval)
 
 	// Now another get should trigger a refresh, which now finds data.
-	entry, ok, err = c.get(ctx, 1)
+	entry, ok, err = c.get(ctx, refId)
 	if entry == nil || !ok || err != nil {
 		t.Errorf("expected metadata but got none, error: %s", err)
+	}
+}
+
+func TestSeriesCache_RefreshTooManyLabels(t *testing.T) {
+	resourceMaps := []ResourceMap{
+		{
+			Type:     "resource2",
+			LabelMap: map[string]labelTranslation{"__resource_a": constValue("resource_a")},
+		},
+	}
+	logBuffer := &bytes.Buffer{}
+	defer func() {
+		if logBuffer.Len() > 0 {
+			t.Log(logBuffer.String())
+		}
+	}()
+	logger := log.NewLogfmtLogger(logBuffer)
+	targetMap := targetMap{}
+	targetMap["job1/inst1"] = &targets.Target{
+		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
+		DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+	}
+	metadataMap := metadataMap{}
+	metadataMap["job1/inst1/metric1"] = &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"}
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const refId = 1
+	lset := labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1")
+	for i := 0; i <= maxLabelCount; i++ {
+		lset = append(lset, labels.Label{fmt.Sprintf("label%d", i), "x"})
+	}
+	// Set will trigger a refresh.
+	if err := c.set(ctx, refId, lset, 5); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if !strings.Contains(logBuffer.String(), "too many labels") {
+		t.Errorf("expected error \"too many labels\", got: %v", logBuffer)
+	}
+
+	// Get shouldn't find data because of the previous error.
+	entry, ok, err := c.get(ctx, refId)
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
+	}
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
+func TestSeriesCache_RefreshUnknownResource(t *testing.T) {
+	resourceMaps := []ResourceMap{
+		{
+			Type:     "resource2",
+			LabelMap: map[string]labelTranslation{"__resource_a": constValue("resource_a")},
+		},
+	}
+	logBuffer := &bytes.Buffer{}
+	defer func() {
+		if logBuffer.Len() > 0 {
+			t.Log(logBuffer.String())
+		}
+	}()
+	logger := log.NewLogfmtLogger(logBuffer)
+	targetMap := targetMap{}
+	targetMap["job1/inst1"] = &targets.Target{
+		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
+		DiscoveredLabels: promlabels.FromStrings("__unknown_resource", "resource2_a"),
+	}
+	metadataMap := metadataMap{}
+	metadataMap["job1/inst1/metric1"] = &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"}
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const refId = 1
+	// Set will trigger a refresh.
+	if err := c.set(ctx, refId, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if !strings.Contains(logBuffer.String(), "unknown resource") {
+		t.Errorf("expected error \"unknown resource\", got: %v", logBuffer)
+	}
+
+	// Get shouldn't find data because of the previous error.
+	entry, ok, err := c.get(ctx, refId)
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
+	}
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
+func TestSeriesCache_RefreshMetadataNotFound(t *testing.T) {
+	resourceMaps := []ResourceMap{
+		{
+			Type:     "resource2",
+			LabelMap: map[string]labelTranslation{"__resource_a": constValue("resource_a")},
+		},
+	}
+	logBuffer := &bytes.Buffer{}
+	defer func() {
+		if logBuffer.Len() > 0 {
+			t.Log(logBuffer.String())
+		}
+	}()
+	logger := log.NewLogfmtLogger(logBuffer)
+	targetMap := targetMap{}
+	targetMap["job1/inst1"] = &targets.Target{
+		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
+		DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+	}
+	metadataMap := metadataMap{}
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const refId = 1
+	// Set will trigger a refresh.
+	if err := c.set(ctx, refId, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if !strings.Contains(logBuffer.String(), "metadata not found") {
+		t.Errorf("expected error \"metadata not found\", got: %v", logBuffer)
+	}
+
+	// Get shouldn't find data because of the previous error.
+	entry, ok, err := c.get(ctx, refId)
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
+	}
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
 	}
 }
 
@@ -244,7 +404,14 @@ func TestSeriesCache_Filter(t *testing.T) {
 	metadataMap := metadataMap{
 		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
 	}
-	c := newSeriesCache(nil, "", []*promlabels.Matcher{
+	logBuffer := &bytes.Buffer{}
+	defer func() {
+		if logBuffer.Len() > 0 {
+			t.Log(logBuffer.String())
+		}
+	}()
+	logger := log.NewLogfmtLogger(logBuffer)
+	c := newSeriesCache(logger, "", []*promlabels.Matcher{
 		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "a", Value: "a1"},
 		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"},
 	}, nil, targetMap, metadataMap, resourceMaps, "", false)
@@ -292,7 +459,14 @@ func TestSeriesCache_RenameMetric(t *testing.T) {
 		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
 		"job1/inst1/metric2": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric2"},
 	}
-	c := newSeriesCache(nil, "", nil,
+	logBuffer := &bytes.Buffer{}
+	defer func() {
+		if logBuffer.Len() > 0 {
+			t.Log(logBuffer.String())
+		}
+	}()
+	logger := log.NewLogfmtLogger(logBuffer)
+	c := newSeriesCache(logger, "", nil,
 		map[string]string{"metric2": "metric3"},
 		targetMap, metadataMap, resourceMaps, "", false)
 
