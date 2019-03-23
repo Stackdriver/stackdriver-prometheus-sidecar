@@ -78,11 +78,11 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 	// We should be able to read them all.
 	for i := 1; i <= 7; i++ {
 		entry, ok, err := c.get(ctx, uint64(i))
-		if !ok {
-			t.Fatalf("entry with ref %d not found", i)
-		}
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
+		}
+		if !ok {
+			t.Fatalf("entry with ref %d not found", i)
 		}
 		if !entry.lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
 			t.Fatalf("unexpected label set for ref %d: %s", i, entry.lset)
@@ -116,20 +116,20 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i := 1; i < 2; i++ {
-			if entry, ok, err := c.get(ctx, uint64(i)); ok {
-				t.Fatalf("unexpected cache entry %d: %s", i, entry.lset)
-			} else if err != nil {
+			if entry, ok, err := c.get(ctx, uint64(i)); err != nil {
 				t.Fatalf("unexpected error: %s", err)
+			} else if ok {
+				t.Fatalf("unexpected cache entry %d: %s", i, entry.lset)
 			}
 		}
 		// We should be able to read them all.
 		for i := 3; i <= 7; i++ {
 			entry, ok, err := c.get(ctx, uint64(i))
-			if !ok {
-				t.Fatalf("label set with ref %d not found", i)
-			}
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
+			}
+			if !ok {
+				t.Fatalf("label set with ref %d not found", i)
 			}
 			if !entry.lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
 				t.Fatalf("unexpected label set for ref %d: %s", i, entry.lset)
@@ -164,19 +164,19 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 	//  Only series 4 and 7 should be left.
 	for i := 1; i <= 7; i++ {
 		if i != 4 && i != 7 {
-			if entry, ok, err := c.get(ctx, uint64(i)); ok {
-				t.Fatalf("unexpected cache entry %d: %s", i, entry.lset)
-			} else if err != nil {
+			if entry, ok, err := c.get(ctx, uint64(i)); err != nil {
 				t.Fatalf("unexpected error: %s", err)
+			} else if ok {
+				t.Fatalf("unexpected cache entry %d: %s", i, entry.lset)
 			}
 			continue
 		}
 		entry, ok, err := c.get(ctx, uint64(i))
-		if !ok {
-			t.Fatalf("entry with ref %d not found", i)
-		}
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
+		}
+		if !ok {
+			t.Fatalf("entry with ref %d not found", i)
 		}
 		if !entry.lset.Equals(labels.FromStrings("a", strconv.Itoa(i))) {
 			t.Fatalf("unexpected label set for ref %d: %s", i, entry.lset)
@@ -208,11 +208,11 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	// Query unset reference.
 	const refId = 1
 	entry, ok, err := c.get(ctx, refId)
-	if ok || entry != nil {
-		t.Fatalf("unexpected series entry found: %v", entry)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
+	}
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
 	}
 
 	// Set a series but the metadata and target getters won't have sufficient information for it.
@@ -224,11 +224,11 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	}
 	// We should still not receive anything.
 	entry, ok, err = c.get(ctx, refId)
-	if ok || entry != nil {
-		t.Fatalf("unexpected series entry found: %v", entry)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
+	}
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
 	}
 
 	// Populate the getters with data.
@@ -263,13 +263,15 @@ func TestSeriesCache_RefreshTooManyLabels(t *testing.T) {
 		}
 	}()
 	logger := log.NewLogfmtLogger(logBuffer)
-	targetMap := targetMap{}
-	targetMap["job1/inst1"] = &targets.Target{
-		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
-		DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+	targetMap := targetMap{
+		"job1/inst1": &targets.Target{
+			Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
+			DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+		},
 	}
-	metadataMap := metadataMap{}
-	metadataMap["job1/inst1/metric1"] = &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"}
+	metadataMap := metadataMap{
+		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+	}
 	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -290,11 +292,11 @@ func TestSeriesCache_RefreshTooManyLabels(t *testing.T) {
 
 	// Get shouldn't find data because of the previous error.
 	entry, ok, err := c.get(ctx, refId)
-	if ok || entry != nil {
-		t.Fatalf("unexpected series entry found: %v", entry)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
+	}
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
 	}
 }
 
@@ -312,13 +314,15 @@ func TestSeriesCache_RefreshUnknownResource(t *testing.T) {
 		}
 	}()
 	logger := log.NewLogfmtLogger(logBuffer)
-	targetMap := targetMap{}
-	targetMap["job1/inst1"] = &targets.Target{
-		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
-		DiscoveredLabels: promlabels.FromStrings("__unknown_resource", "resource2_a"),
+	targetMap := targetMap{
+		"job1/inst1": &targets.Target{
+			Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
+			DiscoveredLabels: promlabels.FromStrings("__unknown_resource", "resource2_a"),
+		},
 	}
-	metadataMap := metadataMap{}
-	metadataMap["job1/inst1/metric1"] = &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"}
+	metadataMap := metadataMap{
+		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+	}
 	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -335,11 +339,11 @@ func TestSeriesCache_RefreshUnknownResource(t *testing.T) {
 
 	// Get shouldn't find data because of the previous error.
 	entry, ok, err := c.get(ctx, refId)
-	if ok || entry != nil {
-		t.Fatalf("unexpected series entry found: %v", entry)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
+	}
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
 	}
 }
 
@@ -357,10 +361,11 @@ func TestSeriesCache_RefreshMetadataNotFound(t *testing.T) {
 		}
 	}()
 	logger := log.NewLogfmtLogger(logBuffer)
-	targetMap := targetMap{}
-	targetMap["job1/inst1"] = &targets.Target{
-		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
-		DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+	targetMap := targetMap{
+		"job1/inst1": &targets.Target{
+			Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
+			DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+		},
 	}
 	metadataMap := metadataMap{}
 	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false)
@@ -379,11 +384,11 @@ func TestSeriesCache_RefreshMetadataNotFound(t *testing.T) {
 
 	// Get shouldn't find data because of the previous error.
 	entry, ok, err := c.get(ctx, refId)
-	if ok || entry != nil {
-		t.Fatalf("unexpected series entry found: %v", entry)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
+	}
+	if ok || entry != nil {
+		t.Fatalf("unexpected series entry found: %v", entry)
 	}
 }
 
