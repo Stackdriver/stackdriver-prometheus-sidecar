@@ -335,6 +335,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	if target == nil {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "target_not_found"))
 		stats.Record(ctx, droppedSeries.M(1))
+		level.Debug(c.logger).Log("msg", "target not found", "labels", entry.lset)
 		return nil
 	}
 	// Remove target labels and __name__ label.
@@ -349,6 +350,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	if len(finalLabels) > maxLabelCount {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "too_many_labels"))
 		stats.Record(ctx, droppedSeries.M(1))
+		level.Debug(c.logger).Log("msg", "too many labels", "labels", entry.lset)
 		return nil
 	}
 
@@ -356,6 +358,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	if !ok {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "unknown_resource"))
 		stats.Record(ctx, droppedSeries.M(1))
+		level.Debug(c.logger).Log("msg", "unknown resource", "labels", target.Labels)
 		return nil
 	}
 	var (
@@ -382,6 +385,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		if metadata == nil {
 			ctx, _ = tag.New(ctx, tag.Insert(keyReason, "metadata_not_found"))
 			stats.Record(ctx, droppedSeries.M(1))
+			level.Debug(c.logger).Log("msg", "metadata not found", "metric_name", metricName)
 			return nil
 		}
 	}
