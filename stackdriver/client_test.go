@@ -147,6 +147,7 @@ func TestResolver(t *testing.T) {
 
 	conn, connerr := grpc.DialContext(ctx, address, grpc.WithInsecure())
 	c.conn = conn
+	defer c.conn.Close()
 	if connerr != nil {
 		t.Fatal(connerr)
 	}
