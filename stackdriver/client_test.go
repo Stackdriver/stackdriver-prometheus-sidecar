@@ -136,7 +136,7 @@ func TestResolver(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 	defer cancel()
 
-  // Failing with "context deadline exceeded"
+  // Currently failing with "context deadline exceeded"
 	conn, connerr := c.getConnection(ctx)
 
 	if connerr != nil {
