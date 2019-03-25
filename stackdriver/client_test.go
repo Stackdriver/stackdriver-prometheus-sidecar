@@ -105,11 +105,6 @@ func TestStoreErrorHandling(t *testing.T) {
 }
 
 func TestEmptyRequest(t *testing.T) {
-	listener := newLocalListener()
-	grpcServer := grpc.NewServer()
-	monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{})
-	go grpcServer.Serve(listener)
-	defer grpcServer.Stop()
 	serverURL, err := url.Parse("http://localhost:12345")
 	if err != nil {
 		t.Fatal(err)
@@ -143,6 +138,7 @@ func TestResolver(t *testing.T) {
 
   // Failing with "context deadline exceeded"
 	conn, connerr := c.getConnection(ctx)
+
 	if connerr != nil {
 		t.Fatal(connerr)
 	}
