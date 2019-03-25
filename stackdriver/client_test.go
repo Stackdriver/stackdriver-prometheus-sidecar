@@ -144,9 +144,12 @@ func TestResolver(t *testing.T) {
   // Currently doesn't work, "google: could not find default credentials. See
 	// https://developers.google.com/accounts/docs/application-default-credentials
 	// for more information."
-	_, connerr := c.getConnection(ctx)
-
+	conn, connerr := c.getConnection(ctx)
 	if connerr != nil {
 		t.Fatal(connerr)
+	}
+	requestedTarget := conn.Target()
+	if requestedTarget != "localhost" {
+		t.Errorf("ERROR: Remote address is %s, want localhost.", requestedTarget)
 	}
 }
