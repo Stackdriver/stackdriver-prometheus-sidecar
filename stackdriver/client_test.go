@@ -124,7 +124,7 @@ func TestEmptyRequest(t *testing.T) {
 }
 
 func TestResolver(t *testing.T) {
-	serverURL, err := url.Parse("http://stackdriver.invalid:443?auth=false")
+	serverURL, err := url.Parse("http://stackdriver.invalid?auth=false")
 	if err != nil {
 		t.Fatal(err)
 	}
