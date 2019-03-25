@@ -119,10 +119,16 @@ func TestEmptyRequest(t *testing.T) {
 }
 
 func TestResolver(t *testing.T) {
+  grpcServer := grpc.NewServer()
+	listener := newLocalListener()
+	go grpcServer.Serve(listener)
+	defer grpcServer.Stop()
+
 	serverURL, err := url.Parse("http://stackdriver.invalid?auth=false")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	res, _ := manual.GenerateAndRegisterManualResolver()
 	res.InitialAddrs([]resolver.Address{
 		{Addr: "localhost"},
@@ -133,17 +139,21 @@ func TestResolver(t *testing.T) {
 		Resolver: res,
 	})
 
+  address := c.url.Hostname()
 	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 	defer cancel()
 
-  // Currently failing with "context deadline exceeded"
-	conn, connerr := c.getConnection(ctx)
+	c.resolver.Scheme()
 
+	conn, connerr := grpc.DialContext(ctx, address, grpc.WithInsecure())
+	c.conn = conn
 	if connerr != nil {
 		t.Fatal(connerr)
 	}
-	requestedTarget := conn.Target()
-	if requestedTarget != "localhost" {
-		t.Errorf("ERROR: Remote address is %s, want localhost.", requestedTarget)
+
+	requestedTarget := c.conn.Target()
+	if requestedTarget != "stackdriver.invalid" {
+		t.Errorf("ERROR: Remote address is %s, want stackdriver.invalid.",
+			requestedTarget)
 	}
 }
