@@ -14,6 +14,7 @@
 package stackdriver
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -104,6 +105,11 @@ func TestStoreErrorHandling(t *testing.T) {
 }
 
 func TestEmptyRequest(t *testing.T) {
+	listener := newLocalListener()
+	grpcServer := grpc.NewServer()
+	monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{})
+	go grpcServer.Serve(listener)
+	defer grpcServer.Stop()
 	serverURL, err := url.Parse("http://localhost:12345")
 	if err != nil {
 		t.Fatal(err)
@@ -131,14 +137,16 @@ func TestResolver(t *testing.T) {
 		Timeout:  time.Second,
 		Resolver: res,
 	})
-	// Not sure if the following tests what I really want it to.
-	// CreateTimeSeriesRequest{} does call getConnection...
-	// In any case, it's failing with "could not find default credentials."
-	if conerr := c.Store(&monitoring.CreateTimeSeriesRequest{
-		TimeSeries: []*monitoring.TimeSeries{
-			&monitoring.TimeSeries{},
-		},
-	}); conerr != nil {
-		t.Fatal(conerr)
+
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+
+  // Currently doesn't work, "google: could not find default credentials. See
+	// https://developers.google.com/accounts/docs/application-default-credentials
+	// for more information."
+	_, connerr := c.getConnection(ctx)
+
+	if connerr != nil {
+		t.Fatal(connerr)
 	}
 }
