@@ -124,7 +124,7 @@ func TestEmptyRequest(t *testing.T) {
 }
 
 func TestResolver(t *testing.T) {
-	serverURL, err := url.Parse("http://stackdriver.invalid:443")
+	serverURL, err := url.Parse("http://stackdriver.invalid:443?auth=false")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,9 +141,7 @@ func TestResolver(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 	defer cancel()
 
-  // Currently doesn't work, "google: could not find default credentials. See
-	// https://developers.google.com/accounts/docs/application-default-credentials
-	// for more information."
+  // Failing with "context deadline exceeded"
 	conn, connerr := c.getConnection(ctx)
 	if connerr != nil {
 		t.Fatal(connerr)
