@@ -48,15 +48,17 @@ stackdriver-prometheus-sidecar --help
 
 #### Filters
 
-The `--filter` flag allows to provide filters which all series have to pass before being sent to Stackdriver. The flag may be repeated to provide several filters. Filters use the same syntax as the well-known PromQL label matchers, e.g.:
+The `--include` flag allows to provide filters which all series have to pass before being sent to Stackdriver. Filters use the same syntax as [Prometheus instant vector selectors](https://prometheus.io/docs/prometheus/latest/querying/basics/#instant-vector-selectors), e.g.:
 
 ```
-stackdriver-prometheus-sidecar --filter=job="k8s" --filter=__name__!~"cadvisor_.+" ...
+stackdriver-prometheus-sidecar --include='{__name__!~"cadvisor_.+",job="k8s"}' ...
 ```
 
 This drops all series which do not have a `job` label `k8s` and all metrics that have a name starting with `cadvisor_`.
 
-Note: On the command-line shell you may need to escape filters as `--filter='job="k8s"'`.
+For equality filter on metric name you can use the simpler notation, e.g. `--include='metric_name{label="foo"}'`.
+
+The flag may be repeated to provide several sets of filters, in which case the metric will be forwarded if it matches at least one of them.
 
 #### File
 

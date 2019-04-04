@@ -416,30 +416,37 @@ func TestSeriesCache_Filter(t *testing.T) {
 		}
 	}()
 	logger := log.NewLogfmtLogger(logBuffer)
-	c := newSeriesCache(logger, "", []*promlabels.Matcher{
-		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "a", Value: "a1"},
-		&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"},
+	c := newSeriesCache(logger, "", [][]*promlabels.Matcher{
+		{
+			&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "a", Value: "a1"},
+			&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"},
+		},
+		{&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "c", Value: "c1"}},
 	}, nil, targetMap, metadataMap, resourceMaps, "", false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Test base case of metric that passes all filters. This primarily
-	// ensures that our setup is correct and metrics aren't dropped for reasons
-	// other than the filter.
-	err := c.set(ctx, 1, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a1", "b", "b1"), 1)
-	if err != nil {
-		t.Fatal(err)
+	// Test that metrics that pass a single filterset do not get dropped.
+	lsets := []labels.Labels{
+		labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a1", "b", "b1"),
+		labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "c", "c1"),
 	}
-	if _, ok, err := c.get(ctx, 1); !ok || err != nil {
-		t.Fatalf("metric not found: %s", err)
+	for idx, lset := range lsets {
+		err := c.set(ctx, uint64(idx), lset, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok, err := c.get(ctx, uint64(idx)); !ok || err != nil {
+			t.Fatalf("metric not found: %s", err)
+		}
 	}
 	// Test filtered metric.
-	err = c.set(ctx, 2, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a1", "b", "b2"), 1)
+	err := c.set(ctx, 100, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a1", "b", "b2"), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := c.get(ctx, 2); err != nil {
+	if _, ok, err := c.get(ctx, 100); err != nil {
 		t.Fatalf("error retrieving metric: %s", err)
 	} else if ok {
 		t.Fatalf("metric was not filtered")

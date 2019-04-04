@@ -25,7 +25,6 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
@@ -52,6 +51,7 @@ import (
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/scrape"
 	oc_prometheus "go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/plugin/ocgrpc"
@@ -183,6 +183,7 @@ func main() {
 		prometheusURL      *url.URL
 		listenAddress      string
 		filters            []string
+		filtersets         []string
 		metricRenames      map[string]string
 		staticMetadata     []scrape.MetricMetadata
 		monitoringBackends []string
@@ -236,7 +237,10 @@ func main() {
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry.").
 		Default("0.0.0.0:9091").StringVar(&cfg.listenAddress)
 
-	a.Flag("filter", "PromQL-style label matcher which must pass for a series to be forwarded to Stackdriver. May be repeated.").
+	a.Flag("include", "PromQL metric and label matcher which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass any of the filter sets to be forwarded.").
+		StringsVar(&cfg.filtersets)
+
+	a.Flag("filter", "PromQL-style matcher for a single label which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass all filters to be forwarded. Deprecated, please use --include instead.").
 		StringsVar(&cfg.filters)
 
 	promlogflag.AddFlags(a, &cfg.logLevel)
@@ -309,9 +313,9 @@ func main() {
 		}
 	}
 
-	filters, err := parseFilters(cfg.filters...)
+	filtersets, err := parseFiltersets(logger, cfg.filtersets, cfg.filters)
 	if err != nil {
-		level.Error(logger).Log("msg", "Error parsing filters", "err", err)
+		level.Error(logger).Log("msg", "Error parsing --include (or --filter)", "err", err)
 		os.Exit(2)
 	}
 
@@ -368,7 +372,7 @@ func main() {
 		log.With(logger, "component", "Prometheus reader"),
 		cfg.walDirectory,
 		tailer,
-		filters,
+		filtersets,
 		cfg.metricRenames,
 		retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(staticLabels)),
 		metadataCache,
@@ -550,32 +554,25 @@ func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL)
 	}
 }
 
-// parseFilters parses a list of strings that contain PromQL-style label matchers and
+// parseFiltersets parses two flags that contain PromQL-style metric/label selectors and
 // returns a list of the resulting matchers.
-func parseFilters(strs ...string) (matchers []*labels.Matcher, err error) {
-	pattern := regexp.MustCompile(`^([a-zA-Z0-9_]+)(=|!=|=~|!~)"(.+)"$`)
-
-	for _, s := range strs {
-		parts := pattern.FindStringSubmatch(s)
-		if len(parts) != 4 {
-			return nil, fmt.Errorf("invalid filter %q", s)
-		}
-		var matcherType labels.MatchType
-		switch parts[2] {
-		case "=":
-			matcherType = labels.MatchEqual
-		case "!=":
-			matcherType = labels.MatchNotEqual
-		case "=~":
-			matcherType = labels.MatchRegexp
-		case "!~":
-			matcherType = labels.MatchNotRegexp
-		}
-		matcher, err := labels.NewMatcher(matcherType, parts[1], parts[3])
+func parseFiltersets(logger log.Logger, filtersets, filters []string) ([][]*labels.Matcher, error) {
+	var matchers [][]*labels.Matcher
+	if len(filters) > 0 {
+		level.Warn(logger).Log("msg", "--filter is deprecated; please use --include instead")
+		f := fmt.Sprintf("{%s}", strings.Join(filters, ","))
+		m, err := promql.ParseMetricSelector(f)
 		if err != nil {
-			return nil, fmt.Errorf("invalid filter %q: %s", s, err)
+			return nil, errors.Errorf("cannot parse --filter flag (metric filter '%s'): %q", f, err)
 		}
-		matchers = append(matchers, matcher)
+		matchers = append(matchers, m)
+	}
+	for _, f := range filtersets {
+		m, err := promql.ParseMetricSelector(f)
+		if err != nil {
+			return nil, errors.Errorf("cannot parse --include flag '%s': %q", f, err)
+		}
+		matchers = append(matchers, m)
 	}
 	return matchers, nil
 }

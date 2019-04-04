@@ -75,7 +75,7 @@ type seriesGetter interface {
 type seriesCache struct {
 	logger         log.Logger
 	dir            string
-	filters        []*promlabels.Matcher
+	filtersets     [][]*promlabels.Matcher
 	targets        TargetGetter
 	metadata       MetadataGetter
 	resourceMaps   []ResourceMap
@@ -129,7 +129,7 @@ func (e *seriesCacheEntry) shouldRefresh() bool {
 func newSeriesCache(
 	logger log.Logger,
 	dir string,
-	filters []*promlabels.Matcher,
+	filtersets [][]*promlabels.Matcher,
 	renames map[string]string,
 	targets TargetGetter,
 	metadata MetadataGetter,
@@ -143,7 +143,7 @@ func newSeriesCache(
 	return &seriesCache{
 		logger:         logger,
 		dir:            dir,
-		filters:        filters,
+		filtersets:     filtersets,
 		targets:        targets,
 		metadata:       metadata,
 		resourceMaps:   resourceMaps,
@@ -303,10 +303,8 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 // set the label set for the given reference.
 // maxSegment indicates the the highest segment at which the series was possibly defined.
 func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, maxSegment int) error {
-	for _, f := range c.filters {
-		if v := lset.Get(f.Name); !f.Matches(v) {
-			return nil
-		}
+	if c.filtersets != nil && !matchFiltersets(lset, c.filtersets) {
+		return nil
 	}
 	c.mtx.Lock()
 	c.entries[ref] = &seriesCacheEntry{
@@ -469,4 +467,25 @@ func (c *seriesCache) getResource(discovered, final promlabels.Labels) (*monitor
 		}
 	}
 	return nil, false
+}
+
+// matchFiltersets checks whether any of the supplied filtersets passes.
+func matchFiltersets(lset labels.Labels, filtersets [][]*promlabels.Matcher) bool {
+	for _, fs := range filtersets {
+		if matchFilterset(lset, fs) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchFilterset checks whether labels match a given list of label matchers.
+// All matchers need to match for the function to return true.
+func matchFilterset(lset labels.Labels, filterset []*promlabels.Matcher) bool {
+	for _, matcher := range filterset {
+		if !matcher.Matches(lset.Get(matcher.Name)) {
+			return false
+		}
+	}
+	return true
 }
