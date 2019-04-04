@@ -77,6 +77,29 @@ static_metadata:
 # - ...
 ```
 
+#### Counter Aggregator
+
+Counter Aggregator is an advanced feature of the sidecar that can be used to export a sum of multiple Prometheus counters to Stackdriver as a single CUMULATIVE metric.
+
+You might find this useful if you have counter metrics in Prometheus with high cardinality labels (or perhaps just counters exported by a large number of targets) which makes exporting all of them to Stackdriver directly too expensive, however you would like to have a cumulative metric that has the sum of those counters.
+
+Aggregated counters are configured in the `aggregated_counters` block of the configuration file. For example:
+
+```yaml
+aggregated_counters:
+  - metric: network_transmit_bytes
+    help: total number of bytes sent over eth0
+    filters:
+     - 'node_network_transmit_bytes_total{device="eth0"}'
+     - 'node_network_transmit_bytes{device="eth0"}'
+```
+
+In this example, the sidecar will export a new counter `network_transmit_bytes`, which will correspond to the total number of bytes transmitted over 'eth0' interface across all machines monitored by Prometheus. Counter Aggregator keeps track of all counters matching the filters and correctly handles counter resets. Like all internal metrics exported by the sidecar, the aggregated counter is exported using OpenCensus and will be available in Stackdriver as a custom metric (`custom.googleapis.com/opencensus/prometheus_sidecar/aggregated_counters/network_transmit_bytes`).
+
+Please note that by default metrics that match one of aggregated counter filters will still be exported to Stackdriver unless you have inclusion filters configured that prevent those metrics from being exported (see `--include`). When using Counter Aggregator you would usually want to configure a restrictive inclusion filter to avoid raw metrics from being exported to Stackdriver.
+
+For aggregated metrics to be exported to Stackdriver you will also need to enable Stackdriver monitoring backend in the sidecar by passing `--monitoring.backend=stackdriver` flag (please also pass `--monitoring.backend=prometheus` if you are collecting sidecar metrics to Prometheus).
+
 ## Compatibility
 
 The matrix below lists the versions of Prometheus Server and other dependencies that have been qualified to work with releases of `stackdriver-prometheus-sidecar`.

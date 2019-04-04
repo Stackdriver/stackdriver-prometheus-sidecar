@@ -73,15 +73,16 @@ type seriesGetter interface {
 // It can garbage collect obsolete entries based on the most recent WAL checkpoint.
 // Implements seriesGetter.
 type seriesCache struct {
-	logger         log.Logger
-	dir            string
-	filtersets     [][]*promlabels.Matcher
-	targets        TargetGetter
-	metadata       MetadataGetter
-	resourceMaps   []ResourceMap
-	metricsPrefix  string
-	useGkeResource bool
-	renames        map[string]string
+	logger            log.Logger
+	dir               string
+	filtersets        [][]*promlabels.Matcher
+	targets           TargetGetter
+	metadata          MetadataGetter
+	counterAggregator *CounterAggregator
+	resourceMaps      []ResourceMap
+	metricsPrefix     string
+	useGkeResource    bool
+	renames           map[string]string
 
 	// lastCheckpoint holds the index of the last checkpoint we garbage collected for.
 	// We don't have to redo garbage collection until a higher checkpoint appears.
@@ -114,6 +115,15 @@ type seriesCacheEntry struct {
 
 	// Last time we attempted to populate meta information about the series.
 	lastRefresh time.Time
+
+	// Whether the series needs to be exported.
+	exported bool
+
+	// Counter tracker that will be called with each new sample if this time series
+	// needs to feed data into aggregated counters.
+	// This is nil if there are no aggregated counters that need to be incremented
+	// for this time series.
+	tracker *counterTracker
 }
 
 const refreshInterval = 3 * time.Minute
@@ -136,22 +146,24 @@ func newSeriesCache(
 	resourceMaps []ResourceMap,
 	metricsPrefix string,
 	useGkeResource bool,
+	counterAggregator *CounterAggregator,
 ) *seriesCache {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &seriesCache{
-		logger:         logger,
-		dir:            dir,
-		filtersets:     filtersets,
-		targets:        targets,
-		metadata:       metadata,
-		resourceMaps:   resourceMaps,
-		entries:        map[uint64]*seriesCacheEntry{},
-		intervals:      map[uint64]sampleInterval{},
-		metricsPrefix:  metricsPrefix,
-		useGkeResource: useGkeResource,
-		renames:        renames,
+		logger:            logger,
+		dir:               dir,
+		filtersets:        filtersets,
+		targets:           targets,
+		metadata:          metadata,
+		resourceMaps:      resourceMaps,
+		entries:           map[uint64]*seriesCacheEntry{},
+		intervals:         map[uint64]sampleInterval{},
+		metricsPrefix:     metricsPrefix,
+		useGkeResource:    useGkeResource,
+		renames:           renames,
+		counterAggregator: counterAggregator,
 	}
 }
 
@@ -303,13 +315,22 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 // set the label set for the given reference.
 // maxSegment indicates the the highest segment at which the series was possibly defined.
 func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, maxSegment int) error {
-	if c.filtersets != nil && !matchFiltersets(lset, c.filtersets) {
+	exported := false
+	if c.filtersets == nil || matchFiltersets(lset, c.filtersets) {
+		exported = true
+	}
+	counterTracker := c.counterAggregator.getTracker(lset)
+
+	if !exported && counterTracker == nil {
 		return nil
 	}
+
 	c.mtx.Lock()
 	c.entries[ref] = &seriesCacheEntry{
 		maxSegment: maxSegment,
 		lset:       lset,
+		exported:   exported,
+		tracker:    counterTracker,
 	}
 	c.mtx.Unlock()
 	return c.refresh(ctx, ref)
