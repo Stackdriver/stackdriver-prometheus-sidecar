@@ -50,7 +50,7 @@ stackdriver-prometheus-sidecar --help
 
 The `--filter` flag allows to provide filters which all series have to pass before being sent to Stackdriver. The flag may be repeated to provide several filters. Filters use the same syntax as the well-known PromQL label matchers, e.g.:
 
-```sh
+```
 stackdriver-prometheus-sidecar --filter=job="k8s" --filter=__name__!~"cadvisor_.+" ...
 ```
 
