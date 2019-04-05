@@ -12,7 +12,7 @@ Required environment variables:
 
 Optional environment variables:
 * `SIDECAR_IMAGE_NAME`: Image name parameter for the sidecar (default:
-  gcr.io/stackdriver-kubernetes-1337/stackdriver-prometheus-sidecar)
+  gcr.io/stackdriver-kubernetes-prometheus/stackdriver-prometheus-sidecar)
 
 If your cluster is not the default context:
 
