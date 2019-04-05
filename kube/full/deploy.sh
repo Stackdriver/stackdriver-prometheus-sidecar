@@ -5,7 +5,8 @@ set -u
 
 pushd "$(dirname "$0")"
 
-# Override to use a different Docker image version for the sidecar.
+# Override to use a different Docker image name or version for the sidecar.
+export SIDECAR_IMAGE_NAME=${SIDECAR_IMAGE_NAME:-'gcr.io/stackdriver-kubernetes-1337/stackdriver-prometheus-sidecar'}
 export SIDECAR_IMAGE_TAG=${SIDECAR_IMAGE_TAG:-'master'}
 export KUBE_NAMESPACE=${KUBE_NAMESPACE:-'default'}
 

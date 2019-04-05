@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: sidecar
-        image: gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar:${SIDECAR_IMAGE_TAG}
+        image: ${SIDECAR_IMAGE_NAME}:${SIDECAR_IMAGE_TAG}
         imagePullPolicy: Always
         args:
         - \"--stackdriver.project-id=${GCP_PROJECT}\"
