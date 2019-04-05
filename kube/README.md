@@ -10,6 +10,10 @@ Required environment variables:
 * `GCP_PROJECT`: GCP project parameter for the sidecar
 * `SIDECAR_IMAGE_TAG`: Version parameter for the sidecar
 
+Optional environment variables:
+* `SIDECAR_IMAGE_NAME`: Image name parameter for the sidecar (default:
+  gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar)
+
 If your cluster is not the default context:
 
 ```sh
