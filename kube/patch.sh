@@ -12,6 +12,9 @@ if [  $# -le 1 ]; then
   exit 1
 fi
 
+# Override to use a different Docker image name for the sidecar.
+export SIDECAR_IMAGE_NAME=${SIDECAR_IMAGE_NAME:-'gcr.io/stackdriver-kubernetes-1337/stackdriver-prometheus-sidecar'}
+
 kubectl -n "${KUBE_NAMESPACE}" patch "$1" "$2" --type strategic --patch "
 spec:
   template:

@@ -8,8 +8,11 @@ Required environment variables:
 * `KUBE_CLUSTER`: cluster name parameter for the sidecar
 * `GCP_REGION`: GCP region parameter for the sidecar
 * `GCP_PROJECT`: GCP project parameter for the sidecar
-* `SIDECAR_IMAGE_NAME`: Image name parameter for the sidecar
 * `SIDECAR_IMAGE_TAG`: Version parameter for the sidecar
+
+Optional environment variables:
+* `SIDECAR_IMAGE_NAME`: Image name parameter for the sidecar (default:
+  gcr.io/stackdriver-kubernetes-1337/stackdriver-prometheus-sidecar)
 
 If your cluster is not the default context:
 
