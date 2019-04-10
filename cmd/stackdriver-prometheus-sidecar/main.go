@@ -32,6 +32,7 @@ import (
 	"time"
 
 	md "cloud.google.com/go/compute/metadata"
+	oc_stackdriver "contrib.go.opencensus.io/exporter/stackdriver"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
@@ -184,6 +185,7 @@ func main() {
 		filters            []string
 		metricRenames      map[string]string
 		staticMetadata     []scrape.MetricMetadata
+		monitoringBackends []string
 
 		logLevel promlog.AllowedLevel
 	}{}
@@ -228,6 +230,9 @@ func main() {
 	a.Flag("prometheus.api-address", "Address to listen on for UI, API, and telemetry.").
 		Default("http://127.0.0.1:9090/").URLVar(&cfg.prometheusURL)
 
+	a.Flag("monitoring.backend", "Monitoring backend(s) for internal metrics").Default("prometheus").
+		EnumsVar(&cfg.monitoringBackends, "prometheus", "stackdriver")
+
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry.").
 		Default("0.0.0.0:9091").StringVar(&cfg.listenAddress)
 
@@ -258,20 +263,38 @@ func main() {
 	level.Info(logger).Log("host_details", Uname())
 	level.Info(logger).Log("fd_limits", FdLimits())
 
-	promExporter, err := oc_prometheus.NewExporter(oc_prometheus.Options{
-		Registry: prometheus.DefaultRegisterer.(*prometheus.Registry),
-	})
-	if err != nil {
-		level.Error(logger).Log("msg", "Creating Prometheus exporter failed", "err", err)
-		os.Exit(1)
-	}
-	view.RegisterExporter(promExporter)
-
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
 	if *projectId == "" {
 		*projectId = getGCEProjectID()
 	}
+
+	for _, backend := range cfg.monitoringBackends {
+		switch backend {
+		case "prometheus":
+			promExporter, err := oc_prometheus.NewExporter(oc_prometheus.Options{
+				Registry: prometheus.DefaultRegisterer.(*prometheus.Registry),
+			})
+			if err != nil {
+				level.Error(logger).Log("msg", "Creating Prometheus exporter failed", "err", err)
+				os.Exit(1)
+			}
+			view.RegisterExporter(promExporter)
+		case "stackdriver":
+			sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{ProjectID: *projectId})
+			if err != nil {
+				level.Error(logger).Log("msg", "Creating Stackdriver exporter failed", "err", err)
+				os.Exit(1)
+			}
+			defer sd.Flush()
+			view.RegisterExporter(sd)
+			view.SetReportingPeriod(60 * time.Second)
+		default:
+			level.Error(logger).Log("msg", "Unknown monitoring backend", "backend", backend)
+			os.Exit(1)
+		}
+	}
+
 	var staticLabels = map[string]string{
 		retrieval.ProjectIDLabel:             *projectId,
 		retrieval.KubernetesLocationLabel:    cfg.kubernetesLabels.location,
