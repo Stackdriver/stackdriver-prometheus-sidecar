@@ -122,8 +122,9 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 
 const (
 	metricSuffixBucket = "_bucket"
-	metricSuffixSum    = "_sum"
+	metricSuffixSum    = "_total"
 	metricSuffixCount  = "_count"
+	// metricSuffixTotal  = "_total"
 )
 
 func stripComplexMetricSuffix(name string) (string, string, bool) {
@@ -136,6 +137,9 @@ func stripComplexMetricSuffix(name string) (string, string, bool) {
 	if strings.HasSuffix(name, metricSuffixSum) {
 		return name[:len(name)-len(metricSuffixSum)], metricSuffixSum, true
 	}
+	// if strings.HasSuffix(name, metricSuffixTotal) {
+	// 	return name[:len(name)-len(metricSuffixTotal)], metricSuffixTotal, true
+	// }
 	return name, "", false
 }
 
@@ -213,7 +217,7 @@ Loop:
 		if !strings.HasPrefix(name, baseName) || !histogramLabelsEqual(e.lset, matchLset) {
 			break
 		}
-		// In general, a scrape cannot contain the same (set of) series repeatedlty but for different timestamps.
+		// In general, a scrape cannot contain the same (set of) series repeatedly but for different timestamps.
 		// It could still happen with bad clients though and we are doing it in tests for simplicity.
 		// If we detect the same series as before but for a different timestamp, return the histogram up to this
 		// series and leave the duplicate time series untouched on the input.
