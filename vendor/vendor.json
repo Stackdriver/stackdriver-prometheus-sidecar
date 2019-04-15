@@ -654,6 +654,18 @@
 			"revisionTime": "2017-01-17T20:06:51Z"
 		},
 		{
+			"checksumSHA1": "6EIQaeaWECn3zlechdGkqmIKld4=",
+			"path": "github.com/opentracing/opentracing-go",
+			"revision": "659c90643e714681897ec2521c60567dd21da733",
+			"revisionTime": "2019-03-23T20:25:03Z"
+		},
+		{
+			"checksumSHA1": "tnkdNJbJxNKuPZMWapP1xhKIIGw=",
+			"path": "github.com/opentracing/opentracing-go/log",
+			"revision": "659c90643e714681897ec2521c60567dd21da733",
+			"revisionTime": "2019-03-23T20:25:03Z"
+		},
+		{
 			"checksumSHA1": "ynJSWoF6v+3zMnh9R0QmmG6iGV8=",
 			"path": "github.com/pkg/errors",
 			"revision": "248dadf4e9068a0b3e79f02ed0a610d935de5302",
@@ -846,6 +858,12 @@
 			"revisionTime": "2018-06-05T10:30:19Z"
 		},
 		{
+			"checksumSHA1": "xqy3Mg4HizTrdtie9Ql7YlhBvCs=",
+			"path": "github.com/prometheus/prometheus/promql",
+			"revision": "057a5ae2b147b6a1dfe0d3a667e13ed6535dbe20",
+			"revisionTime": "2018-06-05T10:30:19Z"
+		},
+		{
 			"checksumSHA1": "+MySwSXOb6nwbb3tQi3GaVxDHbM=",
 			"path": "github.com/prometheus/prometheus/scrape",
 			"revision": "67dc912ac8b24f94a1fc478f352d25179c94ab9b",
@@ -858,9 +876,27 @@
 			"revisionTime": "2018-06-05T10:30:19Z"
 		},
 		{
+			"checksumSHA1": "ibW4coim9SvqJbFEcidzGOQ4sR0=",
+			"path": "github.com/prometheus/prometheus/storage/tsdb",
+			"revision": "057a5ae2b147b6a1dfe0d3a667e13ed6535dbe20",
+			"revisionTime": "2018-06-05T10:30:19Z"
+		},
+		{
+			"checksumSHA1": "tNz+YU7QG0xzETqtLOqClATw9IQ=",
+			"path": "github.com/prometheus/prometheus/util/stats",
+			"revision": "057a5ae2b147b6a1dfe0d3a667e13ed6535dbe20",
+			"revisionTime": "2018-06-05T10:30:19Z"
+		},
+		{
 			"checksumSHA1": "1Z1LToD/EEb1r+sWog8vtwfaGBk=",
 			"path": "github.com/prometheus/prometheus/util/strutil",
 			"revision": "ae96914199b4e1e47b27a3789c3044ee8a14e796",
+			"revisionTime": "2018-06-05T10:30:19Z"
+		},
+		{
+			"checksumSHA1": "H5Iboq7JzeHIxKpL8DYGNBitI1A=",
+			"path": "github.com/prometheus/prometheus/util/testutil",
+			"revision": "057a5ae2b147b6a1dfe0d3a667e13ed6535dbe20",
 			"revisionTime": "2018-06-05T10:30:19Z"
 		},
 		{

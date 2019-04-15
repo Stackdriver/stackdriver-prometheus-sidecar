@@ -23,6 +23,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/go-kit/kit/log"
 )
 
 var promPath string
@@ -114,40 +116,58 @@ Loop:
 	}
 }
 
-func TestParseFilters(t *testing.T) {
-	input := []string{
-		`__name__="test1"`,
-		`a1=~"test2.+"`,
-		`a2!="test3"`,
-		`a3!~"test4.*"`,
-	}
-	// Test success cases.
-	filters, err := parseFilters(input...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// We verify by comparing the serializiation produced by the parsed matchers again.
-	// Deep equal comparison doesn't work since some fields deep down in the produced regexes differ
-	// even though everything being equal semantically.
-	if len(filters) != len(input) {
-		t.Fatalf("unexpected result length %d", len(filters))
-	}
-	for i, f := range filters {
-		if f.String() != input[i] {
-			t.Fatalf("unexpected parsed filter %v, want %v", f, input[i])
-		}
-	}
-	// Test failure cases.
-	cases := []string{
-		`a-b="1"`, // Invalid character in key.
-		`a="1`,    // Missing trailing quote.
-		`a=1"`,    // Missing leading quote.
-		`a!=="1"`, // Invalid operator.
-	}
-	for _, c := range cases {
-		if _, err := parseFilters(c); err == nil {
-			t.Fatalf("expected error for %q but got none", c)
-		}
+func TestParseWhitelists(t *testing.T) {
+	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	for _, tt := range []struct {
+		name         string
+		filtersets   []string
+		filters      []string
+		wantMatchers int
+	}{
+		{"both filters and filtersets defined",
+			[]string{
+				`metric_name`,
+				`metric_name{label="value"}`,
+			},
+			[]string{
+				`__name__="test1"`,
+				`a1=~"test2.+"`,
+				`a2!="test3"`,
+				`a3!~"test4.*"`,
+			}, 3},
+		{"just filtersets", []string{"metric_name"}, []string{}, 1},
+		{"just filters", []string{}, []string{`__name__="foo"`}, 1},
+		{"neither filtersets nor filters", []string{}, []string{}, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test success cases.
+			parsed, err := parseFiltersets(logger, tt.filtersets, tt.filters)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(parsed) != tt.wantMatchers {
+				t.Fatalf("expected %d matchers; got %d", tt.wantMatchers, len(parsed))
+			}
+		})
 	}
 
+	// Test failure cases.
+	for _, tt := range []struct {
+		name       string
+		filtersets []string
+		filters    []string
+	}{
+		{"Invalid character in key", []string{}, []string{`a-b="1"`}},
+		{"Missing trailing quote", []string{}, []string{`a="1`}},
+		{"Missing leading quote", []string{}, []string{`a=1"`}},
+		{"Invalid operator", []string{}, []string{`a!=="1"`}},
+		{"Invalid operator in filterset", []string{`{a!=="1"}`}, []string{}},
+		{"Empty filterset", []string{""}, []string{}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := parseFiltersets(logger, tt.filtersets, tt.filters); err == nil {
+				t.Fatalf("expected error, but got none")
+			}
+		})
+	}
 }
