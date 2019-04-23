@@ -337,6 +337,9 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		return nil
 	}
 	// Remove target labels and __name__ label.
+	// Stackdriver only accepts a limited amount of labels, so we choose to economize aggressively here. This should be OK
+	// because we expect that the target.Labels will be redundant with the Stackdriver MonitoredResource, which is derived
+	// from the target Labels and DiscoveredLabels.
 	finalLabels := targets.DropTargetLabels(pkgLabels(entry.lset), target.Labels)
 	for i, l := range finalLabels {
 		if l.Name == "__name__" {
