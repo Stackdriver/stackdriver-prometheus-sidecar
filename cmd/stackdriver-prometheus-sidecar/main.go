@@ -32,6 +32,7 @@ import (
 
 	md "cloud.google.com/go/compute/metadata"
 	oc_stackdriver "contrib.go.opencensus.io/exporter/stackdriver"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/file"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
@@ -187,6 +188,7 @@ func main() {
 		stackdriverAddress *url.URL
 		metricsPrefix      string
 		useGkeResource     bool
+		storeInFiles       bool
 		walDirectory       string
 		prometheusURL      *url.URL
 		listenAddress      string
@@ -238,6 +240,9 @@ func main() {
 	a.Flag("stackdriver.use-gke-resource",
 		"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
 		Default("false").BoolVar(&cfg.useGkeResource)
+
+	a.Flag("stackdriver.store-in-files", "Whethere to store data in local files.").
+		Default("false").BoolVar(&cfg.storeInFiles)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -393,16 +398,26 @@ func main() {
 	// works well.
 	config.DefaultQueueConfig.Capacity = 3 * stackdriver.MaxTimeseriesesPerRequest
 
-	queueManager, err := stackdriver.NewQueueManager(
-		log.With(logger, "component", "queue_manager"),
-		config.DefaultQueueConfig,
-		&clientFactory{
+	var scf stackdriver.StorageClientFactory
+
+	if cfg.storeInFiles {
+		scf = &fileClientFactory{
+			logger:     log.With(logger, "component", "storage"),
+		}
+	} else {
+		scf = &stackdriverClientFactory{
 			logger:            log.With(logger, "component", "storage"),
 			projectIdResource: cfg.projectIdResource,
 			url:               cfg.stackdriverAddress,
 			timeout:           10 * time.Second,
 			manualResolver:    cfg.manualResolver,
-		},
+		}
+	}
+
+	queueManager, err := stackdriver.NewQueueManager(
+		log.With(logger, "component", "queue_manager"),
+		config.DefaultQueueConfig,
+		scf,
 		tailer,
 	)
 	if err != nil {
@@ -561,7 +576,7 @@ func main() {
 	level.Info(logger).Log("msg", "See you next time!")
 }
 
-type clientFactory struct {
+type stackdriverClientFactory struct {
 	logger            log.Logger
 	projectIdResource string
 	url               *url.URL
@@ -569,18 +584,30 @@ type clientFactory struct {
 	manualResolver    *manual.Resolver
 }
 
-func (f *clientFactory) New() stackdriver.StorageClient {
+func (s *stackdriverClientFactory) New() stackdriver.StorageClient {
 	return stackdriver.NewClient(&stackdriver.ClientConfig{
-		Logger:    f.logger,
-		ProjectId: f.projectIdResource,
-		URL:       f.url,
-		Timeout:   f.timeout,
-		Resolver:  f.manualResolver,
+		Logger:    s.logger,
+		ProjectId: s.projectIdResource,
+		URL:       s.url,
+		Timeout:   s.timeout,
+		Resolver:  s.manualResolver,
 	})
 }
 
-func (f *clientFactory) Name() string {
-	return f.url.String()
+func (s *stackdriverClientFactory) Name() string {
+	return s.url.String()
+}
+
+type fileClientFactory struct {
+	logger log.Logger
+}
+
+func (f *fileClientFactory) New() stackdriver.StorageClient {
+	return file.NewFileClient(f.logger)
+}
+
+func (f *fileClientFactory) Name() string {
+	return "fileClientFactory"
 }
 
 func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL) {
