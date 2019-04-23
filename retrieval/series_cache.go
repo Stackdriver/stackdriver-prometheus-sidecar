@@ -315,10 +315,7 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 // set the label set for the given reference.
 // maxSegment indicates the the highest segment at which the series was possibly defined.
 func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, maxSegment int) error {
-	exported := false
-	if c.filtersets == nil || matchFiltersets(lset, c.filtersets) {
-		exported = true
-	}
+	exported := c.filtersets == nil || matchFiltersets(lset, c.filtersets)
 	counterTracker := c.counterAggregator.getTracker(lset)
 
 	if !exported && counterTracker == nil {

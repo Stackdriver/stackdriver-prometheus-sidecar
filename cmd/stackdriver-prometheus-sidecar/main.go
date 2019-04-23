@@ -667,11 +667,11 @@ func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadat
 		}
 		a := &retrieval.CounterAggregatorMetricConfig{Help: c.Help}
 		for _, f := range c.Filters {
-			matchers, err := promql.ParseMetricSelector(f)
+			matcher, err := promql.ParseMetricSelector(f)
 			if err != nil {
 				return nil, nil, nil, errors.Errorf("cannot parse metric selector '%s': %q", f, err)
 			}
-			a.Matchers = append(a.Matchers, matchers)
+			a.Matchers = append(a.Matchers, matcher)
 		}
 		aggregations[c.Metric] = a
 	}
