@@ -58,7 +58,7 @@ This drops all series which do not have a `job` label `k8s` and all metrics that
 
 For equality filter on metric name you can use the simpler notation, e.g. `--include='metric_name{label="foo"}'`.
 
-The flag may be repeated to provide several sets of filters, in which case the metric will be forwarded if it matches at least one of them. Please note that inclusion filters only apply to Prometheus metrics prixied directly, and do not apply to [aggregated counters](#counter-aggregator).
+The flag may be repeated to provide several sets of filters, in which case the metric will be forwarded if it matches at least one of them. Please note that inclusion filters only apply to Prometheus metrics proxied directly, and do not apply to [aggregated counters](#counter-aggregator).
 
 #### File
 
@@ -94,7 +94,9 @@ aggregated_counters:
      - 'node_network_transmit_bytes{device="eth0"}'
 ```
 
-In this example, the sidecar will export a new counter `network_transmit_bytes`, which will correspond to the total number of bytes transmitted over 'eth0' interface across all machines monitored by Prometheus. Counter Aggregator keeps track of all counters matching the filters and correctly handles counter resets. Like all internal metrics exported by the sidecar, the aggregated counter is exported using OpenCensus and will be available in Stackdriver as a custom metric (`custom.googleapis.com/opencensus/prometheus_sidecar/aggregated_counters/network_transmit_bytes`).
+In this example, the sidecar will export a new counter `network_transmit_bytes`, which will correspond to the total number of bytes transmitted over 'eth0' interface across all machines monitored by Prometheus. Counter Aggregator keeps track of all counters matching the filters and correctly handles counter resets. Like all internal metrics exported by the sidecar, the aggregated counter is exported using OpenCensus and will be available in Stackdriver as a custom metric (`custom.googleapis.com/opencensus/network_transmit_bytes`).
+
+A list of [Prometheus instant vector selectors](https://prometheus.io/docs/prometheus/latest/querying/basics/#instant-vector-selectors) is expected in the `filters` field. A time series needs to match any of the specified selectors to be included in the aggregated counter.
 
 For aggregated metrics to be exported to Stackdriver you will also need to enable Stackdriver monitoring backend in the sidecar by passing `--monitoring.backend=stackdriver` flag (please also pass `--monitoring.backend=prometheus` if you are collecting sidecar metrics to Prometheus).
 

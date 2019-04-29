@@ -28,11 +28,13 @@ import (
 
 var statsRecord = stats.Record
 
-const metricPrefix = "prometheus_sidecar/aggregated_counters/"
-
 // CounterAggregator provides the 'aggregated counters' feature of the sidecar.
 // It can be used to export a sum of multiple counters from Prometheus to
 // Stackdriver as a single cumulative metric.
+// Each aggregated counter is associated with a single OpenCensus counter that
+// can then be exported to Stackdriver (as a CUMULATIVE metric) or exposed to
+// Prometheus via the standard `/metrics` endpoint. Regular flushing of counter
+// values is implemented by OpenCensus.
 type CounterAggregator struct {
 	logger   log.Logger
 	counters []*aggregatedCounter
@@ -74,10 +76,9 @@ type counterTracker struct {
 func NewCounterAggregator(logger log.Logger, config *CounterAggregatorConfig) (*CounterAggregator, error) {
 	aggregator := &CounterAggregator{logger: logger}
 	for metric, cfg := range *config {
-		name := metricPrefix + metric
-		measure := stats.Float64(name, cfg.Help, stats.UnitDimensionless)
+		measure := stats.Float64(metric, cfg.Help, stats.UnitDimensionless)
 		v := &view.View{
-			Name:        name,
+			Name:        metric,
 			Description: cfg.Help,
 			Measure:     measure,
 			Aggregation: view.Sum(),
