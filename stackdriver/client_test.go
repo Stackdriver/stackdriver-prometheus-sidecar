@@ -111,7 +111,7 @@ func TestEmptyRequest(t *testing.T) {
 	}
 	c := NewClient(&ClientConfig{
 		URL:     serverURL,
-		Timeout: time.Second,
+		Timeout: time.Second * 60,
 	})
 	if err := c.Store(&monitoring.CreateTimeSeriesRequest{}); err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestEmptyRequest(t *testing.T) {
 }
 
 func TestResolver(t *testing.T) {
-  grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer()
 	listener := newLocalListener()
 	go grpcServer.Serve(listener)
 	defer grpcServer.Stop()
@@ -139,17 +139,14 @@ func TestResolver(t *testing.T) {
 		Resolver: res,
 	})
 
-  address := c.url.Hostname()
+	address := c.url.Hostname()
 	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 	defer cancel()
 
-	c.resolver.Scheme()
+	address = c.resolver.Scheme() + ":" + address
 
-	conn, connerr := grpc.DialContext(ctx, address, grpc.WithInsecure())
-	c.conn = conn
-	defer c.conn.Close()
-	if connerr != nil {
-		t.Fatal(connerr)
+	if c.conn, err = grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock()); err != nil {
+		t.Fatal("ERROR: ", err)
 	}
 
 	requestedTarget := c.conn.Target()
