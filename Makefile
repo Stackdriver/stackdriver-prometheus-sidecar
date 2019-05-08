@@ -54,7 +54,7 @@ test-short:
 
 test:
 	@echo ">> running all tests"
-	@$(GO) test $(shell $(GO) list ./... | grep -v /vendor/ | grep -v examples)
+	@$(GO) test $(shell $(GO) list ./... | grep -v /vendor/ | grep -v examples) -test.v -args log.level=debug
 
 cover:
 	@echo ">> running all tests with coverage"

@@ -14,13 +14,15 @@
 package stackdriver
 
 import (
-	"context"
+	"bytes"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-kit/kit/log"
 
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
@@ -121,8 +123,17 @@ func TestEmptyRequest(t *testing.T) {
 func TestResolver(t *testing.T) {
 	grpcServer := grpc.NewServer()
 	listener := newLocalListener()
+	monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
 	go grpcServer.Serve(listener)
 	defer grpcServer.Stop()
+
+	logBuffer := &bytes.Buffer{}
+	defer func() {
+		if logBuffer.Len() > 0 {
+			t.Log(logBuffer.String())
+		}
+	}()
+	logger := log.NewLogfmtLogger(logBuffer)
 
 	serverURL, err := url.Parse("http://stackdriver.invalid?auth=false")
 	if err != nil {
@@ -131,26 +142,32 @@ func TestResolver(t *testing.T) {
 
 	res, _ := manual.GenerateAndRegisterManualResolver()
 	res.InitialAddrs([]resolver.Address{
-		{Addr: "localhost"},
+		{Addr: listener.Addr().String()},
 	})
+	//resolver.SetDefaultScheme(res.Scheme())
+
 	c := NewClient(&ClientConfig{
 		URL:      serverURL,
 		Timeout:  time.Second,
 		Resolver: res,
+		Logger: logger,
 	})
 
-	address := c.url.Hostname()
-	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
-	defer cancel()
+	err = c.Store(&monitoring.CreateTimeSeriesRequest{
+		TimeSeries: []*monitoring.TimeSeries{
+			&monitoring.TimeSeries{},
+		},
+	})
 
-	address = c.resolver.Scheme() + ":" + address
-
-	if c.conn, err = grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock()); err != nil {
-		t.Fatal("ERROR: ", err)
+	if err != nil {
+		t.Fatal(err)
 	}
 
+	if c.conn == nil {
+		t.Fatal("NIL")
+	}
 	requestedTarget := c.conn.Target()
-	if requestedTarget != "stackdriver.invalid" {
+	if requestedTarget[12:] != "stackdriver.invalid" {
 		t.Errorf("ERROR: Remote address is %s, want stackdriver.invalid.",
 			requestedTarget)
 	}

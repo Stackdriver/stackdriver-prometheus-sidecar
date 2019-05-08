@@ -88,6 +88,9 @@ var userAgent = fmt.Sprintf("StackdriverPrometheus/%s", version.Version)
 
 func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if c.conn != nil {
+		level.Debug(c.logger).Log(
+			"EMPTY", "conn",
+		)
 		return c.conn, nil
 	}
 
@@ -127,6 +130,8 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if c.resolver != nil {
 		address = c.resolver.Scheme() + ":" + address
 	}
+	level.Debug(c.logger).Log(
+		"address", address)
 	conn, err := grpc.DialContext(ctx, address, dopts...)
 	c.conn = conn
 	return conn, err
