@@ -20,10 +20,6 @@
 // All APIs in this package are experimental.
 package resolver
 
-import(
-	"runtime/debug"
-)
-
 var (
 	// m is a map from scheme to resolver builder.
 	m = make(map[string]Builder)
@@ -47,8 +43,6 @@ func Register(b Builder) {
 //
 // If no builder is register with the scheme, nil will be returned.
 func Get(scheme string) Builder {
-	debug.PrintStack()
-	println("TEEEEEEST SCHEME IN GET" + scheme)
 	if b, ok := m[scheme]; ok {
 		return b
 	}

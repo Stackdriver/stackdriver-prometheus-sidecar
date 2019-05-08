@@ -144,7 +144,6 @@ func TestResolver(t *testing.T) {
 	res.InitialAddrs([]resolver.Address{
 		{Addr: listener.Addr().String()},
 	})
-	//resolver.SetDefaultScheme(res.Scheme())
 
 	c := NewClient(&ClientConfig{
 		URL:      serverURL,
@@ -167,7 +166,7 @@ func TestResolver(t *testing.T) {
 		t.Fatal("NIL")
 	}
 	requestedTarget := c.conn.Target()
-	if requestedTarget[12:] != "stackdriver.invalid" {
+	if requestedTarget != c.resolver.Scheme() + ":///" + "stackdriver.invalid" {
 		t.Errorf("ERROR: Remote address is %s, want stackdriver.invalid.",
 			requestedTarget)
 	}

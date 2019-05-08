@@ -128,7 +128,7 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 		address = fmt.Sprintf("%s:%s", address, c.url.Port())
 	}
 	if c.resolver != nil {
-		address = c.resolver.Scheme() + ":" + address
+		address = c.resolver.Scheme() + ":///" + address
 	}
 	level.Debug(c.logger).Log(
 		"address", address)
