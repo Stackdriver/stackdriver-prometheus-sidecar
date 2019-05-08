@@ -267,6 +267,19 @@ func main() {
 			level.Error(logger).Log("msg", msg, "err", err)
 			os.Exit(2)
 		}
+
+		// Enable Stackdriver monitoring backend if counter aggregator configuration is present.
+		if len(cfg.aggregations) > 0 {
+			sdEnabled := false
+			for _, backend := range cfg.monitoringBackends {
+				if backend == "stackdriver" {
+					sdEnabled = true
+				}
+			}
+			if !sdEnabled {
+				cfg.monitoringBackends = append(cfg.monitoringBackends, "stackdriver")
+			}
+		}
 	}
 
 	level.Info(logger).Log("msg", "Starting Stackdriver Prometheus sidecar", "version", version.Info())

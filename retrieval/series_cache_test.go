@@ -249,7 +249,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	if entry == nil || !ok || err != nil {
 		t.Errorf("expected metadata but got none, error: %s", err)
 	}
-	if entry.exported != true {
+	if !entry.exported {
 		t.Errorf("expected to get exported entry")
 	}
 }
@@ -495,8 +495,8 @@ func TestSeriesCache_CounterAggregator(t *testing.T) {
 	for idx, tt := range []struct {
 		name         string
 		lset         labels.Labels
-		wantExported bool
-		wantTracked  bool
+		wantExported bool // Metric is expected to be exported to Stackdriver.
+		wantTracked  bool // Metric is included in one of the aggregated counters, and should have non-nil counter tracker.
 	}{
 		{"exported and tracked", labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a1", "b", "b1"), true, true},
 		{"exported", labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a2", "b", "b1"), true, false},

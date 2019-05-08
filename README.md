@@ -98,8 +98,6 @@ In this example, the sidecar will export a new counter `network_transmit_bytes`,
 
 A list of [Prometheus instant vector selectors](https://prometheus.io/docs/prometheus/latest/querying/basics/#instant-vector-selectors) is expected in the `filters` field. A time series needs to match any of the specified selectors to be included in the aggregated counter.
 
-For aggregated metrics to be exported to Stackdriver you will also need to enable Stackdriver monitoring backend in the sidecar by passing `--monitoring.backend=stackdriver` flag (please also pass `--monitoring.backend=prometheus` if you are collecting sidecar metrics to Prometheus).
-
 ##### Counter aggregator and inclusion filters
 
 Please note that by default metrics that match one of aggregated counter filters will still be exported to Stackdriver unless you have inclusion filters configured that prevent those metrics from being exported (see `--include`). Using `--include` to prevent a metric from being exported to Stackdriver does not prevent the metric from being covered by aggregated counters.

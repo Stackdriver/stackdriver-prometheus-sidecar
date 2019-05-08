@@ -55,20 +55,19 @@ func TestCounterAggregator(t *testing.T) {
 			}()
 			logger := log.NewLogfmtLogger(logBuffer)
 
-			var got []float64
-			statsRecord = func(ctx context.Context, ms ...stats.Measurement) {
-				for _, m := range ms {
-					got = append(got, m.Value())
-				}
-			}
-			defer func() { statsRecord = stats.Record }()
-
 			aggr, _ := NewCounterAggregator(logger, &CounterAggregatorConfig{
 				"counter1": &CounterAggregatorMetricConfig{Matchers: [][]*promlabels.Matcher{
 					{&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "a", Value: "a1"}},
 				}},
 			})
 			defer aggr.Close()
+
+			var got []float64
+			aggr.statsRecord = func(ctx context.Context, ms ...stats.Measurement) {
+				for _, m := range ms {
+					got = append(got, m.Value())
+				}
+			}
 
 			lset := labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1", "a", "a1")
 			tracker := aggr.getTracker(lset)

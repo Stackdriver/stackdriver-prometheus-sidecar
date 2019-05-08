@@ -26,8 +26,6 @@ import (
 	"go.opencensus.io/stats/view"
 )
 
-var statsRecord = stats.Record
-
 // CounterAggregator provides the 'aggregated counters' feature of the sidecar.
 // It can be used to export a sum of multiple counters from Prometheus to
 // Stackdriver as a single cumulative metric.
@@ -36,8 +34,9 @@ var statsRecord = stats.Record
 // Prometheus via the standard `/metrics` endpoint. Regular flushing of counter
 // values is implemented by OpenCensus.
 type CounterAggregator struct {
-	logger   log.Logger
-	counters []*aggregatedCounter
+	logger      log.Logger
+	counters    []*aggregatedCounter
+	statsRecord func(context.Context, ...stats.Measurement) // used in testing.
 }
 
 // aggregatedCounter is where CounterAggregator keeps internal state about each
@@ -69,12 +68,12 @@ type counterTracker struct {
 	lastTimestamp int64
 	lastValue     float64
 	measures      []*stats.Float64Measure
-	logger        log.Logger
+	ca            *CounterAggregator
 }
 
 // NewCounterAggregator creates a counter aggregator.
 func NewCounterAggregator(logger log.Logger, config *CounterAggregatorConfig) (*CounterAggregator, error) {
-	aggregator := &CounterAggregator{logger: logger}
+	aggregator := &CounterAggregator{logger: logger, statsRecord: stats.Record}
 	for metric, cfg := range *config {
 		measure := stats.Float64(metric, cfg.Help, stats.UnitDimensionless)
 		v := &view.View{
@@ -115,45 +114,46 @@ func (c *CounterAggregator) getTracker(lset labels.Labels) *counterTracker {
 	if len(measures) == 0 {
 		return nil
 	}
-	return &counterTracker{measures: measures, logger: c.logger}
+	return &counterTracker{measures: measures, ca: c}
 }
 
 // newPoint gets called on each new sample (timestamp, value) for time series that need to feed
 // values into aggregated counters.
-func (a *counterTracker) newPoint(ctx context.Context, lset labels.Labels, t int64, v float64) {
+func (t *counterTracker) newPoint(ctx context.Context, lset labels.Labels, ts int64, v float64) {
 	if math.IsNaN(v) {
-		level.Debug(a.logger).Log("msg", "got NaN value", "labels", lset, "last ts", a.lastTimestamp, "ts", t, "lastValue", a.lastValue)
+		level.Debug(t.ca.logger).Log("msg", "got NaN value", "labels", lset, "last ts", t.lastTimestamp, "ts", t, "lastValue", t.lastValue)
 		return
 	}
-	// Ignore points that are earlier than last seen timestamp.
-	if t < a.lastTimestamp {
-		level.Debug(a.logger).Log("msg", "out of order timestamp", "labels", lset, "last ts", a.lastTimestamp, "ts", t)
+	// Ignore measurements that are earlier than last seen timestamp, since they are already covered by
+	// later values. Samples are coming from TSDB in order, so this is unlikely to happen.
+	if ts < t.lastTimestamp {
+		level.Debug(t.ca.logger).Log("msg", "out of order timestamp", "labels", lset, "last ts", t.lastTimestamp, "ts", ts)
 		return
 	}
-	// First time we're seeing a value; record it, but don't increment counters.
-	if a.lastTimestamp == 0 {
-		level.Debug(a.logger).Log("msg", "first point", "labels", lset)
-		a.lastTimestamp = t
-		a.lastValue = v
+	// Use the first value we see as the starting point for the counter.
+	if t.lastTimestamp == 0 {
+		level.Debug(t.ca.logger).Log("msg", "first point", "labels", lset)
+		t.lastTimestamp = ts
+		t.lastValue = v
 		return
 	}
 	var delta float64
-	if v < a.lastValue {
+	if v < t.lastValue {
 		// Counter was reset.
 		delta = v
-		level.Debug(a.logger).Log("msg", "counter reset", "labels", lset, "value", v, "lastValue", a.lastValue, "delta", delta)
+		level.Debug(t.ca.logger).Log("msg", "counter reset", "labels", lset, "value", v, "lastValue", t.lastValue, "delta", delta)
 	} else {
-		delta = v - a.lastValue
-		level.Debug(a.logger).Log("msg", "got delta", "labels", lset, "value", v, "lastValue", a.lastValue, "delta", delta)
+		delta = v - t.lastValue
+		level.Debug(t.ca.logger).Log("msg", "got delta", "labels", lset, "value", v, "lastValue", t.lastValue, "delta", delta)
 	}
-	a.lastTimestamp = t
-	a.lastValue = v
+	t.lastTimestamp = ts
+	t.lastValue = v
 	if delta == 0 {
 		return
 	}
-	ms := make([]stats.Measurement, len(a.measures))
-	for i, measure := range a.measures {
+	ms := make([]stats.Measurement, len(t.measures))
+	for i, measure := range t.measures {
 		ms[i] = measure.M(delta)
 	}
-	statsRecord(ctx, ms...)
+	t.ca.statsRecord(ctx, ms...)
 }
