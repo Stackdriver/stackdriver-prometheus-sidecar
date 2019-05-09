@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -113,7 +112,7 @@ func TestEmptyRequest(t *testing.T) {
 	}
 	c := NewClient(&ClientConfig{
 		URL:     serverURL,
-		Timeout: time.Second * 60,
+		Timeout: time.Second,
 	})
 	if err := c.Store(&monitoring.CreateTimeSeriesRequest{}); err != nil {
 		t.Fatal(err)
@@ -149,7 +148,7 @@ func TestResolver(t *testing.T) {
 		URL:      serverURL,
 		Timeout:  time.Second,
 		Resolver: res,
-		Logger: logger,
+		Logger:   logger,
 	})
 
 	err = c.Store(&monitoring.CreateTimeSeriesRequest{
@@ -157,16 +156,11 @@ func TestResolver(t *testing.T) {
 			&monitoring.TimeSeries{},
 		},
 	})
-
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if c.conn == nil {
-		t.Fatal("NIL")
-	}
 	requestedTarget := c.conn.Target()
-	if requestedTarget != c.resolver.Scheme() + ":///" + "stackdriver.invalid" {
+	if requestedTarget != c.resolver.Scheme()+":///stackdriver.invalid" {
 		t.Errorf("ERROR: Remote address is %s, want stackdriver.invalid.",
 			requestedTarget)
 	}
