@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
+	"github.com/go-kit/kit/log"
 	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
@@ -636,7 +637,8 @@ func TestSampleBuilder(t *testing.T) {
 		var err error
 		var result []*monitoring_pb.TimeSeries
 
-		series := newSeriesCache(nil, "", nil, nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false)
+		aggr, _ := NewCounterAggregator(log.NewNopLogger(), new(CounterAggregatorConfig))
+		series := newSeriesCache(nil, "", nil, nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false, aggr)
 		for ref, s := range c.series {
 			series.set(ctx, ref, s, 0)
 		}

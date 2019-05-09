@@ -46,6 +46,14 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	if !ok {
 		return nil, 0, samples[1:], nil
 	}
+
+	if entry.tracker != nil {
+		entry.tracker.newPoint(ctx, entry.lset, sample.T, sample.V)
+	}
+
+	if !entry.exported {
+		return nil, 0, samples[1:], nil
+	}
 	// Get a shallow copy of the proto so we can overwrite the point field
 	// and safely send it into the remote queues.
 	ts := *entry.proto

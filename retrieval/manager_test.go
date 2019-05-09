@@ -23,6 +23,7 @@ import (
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
+	"github.com/go-kit/kit/log"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/scrape"
@@ -84,7 +85,8 @@ func TestReader_Progress(t *testing.T) {
 		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
 	}
 
-	r := NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, &nopAppender{}, "", false)
+	aggr, _ := NewCounterAggregator(log.NewNopLogger(), new(CounterAggregatorConfig))
+	r := NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, &nopAppender{}, "", false, aggr)
 	r.progressSaveInterval = 200 * time.Millisecond
 
 	// Populate sample data
@@ -141,7 +143,7 @@ func TestReader_Progress(t *testing.T) {
 	}
 
 	recorder := &nopAppender{}
-	r = NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, recorder, "", false)
+	r = NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, recorder, "", false, aggr)
 	go r.Run(ctx, progressOffset)
 
 	// Wait for reader to process until the end.
