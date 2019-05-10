@@ -12,13 +12,16 @@ if [  $# -le 1 ]; then
   exit 1
 fi
 
+# Override to use a different Docker image name for the sidecar.
+export SIDECAR_IMAGE_NAME=${SIDECAR_IMAGE_NAME:-'gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar'}
+
 kubectl -n "${KUBE_NAMESPACE}" patch "$1" "$2" --type strategic --patch "
 spec:
   template:
     spec:
       containers:
       - name: sidecar
-        image: gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar:${SIDECAR_IMAGE_TAG}
+        image: ${SIDECAR_IMAGE_NAME}:${SIDECAR_IMAGE_TAG}
         imagePullPolicy: Always
         args:
         - \"--stackdriver.project-id=${GCP_PROJECT}\"

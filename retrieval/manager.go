@@ -80,13 +80,14 @@ func NewPrometheusReader(
 	logger log.Logger,
 	walDirectory string,
 	tailer *tail.Tailer,
-	filters []*labels.Matcher,
+	filtersets [][]*labels.Matcher,
 	metricRenames map[string]string,
 	targetGetter TargetGetter,
 	metadataGetter MetadataGetter,
 	appender Appender,
 	metricsPrefix string,
 	useGkeResource bool,
+	counterAggregator *CounterAggregator,
 ) *PrometheusReader {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -95,7 +96,7 @@ func NewPrometheusReader(
 		appender:             appender,
 		logger:               logger,
 		tailer:               tailer,
-		filters:              filters,
+		filtersets:           filtersets,
 		walDirectory:         walDirectory,
 		targetGetter:         targetGetter,
 		metadataGetter:       metadataGetter,
@@ -103,6 +104,7 @@ func NewPrometheusReader(
 		metricRenames:        metricRenames,
 		metricsPrefix:        metricsPrefix,
 		useGkeResource:       useGkeResource,
+		counterAggregator:    counterAggregator,
 	}
 }
 
@@ -110,7 +112,7 @@ type PrometheusReader struct {
 	logger               log.Logger
 	walDirectory         string
 	tailer               *tail.Tailer
-	filters              []*labels.Matcher
+	filtersets           [][]*labels.Matcher
 	metricRenames        map[string]string
 	targetGetter         TargetGetter
 	metadataGetter       MetadataGetter
@@ -118,6 +120,7 @@ type PrometheusReader struct {
 	progressSaveInterval time.Duration
 	metricsPrefix        string
 	useGkeResource       bool
+	counterAggregator    *CounterAggregator
 }
 
 var (
@@ -152,13 +155,14 @@ func (r *PrometheusReader) Run(ctx context.Context, startOffset int) error {
 	seriesCache := newSeriesCache(
 		r.logger,
 		r.walDirectory,
-		r.filters,
+		r.filtersets,
 		r.metricRenames,
 		r.targetGetter,
 		r.metadataGetter,
 		ResourceMappings,
 		r.metricsPrefix,
 		r.useGkeResource,
+		r.counterAggregator,
 	)
 	go seriesCache.run(ctx)
 

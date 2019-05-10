@@ -25,13 +25,13 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	md "cloud.google.com/go/compute/metadata"
+	oc_stackdriver "contrib.go.opencensus.io/exporter/stackdriver"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
@@ -51,6 +51,7 @@ import (
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/scrape"
 	oc_prometheus "go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/plugin/ocgrpc"
@@ -164,6 +165,12 @@ type fileConfig struct {
 		Type   string `json:"type"`
 		Help   string `json:"help"`
 	} `json:"static_metadata"`
+
+	AggregatedCounters []struct {
+		Metric  string   `json:"metric"`
+		Filters []string `json:"filters"`
+		Help    string   `json:"help"`
+	} `json:"aggregated_counters"`
 }
 
 func main() {
@@ -184,6 +191,8 @@ func main() {
 		prometheusURL      *url.URL
 		listenAddress      string
 		filters            []string
+		filtersets         []string
+		aggregations       retrieval.CounterAggregatorConfig
 		metricRenames      map[string]string
 		staticMetadata     []scrape.MetricMetadata
 		useRestrictedIps   bool
@@ -236,10 +245,16 @@ func main() {
 	a.Flag("prometheus.api-address", "Address to listen on for UI, API, and telemetry.").
 		Default("http://127.0.0.1:9090/").URLVar(&cfg.prometheusURL)
 
+	a.Flag("monitoring.backend", "Monitoring backend(s) for internal metrics").Default("prometheus").
+		EnumsVar(&cfg.monitoringBackends, "prometheus", "stackdriver")
+
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry.").
 		Default("0.0.0.0:9091").StringVar(&cfg.listenAddress)
 
-	a.Flag("filter", "PromQL-style label matcher which must pass for a series to be forwarded to Stackdriver. May be repeated.").
+	a.Flag("include", "PromQL metric and label matcher which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass any of the filter sets to be forwarded.").
+		StringsVar(&cfg.filtersets)
+
+	a.Flag("filter", "PromQL-style matcher for a single label which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass all filters to be forwarded. Deprecated, please use --include instead.").
 		StringsVar(&cfg.filters)
 
 	promlogflag.AddFlags(a, &cfg.logLevel)
@@ -251,35 +266,66 @@ func main() {
 		os.Exit(2)
 	}
 
+	logger := promlog.New(cfg.logLevel)
 	if cfg.configFilename != "" {
-		cfg.metricRenames, cfg.staticMetadata, err = parseConfigFile(cfg.configFilename)
+		cfg.metricRenames, cfg.staticMetadata, cfg.aggregations, err = parseConfigFile(cfg.configFilename)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, errors.Wrapf(err, "parse config file %s", cfg.configFilename))
+			msg := fmt.Sprintf("Parse config file %s", cfg.configFilename)
+			level.Error(logger).Log("msg", msg, "err", err)
 			os.Exit(2)
 		}
-	}
 
-	logger := promlog.New(cfg.logLevel)
+		// Enable Stackdriver monitoring backend if counter aggregator configuration is present.
+		if len(cfg.aggregations) > 0 {
+			sdEnabled := false
+			for _, backend := range cfg.monitoringBackends {
+				if backend == "stackdriver" {
+					sdEnabled = true
+				}
+			}
+			if !sdEnabled {
+				cfg.monitoringBackends = append(cfg.monitoringBackends, "stackdriver")
+			}
+		}
+	}
 
 	level.Info(logger).Log("msg", "Starting Stackdriver Prometheus sidecar", "version", version.Info())
 	level.Info(logger).Log("build_context", version.BuildContext())
 	level.Info(logger).Log("host_details", Uname())
 	level.Info(logger).Log("fd_limits", FdLimits())
 
-	promExporter, err := oc_prometheus.NewExporter(oc_prometheus.Options{
-		Registry: prometheus.DefaultRegisterer.(*prometheus.Registry),
-	})
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "creating Prometheus exporter failed:", err)
-		os.Exit(1)
-	}
-	view.RegisterExporter(promExporter)
-
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
 	if *projectId == "" {
 		*projectId = getGCEProjectID()
 	}
+
+	for _, backend := range cfg.monitoringBackends {
+		switch backend {
+		case "prometheus":
+			promExporter, err := oc_prometheus.NewExporter(oc_prometheus.Options{
+				Registry: prometheus.DefaultRegisterer.(*prometheus.Registry),
+			})
+			if err != nil {
+				level.Error(logger).Log("msg", "Creating Prometheus exporter failed", "err", err)
+				os.Exit(1)
+			}
+			view.RegisterExporter(promExporter)
+		case "stackdriver":
+			sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{ProjectID: *projectId})
+			if err != nil {
+				level.Error(logger).Log("msg", "Creating Stackdriver exporter failed", "err", err)
+				os.Exit(1)
+			}
+			defer sd.Flush()
+			view.RegisterExporter(sd)
+			view.SetReportingPeriod(60 * time.Second)
+		default:
+			level.Error(logger).Log("msg", "Unknown monitoring backend", "backend", backend)
+			os.Exit(1)
+		}
+	}
+
 	var staticLabels = map[string]string{
 		retrieval.ProjectIDLabel:             *projectId,
 		retrieval.KubernetesLocationLabel:    cfg.kubernetesLabels.location,
@@ -294,9 +340,9 @@ func main() {
 		}
 	}
 
-	filters, err := parseFilters(cfg.filters...)
+	filtersets, err := parseFiltersets(logger, cfg.filtersets, cfg.filters)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error parsing filters:", err)
+		level.Error(logger).Log("msg", "Error parsing --include (or --filter)", "err", err)
 		os.Exit(2)
 	}
 
@@ -332,7 +378,7 @@ func main() {
 
 	tailer, err := tail.Tail(ctx, cfg.walDirectory)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Tailing WAL failed:", err)
+		level.Error(logger).Log("msg", "Tailing WAL failed", "err", err)
 		os.Exit(1)
 	}
 	// TODO(jkohen): Remove once we have proper translation of all metric
@@ -360,20 +406,31 @@ func main() {
 		tailer,
 	)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Creating queue manager failed:", err)
+		level.Error(logger).Log("msg", "Creating queue manager failed", "err", err)
 		os.Exit(1)
 	}
+
+	counterAggregator, err := retrieval.NewCounterAggregator(
+		log.With(logger, "component", "counter_aggregator"),
+		&cfg.aggregations)
+	if err != nil {
+		level.Error(logger).Log("msg", "Creating counter aggregator failed", "err", err)
+		os.Exit(1)
+	}
+	defer counterAggregator.Close()
+
 	prometheusReader := retrieval.NewPrometheusReader(
 		log.With(logger, "component", "Prometheus reader"),
 		cfg.walDirectory,
 		tailer,
-		filters,
+		filtersets,
 		cfg.metricRenames,
 		retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(staticLabels)),
 		metadataCache,
 		queueManager,
 		cfg.metricsPrefix,
 		cfg.useGkeResource,
+		counterAggregator,
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.
@@ -551,32 +608,25 @@ func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL)
 	}
 }
 
-// parseFilters parses a list of strings that contain PromQL-style label matchers and
+// parseFiltersets parses two flags that contain PromQL-style metric/label selectors and
 // returns a list of the resulting matchers.
-func parseFilters(strs ...string) (matchers []*labels.Matcher, err error) {
-	pattern := regexp.MustCompile(`^([a-zA-Z0-9_]+)(=|!=|=~|!~)"(.+)"$`)
-
-	for _, s := range strs {
-		parts := pattern.FindStringSubmatch(s)
-		if len(parts) != 4 {
-			return nil, fmt.Errorf("invalid filter %q", s)
-		}
-		var matcherType labels.MatchType
-		switch parts[2] {
-		case "=":
-			matcherType = labels.MatchEqual
-		case "!=":
-			matcherType = labels.MatchNotEqual
-		case "=~":
-			matcherType = labels.MatchRegexp
-		case "!~":
-			matcherType = labels.MatchNotRegexp
-		}
-		matcher, err := labels.NewMatcher(matcherType, parts[1], parts[3])
+func parseFiltersets(logger log.Logger, filtersets, filters []string) ([][]*labels.Matcher, error) {
+	var matchers [][]*labels.Matcher
+	if len(filters) > 0 {
+		level.Warn(logger).Log("msg", "--filter is deprecated; please use --include instead")
+		f := fmt.Sprintf("{%s}", strings.Join(filters, ","))
+		m, err := promql.ParseMetricSelector(f)
 		if err != nil {
-			return nil, fmt.Errorf("invalid filter %q: %s", s, err)
+			return nil, errors.Errorf("cannot parse --filter flag (metric filter '%s'): %q", f, err)
 		}
-		matchers = append(matchers, matcher)
+		matchers = append(matchers, m)
+	}
+	for _, f := range filtersets {
+		m, err := promql.ParseMetricSelector(f)
+		if err != nil {
+			return nil, errors.Errorf("cannot parse --include flag '%s': %q", f, err)
+		}
+		matchers = append(matchers, m)
 	}
 	return matchers, nil
 }
@@ -615,14 +665,14 @@ func fillMetadata(staticConfig *map[string]string) {
 	}
 }
 
-func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadata, error) {
+func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadata, retrieval.CounterAggregatorConfig, error) {
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "reading file")
+		return nil, nil, nil, errors.Wrap(err, "reading file")
 	}
 	var fc fileConfig
 	if err := yaml.Unmarshal(b, &fc); err != nil {
-		return nil, nil, errors.Wrap(err, "invalid YAML")
+		return nil, nil, nil, errors.Wrap(err, "invalid YAML")
 	}
 	renameMapping := map[string]string{}
 	for _, r := range fc.MetricRenames {
@@ -637,7 +687,7 @@ func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadat
 		case textparse.MetricTypeCounter, textparse.MetricTypeGauge, textparse.MetricTypeHistogram,
 			textparse.MetricTypeSummary, textparse.MetricTypeUnknown:
 		default:
-			return nil, nil, errors.Errorf("invalid metric type %q", sm.Type)
+			return nil, nil, nil, errors.Errorf("invalid metric type %q", sm.Type)
 		}
 		staticMetadata = append(staticMetadata, scrape.MetricMetadata{
 			Metric: sm.Metric,
@@ -645,5 +695,21 @@ func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadat
 			Help:   sm.Help,
 		})
 	}
-	return renameMapping, staticMetadata, nil
+
+	aggregations := make(retrieval.CounterAggregatorConfig)
+	for _, c := range fc.AggregatedCounters {
+		if _, ok := aggregations[c.Metric]; ok {
+			return nil, nil, nil, errors.Errorf("duplicate counter aggregator metric %s", c.Metric)
+		}
+		a := &retrieval.CounterAggregatorMetricConfig{Help: c.Help}
+		for _, f := range c.Filters {
+			matcher, err := promql.ParseMetricSelector(f)
+			if err != nil {
+				return nil, nil, nil, errors.Errorf("cannot parse metric selector '%s': %q", f, err)
+			}
+			a.Matchers = append(a.Matchers, matcher)
+		}
+		aggregations[c.Metric] = a
+	}
+	return renameMapping, staticMetadata, aggregations, nil
 }

@@ -37,6 +37,7 @@ func TestCache_Get(t *testing.T) {
 		{Metric: "metric4", Type: textparse.MetricTypeSummary, Help: "help_metric4"},
 		{Metric: "metric5", Type: textparse.MetricTypeUnknown, Help: "help_metric5"},
 		{Metric: "metric6", Type: MetricTypeUntyped, Help: "help_metric6"},
+		{Metric: "metric_with_override", Type: textparse.MetricTypeGauge, Help: "help_metric_with_override"},
 	}
 	var handler func(qMetric, qMatch string) *apiResponse
 
@@ -69,6 +70,7 @@ func TestCache_Get(t *testing.T) {
 	c := NewCache(nil, u, []scrape.MetricMetadata{
 		{Metric: "static_metric1", Type: textparse.MetricTypeCounter, Help: "help_static1"},
 		{Metric: "static_metric2", Type: textparse.MetricTypeCounter, Help: "help_static2"},
+		{Metric: "metric_with_override", Type: textparse.MetricTypeCounter, Help: "help_metric_override"},
 	})
 
 	// First get for the job, we expect an initial batch request.
@@ -214,7 +216,27 @@ func TestCache_Get(t *testing.T) {
 		t.Fatalf("expected metadata %v but got %v", want, md)
 	}
 
+	// Test override with static metadata.
+	handler = func(qMetric, qMatch string) *apiResponse {
+		return &apiResponse{Status: "success", Data: metrics}
+	}
+	md, err = c.Get(ctx, "prometheus", "localhost:9090", "metric_with_override")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = &scrape.MetricMetadata{
+		Metric: "metric_with_override",
+		Type:   textparse.MetricTypeCounter,
+		Help:   "help_metric_override",
+	}
+	if !reflect.DeepEqual(md, want) {
+		t.Fatalf("expected metadata %v but got %v", want, md)
+	}
+
 	// Test recording rule.
+	handler = func(qMetric, qMatch string) *apiResponse {
+		return nil
+	}
 	md, err = c.Get(ctx, "prometheus", "localhost:9090", "some:recording:rule")
 	if err != nil {
 		t.Fatal(err)

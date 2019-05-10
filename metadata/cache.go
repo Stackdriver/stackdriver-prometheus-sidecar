@@ -88,6 +88,9 @@ func (e *metadataEntry) shouldRefetch() bool {
 // If no metadata is found in the Prometheus server, a matching entry from the
 // static metadata or nil is returned.
 func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error) {
+	if md, ok := c.staticMetadata[metric]; ok {
+		return &md, nil
+	}
 	md, ok := c.metadata[metric]
 	if !ok || md.shouldRefetch() {
 		// If we are seeing the job for the first time, preemptively get a full
@@ -117,9 +120,6 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.
 	}
 	if md != nil && md.found {
 		return &md.MetricMetadata, nil
-	}
-	if md, ok := c.staticMetadata[metric]; ok {
-		return &md, nil
 	}
 	// The metric might also be produced by a recording rule, which by convention
 	// contain at least one `:` character. In that case we can generally assume that

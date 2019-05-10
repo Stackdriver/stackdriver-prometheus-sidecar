@@ -1,0 +1,3 @@
+# Ignore checkpoint file.
+stackdriver_sidecar.json
+stackdriver-prometheus-sidecar

@@ -65,7 +65,7 @@ type seriesGetter interface {
 	getResetAdjusted(ref uint64, t int64, v float64) (int64, float64, bool)
 
 	// Attempt to set the new most recent time range for the series with given hash.
-	// Returns true if it failed, in which case the sample must be discarded.
+	// Returns false if it failed, in which case the sample must be discarded.
 	updateSampleInterval(hash uint64, start, end int64) bool
 }
 
@@ -73,15 +73,16 @@ type seriesGetter interface {
 // It can garbage collect obsolete entries based on the most recent WAL checkpoint.
 // Implements seriesGetter.
 type seriesCache struct {
-	logger         log.Logger
-	dir            string
-	filters        []*promlabels.Matcher
-	targets        TargetGetter
-	metadata       MetadataGetter
-	resourceMaps   []ResourceMap
-	metricsPrefix  string
-	useGkeResource bool
-	renames        map[string]string
+	logger            log.Logger
+	dir               string
+	filtersets        [][]*promlabels.Matcher
+	targets           TargetGetter
+	metadata          MetadataGetter
+	counterAggregator *CounterAggregator
+	resourceMaps      []ResourceMap
+	metricsPrefix     string
+	useGkeResource    bool
+	renames           map[string]string
 
 	// lastCheckpoint holds the index of the last checkpoint we garbage collected for.
 	// We don't have to redo garbage collection until a higher checkpoint appears.
@@ -114,6 +115,15 @@ type seriesCacheEntry struct {
 
 	// Last time we attempted to populate meta information about the series.
 	lastRefresh time.Time
+
+	// Whether the series needs to be exported.
+	exported bool
+
+	// Counter tracker that will be called with each new sample if this time series
+	// needs to feed data into aggregated counters.
+	// This is nil if there are no aggregated counters that need to be incremented
+	// for this time series.
+	tracker *counterTracker
 }
 
 const refreshInterval = 3 * time.Minute
@@ -129,29 +139,31 @@ func (e *seriesCacheEntry) shouldRefresh() bool {
 func newSeriesCache(
 	logger log.Logger,
 	dir string,
-	filters []*promlabels.Matcher,
+	filtersets [][]*promlabels.Matcher,
 	renames map[string]string,
 	targets TargetGetter,
 	metadata MetadataGetter,
 	resourceMaps []ResourceMap,
 	metricsPrefix string,
 	useGkeResource bool,
+	counterAggregator *CounterAggregator,
 ) *seriesCache {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &seriesCache{
-		logger:         logger,
-		dir:            dir,
-		filters:        filters,
-		targets:        targets,
-		metadata:       metadata,
-		resourceMaps:   resourceMaps,
-		entries:        map[uint64]*seriesCacheEntry{},
-		intervals:      map[uint64]sampleInterval{},
-		metricsPrefix:  metricsPrefix,
-		useGkeResource: useGkeResource,
-		renames:        renames,
+		logger:            logger,
+		dir:               dir,
+		filtersets:        filtersets,
+		targets:           targets,
+		metadata:          metadata,
+		resourceMaps:      resourceMaps,
+		entries:           map[uint64]*seriesCacheEntry{},
+		intervals:         map[uint64]sampleInterval{},
+		metricsPrefix:     metricsPrefix,
+		useGkeResource:    useGkeResource,
+		renames:           renames,
+		counterAggregator: counterAggregator,
 	}
 }
 
@@ -251,7 +263,7 @@ func (c *seriesCache) get(ctx context.Context, ref uint64) (*seriesCacheEntry, b
 }
 
 // updateSampleInterval attempts to set the new most recent time range for the series with given hash.
-// Returns true if it failed, in which case the sample must be discarded.
+// Returns false if it failed, in which case the sample must be discarded.
 func (c *seriesCache) updateSampleInterval(hash uint64, start, end int64) bool {
 	iv, ok := c.intervals[hash]
 	if !ok || iv.accepts(start, end) {
@@ -303,15 +315,19 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 // set the label set for the given reference.
 // maxSegment indicates the the highest segment at which the series was possibly defined.
 func (c *seriesCache) set(ctx context.Context, ref uint64, lset labels.Labels, maxSegment int) error {
-	for _, f := range c.filters {
-		if v := lset.Get(f.Name); !f.Matches(v) {
-			return nil
-		}
+	exported := c.filtersets == nil || matchFiltersets(lset, c.filtersets)
+	counterTracker := c.counterAggregator.getTracker(lset)
+
+	if !exported && counterTracker == nil {
+		return nil
 	}
+
 	c.mtx.Lock()
 	c.entries[ref] = &seriesCacheEntry{
 		maxSegment: maxSegment,
 		lset:       lset,
+		exported:   exported,
+		tracker:    counterTracker,
 	}
 	c.mtx.Unlock()
 	return c.refresh(ctx, ref)
@@ -335,9 +351,13 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	if target == nil {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "target_not_found"))
 		stats.Record(ctx, droppedSeries.M(1))
+		level.Debug(c.logger).Log("msg", "target not found", "labels", entry.lset)
 		return nil
 	}
 	// Remove target labels and __name__ label.
+	// Stackdriver only accepts a limited amount of labels, so we choose to economize aggressively here. This should be OK
+	// because we expect that the target.Labels will be redundant with the Stackdriver MonitoredResource, which is derived
+	// from the target Labels and DiscoveredLabels.
 	finalLabels := targets.DropTargetLabels(pkgLabels(entry.lset), target.Labels)
 	for i, l := range finalLabels {
 		if l.Name == "__name__" {
@@ -349,6 +369,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	if len(finalLabels) > maxLabelCount {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "too_many_labels"))
 		stats.Record(ctx, droppedSeries.M(1))
+		level.Debug(c.logger).Log("msg", "too many labels", "labels", entry.lset)
 		return nil
 	}
 
@@ -356,6 +377,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	if !ok {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "unknown_resource"))
 		stats.Record(ctx, droppedSeries.M(1))
+		level.Debug(c.logger).Log("msg", "unknown resource", "labels", target.Labels, "discovered_labels", target.DiscoveredLabels)
 		return nil
 	}
 	var (
@@ -382,6 +404,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		if metadata == nil {
 			ctx, _ = tag.New(ctx, tag.Insert(keyReason, "metadata_not_found"))
 			stats.Record(ctx, droppedSeries.M(1))
+			level.Debug(c.logger).Log("msg", "metadata not found", "metric_name", metricName)
 			return nil
 		}
 	}
@@ -465,4 +488,25 @@ func (c *seriesCache) getResource(discovered, final promlabels.Labels) (*monitor
 		}
 	}
 	return nil, false
+}
+
+// matchFiltersets checks whether any of the supplied filtersets passes.
+func matchFiltersets(lset labels.Labels, filtersets [][]*promlabels.Matcher) bool {
+	for _, fs := range filtersets {
+		if matchFilterset(lset, fs) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchFilterset checks whether labels match a given list of label matchers.
+// All matchers need to match for the function to return true.
+func matchFilterset(lset labels.Labels, filterset []*promlabels.Matcher) bool {
+	for _, matcher := range filterset {
+		if !matcher.Matches(lset.Get(matcher.Name)) {
+			return false
+		}
+	}
+	return true
 }
