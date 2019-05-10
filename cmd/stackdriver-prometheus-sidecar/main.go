@@ -186,7 +186,7 @@ func main() {
 		filters            []string
 		metricRenames      map[string]string
 		staticMetadata     []scrape.MetricMetadata
-		apiOverride        bool
+		useRestrictedIps   bool
 		manualResolver     *manual.Resolver
 
 		logLevel promlog.AllowedLevel
@@ -207,8 +207,8 @@ func main() {
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
 
-	a.Flag("stackdriver.api-override", "List of IP addresses. If not empty, stackdriver.api-address will always resolve to these addresses.").
-		Default("false").BoolVar(&cfg.apiOverride)
+	a.Flag("stackdriver.use-restricted-ips", "If true, send all requests through restricted VIPs (EXPERIMENTAL).").
+		Default("false").BoolVar(&cfg.useRestrictedIps)
 
 	a.Flag("stackdriver.kubernetes.location", "Value of the 'location' label in the Kubernetes Stackdriver MonitoredResources.").
 		StringVar(&cfg.kubernetesLabels.location)
@@ -300,7 +300,7 @@ func main() {
 	}
 
 	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
-	if cfg.apiOverride {
+	if cfg.useRestrictedIps {
 		// manual.GenerateAndRegisterManualResolver generates a Resolver and a random scheme.
 		// It also registers the resolver. rb.InitialAddrs adds the addresses we are using
 		// to resolve GCP API calls to the resolver.
