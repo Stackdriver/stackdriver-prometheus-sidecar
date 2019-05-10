@@ -188,6 +188,7 @@ func main() {
 		staticMetadata     []scrape.MetricMetadata
 		useRestrictedIps   bool
 		manualResolver     *manual.Resolver
+		monitoringBackends []string
 
 		logLevel promlog.AllowedLevel
 	}{}
