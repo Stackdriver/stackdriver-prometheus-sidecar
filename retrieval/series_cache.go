@@ -377,7 +377,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	if !ok {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "unknown_resource"))
 		stats.Record(ctx, droppedSeries.M(1))
-		level.Debug(c.logger).Log("msg", "unknown resource", "labels", target.Labels)
+		level.Debug(c.logger).Log("msg", "unknown resource", "labels", target.Labels, "discovered_labels", target.DiscoveredLabels)
 		return nil
 	}
 	var (
