@@ -58,6 +58,8 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/resolver/manual"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -193,6 +195,8 @@ func main() {
 		aggregations       retrieval.CounterAggregatorConfig
 		metricRenames      map[string]string
 		staticMetadata     []scrape.MetricMetadata
+		useRestrictedIps   bool
+		manualResolver     *manual.Resolver
 		monitoringBackends []string
 
 		logLevel promlog.AllowedLevel
@@ -212,6 +216,9 @@ func main() {
 
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
+
+	a.Flag("stackdriver.use-restricted-ips", "If true, send all requests through restricted VIPs (EXPERIMENTAL).").
+		Default("false").BoolVar(&cfg.useRestrictedIps)
 
 	a.Flag("stackdriver.kubernetes.location", "Value of the 'location' label in the Kubernetes Stackdriver MonitoredResources.").
 		StringVar(&cfg.kubernetesLabels.location)
@@ -340,6 +347,19 @@ func main() {
 	}
 
 	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
+	if cfg.useRestrictedIps {
+		// manual.GenerateAndRegisterManualResolver generates a Resolver and a random scheme.
+		// It also registers the resolver. rb.InitialAddrs adds the addresses we are using
+		// to resolve GCP API calls to the resolver.
+		cfg.manualResolver, _ = manual.GenerateAndRegisterManualResolver()
+		// These IP addresses correspond to restricted.googleapis.com and are not expected to change.
+		cfg.manualResolver.InitialAddrs([]resolver.Address{
+			{Addr: "199.36.153.4:443"},
+			{Addr: "199.36.153.5:443"},
+			{Addr: "199.36.153.6:443"},
+			{Addr: "199.36.153.7:443"},
+		})
+	}
 	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {
 		panic(err)
@@ -381,6 +401,7 @@ func main() {
 			projectIdResource: cfg.projectIdResource,
 			url:               cfg.stackdriverAddress,
 			timeout:           10 * time.Second,
+			manualResolver:    cfg.manualResolver,
 		},
 		tailer,
 	)
@@ -545,6 +566,7 @@ type clientFactory struct {
 	projectIdResource string
 	url               *url.URL
 	timeout           time.Duration
+	manualResolver    *manual.Resolver
 }
 
 func (f *clientFactory) New() stackdriver.StorageClient {
@@ -553,6 +575,7 @@ func (f *clientFactory) New() stackdriver.StorageClient {
 		ProjectId: f.projectIdResource,
 		URL:       f.url,
 		Timeout:   f.timeout,
+		Resolver:  f.manualResolver,
 	})
 }
 

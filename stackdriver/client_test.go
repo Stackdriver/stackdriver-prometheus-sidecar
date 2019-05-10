@@ -14,6 +14,7 @@
 package stackdriver
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"net/url"
@@ -21,9 +22,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/resolver/manual"
 	"google.golang.org/grpc/status"
 )
 
@@ -112,5 +116,53 @@ func TestEmptyRequest(t *testing.T) {
 	})
 	if err := c.Store(&monitoring.CreateTimeSeriesRequest{}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResolver(t *testing.T) {
+	grpcServer := grpc.NewServer()
+	listener := newLocalListener()
+	monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
+	go grpcServer.Serve(listener)
+	defer grpcServer.Stop()
+
+	logBuffer := &bytes.Buffer{}
+	defer func() {
+		if logBuffer.Len() > 0 {
+			t.Log(logBuffer.String())
+		}
+	}()
+	logger := log.NewLogfmtLogger(logBuffer)
+	
+	// Without ?auth=false, the test fails with context deadline exceeded.
+	serverURL, err := url.Parse("http://stackdriver.invalid?auth=false")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, _ := manual.GenerateAndRegisterManualResolver()
+	res.InitialAddrs([]resolver.Address{
+		{Addr: listener.Addr().String()},
+	})
+
+	c := NewClient(&ClientConfig{
+		URL:      serverURL,
+		Timeout:  time.Second,
+		Resolver: res,
+		Logger:   logger,
+	})
+
+	err = c.Store(&monitoring.CreateTimeSeriesRequest{
+		TimeSeries: []*monitoring.TimeSeries{
+			&monitoring.TimeSeries{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestedTarget := c.conn.Target()
+	if requestedTarget != c.resolver.Scheme()+":///stackdriver.invalid" {
+		t.Errorf("ERROR: Remote address is %s, want stackdriver.invalid.",
+			requestedTarget)
 	}
 }
