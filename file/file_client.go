@@ -37,9 +37,9 @@ type FileClient struct {
 // NewFileClient creates a file under os.TempDir(), and creates a new FileClient writing to
 // the file. The user of NewFileClient is responsible to manage the created file.
 func NewFileClient(logger log.Logger) *FileClient {
-        if logger == nil {
-                logger = log.NewNopLogger()
-        }
+	if logger == nil {
+			logger = log.NewNopLogger()
+	}
 	tmpOutputDir := os.TempDir() + "/stackdriver-prometheus-sidecar/CreateTimeSeriesRequest"
 	err := os.MkdirAll(tmpOutputDir, 0700)
 	if err != nil {
