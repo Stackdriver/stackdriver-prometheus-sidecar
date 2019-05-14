@@ -609,16 +609,22 @@ func (s *stackdriverClientFactory) Name() string {
 	return s.url.String()
 }
 
-// fileClientFactory allows creating a StorageClient which writes to
-// a newly created file under dir.
+// fileClientFactory requires dir a existing valid directory, and file
+// can be created under dir.
+//
+// fileClientFactory generates StorageClient which writes to a newly
+// created file under dir.
 type fileClientFactory struct {
 	dir    string
 	logger log.Logger
 }
 
-// New creates a new file for each StorageClient, so when multiple
-// StorageClients execute Store(), these clients write to their own
-// files without race condition.
+// New creates a new file for each StorageClient, and configure
+// the newly generated StorageClient to write 
+// monitoring.CreateTimeSeriesRequest to the file.
+// 
+// when multiple StorageClients execute Store(), each client writes
+// to its own file to avoid race condition.
 func (fcf *fileClientFactory) New() stackdriver.StorageClient {
 	f, err := ioutil.TempFile(fcf.dir, "*.txt")
 	if err != nil {
