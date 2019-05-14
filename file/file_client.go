@@ -17,8 +17,7 @@ limitations under the License.
 package file
 
 import (
-	"io/ioutil"
-	"os"
+	"io"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -30,47 +29,34 @@ import (
 // implementation may hit a single backend, so the application should create a
 // number of these clients.
 type FileClient struct {
-	logger log.Logger
-	file *os.File
+	logger      log.Logger
+	writeCloser io.WriteCloser
 }
 
 // NewFileClient creates a file under os.TempDir(), and creates a new FileClient writing to
 // the file. The user of NewFileClient is responsible to manage the created file.
-func NewFileClient(logger log.Logger) *FileClient {
+func NewFileClient(writeCloser io.WriteCloser, logger log.Logger) *FileClient {
 	if logger == nil {
-			logger = log.NewNopLogger()
-	}
-	tmpOutputDir := os.TempDir() + "/stackdriver-prometheus-sidecar/CreateTimeSeriesRequest"
-	err := os.MkdirAll(tmpOutputDir, 0700)
-	if err != nil {
-		level.Warn(logger).Log(
-			"msg", "Failure creating directory.",
-			"err", err)
-	}
-	file, err := ioutil.TempFile(tmpOutputDir, "*.txt")
-	if err != nil {
-		level.Warn(logger).Log(
-			"msg", "failure creating files.",
-			"err", err)
+		logger = log.NewNopLogger()
 	}
 	return &FileClient{
-		file: file,
-		logger: logger,
+		writeCloser: writeCloser,
+		logger:      logger,
 	}
 }
 
 // Store writes a batch of samples to the file.
-func (f *FileClient) Store(req *monitoring.CreateTimeSeriesRequest) error {
+func (fc *FileClient) Store(req *monitoring.CreateTimeSeriesRequest) error {
 	data, err := proto.Marshal(req)
 	if err != nil {
-		level.Warn(f.logger).Log(
+		level.Warn(fc.logger).Log(
 			"msg", "failure marshaling CreateTimeSeriesRequest.",
 			"err", err)
 		return err
 	}
-	_, err = f.file.Write(data)
+	_, err = fc.writeCloser.Write(data)
 	if err != nil {
-		level.Warn(f.logger).Log(
+		level.Warn(fc.logger).Log(
 			"msg", "failure writing data to file.",
 			"err", err)
 		return err
@@ -78,6 +64,6 @@ func (f *FileClient) Store(req *monitoring.CreateTimeSeriesRequest) error {
 	return nil
 }
 
-func (f *FileClient) Close() error {
-	return f.file.Close()
+func (fc *FileClient) Close() error {
+	return fc.writeCloser.Close()
 }

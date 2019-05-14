@@ -15,7 +15,6 @@ package file
 
 import (
 	"io/ioutil"
-	"os"
 	"reflect"
 	"testing"
 
@@ -34,9 +33,6 @@ func TestRequest(t *testing.T) {
 	if err := f.Store(req); err != nil {
 		t.Fatal(err)
 	}
-	filename := f.file.Name()
-	defer os.Remove(filename)
-	f.file.Close()
 
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {

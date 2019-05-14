@@ -402,6 +402,7 @@ func main() {
 
 	if cfg.storeInFiles {
 		scf = &fileClientFactory{
+			pathPrefix: "/tmp/stackdriver-prometheus-sidecar/CreateTimeSeriesRequest",
 			logger:     log.With(logger, "component", "storage"),
 		}
 	} else {
@@ -599,11 +600,18 @@ func (s *stackdriverClientFactory) Name() string {
 }
 
 type fileClientFactory struct {
-	logger log.Logger
+	pathPrefix string
+	logger     log.Logger
 }
 
-func (f *fileClientFactory) New() stackdriver.StorageClient {
-	return file.NewFileClient(f.logger)
+func (fcf *fileClientFactory) New() stackdriver.StorageClient {
+	f, err := ioutil.TempFile(fcf.pathPrefix, "*.txt")
+	if err != nil {
+		level.Warn(fcf.logger).Log(
+			"msg", "failure creating files.",
+			"err", err)
+	}
+	return file.NewFileClient(f, fcf.logger)
 }
 
 func (f *fileClientFactory) Name() string {
