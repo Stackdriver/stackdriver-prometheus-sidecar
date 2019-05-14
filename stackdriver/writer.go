@@ -42,7 +42,8 @@ func NewCreateTimeSeriesRequestWriterCloser(writeCloser io.WriteCloser, logger l
 	}
 }
 
-// Store writes a batch of samples to the writeCloser.
+// Store writes protobuf message monitoring.CreateTimeSeriesRequest to
+// the writeCloser.
 func (c *CreateTimeSeriesRequestWriterCloser) Store(req *monitoring.CreateTimeSeriesRequest) error {
 	data, err := proto.Marshal(req)
 	if err != nil {

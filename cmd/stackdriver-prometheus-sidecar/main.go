@@ -609,8 +609,8 @@ func (s *stackdriverClientFactory) Name() string {
 	return s.url.String()
 }
 
-// fileClientFactory allows creating a stackdriver.StorageClient
-// which writes to a newly created file under dirPath.
+// fileClientFactory allows creating a StorageClient which writes to
+// a newly created file under dir.
 type fileClientFactory struct {
 	dir    string
 	logger log.Logger
