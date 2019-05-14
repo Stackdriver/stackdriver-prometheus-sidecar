@@ -406,7 +406,7 @@ func main() {
 	if cfg.storeInFiles {
 		err := os.MkdirAll(cfg.storeInFilesDirectory, 0700)
 		if err != nil {
-			level.Warn(logger).Log(
+			level.Error(logger).Log(
 				"msg", "Failure creating directory.",
 				"err", err)
 			os.Exit(1)
