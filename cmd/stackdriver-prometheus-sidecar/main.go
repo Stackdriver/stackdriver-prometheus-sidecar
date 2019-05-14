@@ -609,7 +609,7 @@ func (s *stackdriverClientFactory) Name() string {
 	return s.url.String()
 }
 
-// fileClientFactory requires dir a existing valid directory, and file
+// fileClientFactory requires dir an existing valid directory, and file
 // can be created under dir.
 //
 // fileClientFactory generates StorageClient which writes to a newly
