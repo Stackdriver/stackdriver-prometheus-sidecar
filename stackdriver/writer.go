@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package file
+package stackdriver
 
 import (
 	"io"
@@ -25,38 +25,35 @@ import (
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
-// FileClient allows writing to a file gRPC endpoint. The
-// implementation may hit a single backend, so the application should create a
-// number of these clients.
-type FileClient struct {
+// CreateTimeSeriesRequestWriterCloser allows writing protobuf message
+// monitoring.CreateTimeSeriesRequest to writerCloser.
+type CreateTimeSeriesRequestWriterCloser struct {
 	logger      log.Logger
 	writeCloser io.WriteCloser
 }
 
-// NewFileClient creates a file under os.TempDir(), and creates a new FileClient writing to
-// the file. The user of NewFileClient is responsible to manage the created file.
-func NewFileClient(writeCloser io.WriteCloser, logger log.Logger) *FileClient {
+func NewCreateTimeSeriesRequestWriterCloser(writeCloser io.WriteCloser, logger log.Logger) *CreateTimeSeriesRequestWriterCloser {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	return &FileClient{
+	return &CreateTimeSeriesRequestWriterCloser{
 		writeCloser: writeCloser,
 		logger:      logger,
 	}
 }
 
-// Store writes a batch of samples to the file.
-func (fc *FileClient) Store(req *monitoring.CreateTimeSeriesRequest) error {
+// Store writes a batch of samples to the writeCloser.
+func (c *CreateTimeSeriesRequestWriterCloser) Store(req *monitoring.CreateTimeSeriesRequest) error {
 	data, err := proto.Marshal(req)
 	if err != nil {
-		level.Warn(fc.logger).Log(
+		level.Warn(c.logger).Log(
 			"msg", "failure marshaling CreateTimeSeriesRequest.",
 			"err", err)
 		return err
 	}
-	_, err = fc.writeCloser.Write(data)
+	_, err = c.writeCloser.Write(data)
 	if err != nil {
-		level.Warn(fc.logger).Log(
+		level.Warn(c.logger).Log(
 			"msg", "failure writing data to file.",
 			"err", err)
 		return err
@@ -64,6 +61,6 @@ func (fc *FileClient) Store(req *monitoring.CreateTimeSeriesRequest) error {
 	return nil
 }
 
-func (fc *FileClient) Close() error {
-	return fc.writeCloser.Close()
+func (c *CreateTimeSeriesRequestWriterCloser) Close() error {
+	return c.writeCloser.Close()
 }

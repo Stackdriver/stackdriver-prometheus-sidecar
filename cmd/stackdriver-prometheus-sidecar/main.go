@@ -32,7 +32,6 @@ import (
 
 	md "cloud.google.com/go/compute/metadata"
 	oc_stackdriver "contrib.go.opencensus.io/exporter/stackdriver"
-	"github.com/Stackdriver/stackdriver-prometheus-sidecar/file"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
@@ -181,25 +180,26 @@ func main() {
 	}
 
 	cfg := struct {
-		configFilename     string
-		projectIdResource  string
-		kubernetesLabels   kubernetesConfig
-		genericLabels      genericConfig
-		stackdriverAddress *url.URL
-		metricsPrefix      string
-		useGkeResource     bool
-		storeInFiles       bool
-		walDirectory       string
-		prometheusURL      *url.URL
-		listenAddress      string
-		filters            []string
-		filtersets         []string
-		aggregations       retrieval.CounterAggregatorConfig
-		metricRenames      map[string]string
-		staticMetadata     []scrape.MetricMetadata
-		useRestrictedIps   bool
-		manualResolver     *manual.Resolver
-		monitoringBackends []string
+		configFilename        string
+		projectIdResource     string
+		kubernetesLabels      kubernetesConfig
+		genericLabels         genericConfig
+		stackdriverAddress    *url.URL
+		metricsPrefix         string
+		useGkeResource        bool
+		storeInFiles          bool
+		storeInFilesDirectory string
+		walDirectory          string
+		prometheusURL         *url.URL
+		listenAddress         string
+		filters               []string
+		filtersets            []string
+		aggregations          retrieval.CounterAggregatorConfig
+		metricRenames         map[string]string
+		staticMetadata        []scrape.MetricMetadata
+		useRestrictedIps      bool
+		manualResolver        *manual.Resolver
+		monitoringBackends    []string
 
 		logLevel promlog.AllowedLevel
 	}{}
@@ -241,8 +241,11 @@ func main() {
 		"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
 		Default("false").BoolVar(&cfg.useGkeResource)
 
-	a.Flag("stackdriver.store-in-files", "Whethere to store data in local files.").
+	a.Flag("stackdriver.store-in-files", "Whethere to store payload in filesystem. For use in troubleshooting.").
 		Default("false").BoolVar(&cfg.storeInFiles)
+
+	a.Flag("stackdriver.store-in-files-directory", "Directory to store payload. For use in troubleshooting.").
+		Default(os.TempDir() + "/CreateTimeSeriesRequest").StringVar(&cfg.storeInFilesDirectory)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -401,9 +404,17 @@ func main() {
 	var scf stackdriver.StorageClientFactory
 
 	if cfg.storeInFiles {
+		err := os.MkdirAll(cfg.storeInFilesDirectory, 0700)
+		if err != nil {
+			level.Warn(logger).Log(
+				"msg", "Failure creating directory.",
+				"directory", "cfg.storeInFilesDirectory",
+				"err", err)
+			os.Exit(1)
+		}
 		scf = &fileClientFactory{
-			pathPrefix: "/tmp/stackdriver-prometheus-sidecar/CreateTimeSeriesRequest",
-			logger:     log.With(logger, "component", "storage"),
+			dir:    cfg.storeInFilesDirectory,
+			logger: log.With(logger, "component", "storage"),
 		}
 	} else {
 		scf = &stackdriverClientFactory{
@@ -599,19 +610,24 @@ func (s *stackdriverClientFactory) Name() string {
 	return s.url.String()
 }
 
+// fileClientFactory allows creating a stackdriver.StorageClient
+// which writes to a newly created file under dirPath.
 type fileClientFactory struct {
-	pathPrefix string
-	logger     log.Logger
+	dir    string
+	logger log.Logger
 }
 
+// New Creates a new file for each StorageClient, so when Multiple
+// StorageClients execute Store(), these clients write to their own
+// files without race condition.
 func (fcf *fileClientFactory) New() stackdriver.StorageClient {
-	f, err := ioutil.TempFile(fcf.pathPrefix, "*.txt")
+	f, err := ioutil.TempFile(fcf.dir, "*.txt")
 	if err != nil {
 		level.Warn(fcf.logger).Log(
 			"msg", "failure creating files.",
 			"err", err)
 	}
-	return file.NewFileClient(f, fcf.logger)
+	return stackdriver.NewCreateTimeSeriesRequestWriterCloser(f, fcf.logger)
 }
 
 func (f *fileClientFactory) Name() string {
