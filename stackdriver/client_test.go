@@ -133,7 +133,7 @@ func TestResolver(t *testing.T) {
 		}
 	}()
 	logger := log.NewLogfmtLogger(logBuffer)
-
+	
 	// Without ?auth=false, the test fails with context deadline exceeded.
 	serverURL, err := url.Parse("http://stackdriver.invalid?auth=false")
 	if err != nil {
