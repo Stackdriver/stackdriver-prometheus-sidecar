@@ -616,7 +616,7 @@ type fileClientFactory struct {
 	logger log.Logger
 }
 
-// New Creates a new file for each StorageClient, so when Multiple
+// New creates a new file for each StorageClient, so when multiple
 // StorageClients execute Store(), these clients write to their own
 // files without race condition.
 func (fcf *fileClientFactory) New() stackdriver.StorageClient {
