@@ -408,7 +408,6 @@ func main() {
 		if err != nil {
 			level.Warn(logger).Log(
 				"msg", "Failure creating directory.",
-				"directory", "cfg.storeInFilesDirectory",
 				"err", err)
 			os.Exit(1)
 		}
