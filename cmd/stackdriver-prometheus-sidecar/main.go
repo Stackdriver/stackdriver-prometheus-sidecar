@@ -619,7 +619,7 @@ type fileClientFactory struct {
 func (fcf *fileClientFactory) New() stackdriver.StorageClient {
 	f, err := ioutil.TempFile(fcf.dir, "*.txt")
 	if err != nil {
-		level.Warn(fcf.logger).Log(
+		level.Error(fcf.logger).Log(
 			"msg", "failure creating files.",
 			"err", err)
 	}
