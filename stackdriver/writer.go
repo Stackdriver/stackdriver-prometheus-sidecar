@@ -26,7 +26,7 @@ import (
 )
 
 // CreateTimeSeriesRequestWriterCloser allows writing protobuf message
-// monitoring.CreateTimeSeriesRequest to writerCloser.
+// monitoring.CreateTimeSeriesRequest as wire format into the writerCloser.
 type CreateTimeSeriesRequestWriterCloser struct {
 	logger      log.Logger
 	writeCloser io.WriteCloser
@@ -42,8 +42,8 @@ func NewCreateTimeSeriesRequestWriterCloser(writeCloser io.WriteCloser, logger l
 	}
 }
 
-// Store writes protobuf message monitoring.CreateTimeSeriesRequest to
-// the writeCloser.
+// Store writes protobuf message monitoring.CreateTimeSeriesRequest as wire
+// format into the writeCloser.
 func (c *CreateTimeSeriesRequestWriterCloser) Store(req *monitoring.CreateTimeSeriesRequest) error {
 	data, err := proto.Marshal(req)
 	if err != nil {
