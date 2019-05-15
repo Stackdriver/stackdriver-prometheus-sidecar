@@ -180,24 +180,25 @@ func main() {
 	}
 
 	cfg := struct {
-		configFilename     string
-		projectIdResource  string
-		kubernetesLabels   kubernetesConfig
-		genericLabels      genericConfig
-		stackdriverAddress *url.URL
-		metricsPrefix      string
-		useGkeResource     bool
-		walDirectory       string
-		prometheusURL      *url.URL
-		listenAddress      string
-		filters            []string
-		filtersets         []string
-		aggregations       retrieval.CounterAggregatorConfig
-		metricRenames      map[string]string
-		staticMetadata     []scrape.MetricMetadata
-		useRestrictedIps   bool
-		manualResolver     *manual.Resolver
-		monitoringBackends []string
+		configFilename        string
+		projectIdResource     string
+		kubernetesLabels      kubernetesConfig
+		genericLabels         genericConfig
+		stackdriverAddress    *url.URL
+		metricsPrefix         string
+		useGkeResource        bool
+		storeInFilesDirectory string
+		walDirectory          string
+		prometheusURL         *url.URL
+		listenAddress         string
+		filters               []string
+		filtersets            []string
+		aggregations          retrieval.CounterAggregatorConfig
+		metricRenames         map[string]string
+		staticMetadata        []scrape.MetricMetadata
+		useRestrictedIps      bool
+		manualResolver        *manual.Resolver
+		monitoringBackends    []string
 
 		logLevel promlog.AllowedLevel
 	}{}
@@ -238,6 +239,9 @@ func main() {
 	a.Flag("stackdriver.use-gke-resource",
 		"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
 		Default("false").BoolVar(&cfg.useGkeResource)
+
+	a.Flag("stackdriver.store-in-files-directory", "If specified, store the CreateTimeSeriesRequest protobuf messages to files under this directory, instead of sending protobuf messages to Stackdriver Monitoring API.").
+		StringVar(&cfg.storeInFilesDirectory)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -393,16 +397,34 @@ func main() {
 	// works well.
 	config.DefaultQueueConfig.Capacity = 3 * stackdriver.MaxTimeseriesesPerRequest
 
-	queueManager, err := stackdriver.NewQueueManager(
-		log.With(logger, "component", "queue_manager"),
-		config.DefaultQueueConfig,
-		&clientFactory{
+	var scf stackdriver.StorageClientFactory
+
+	if len(cfg.storeInFilesDirectory) > 0 {
+		err := os.MkdirAll(cfg.storeInFilesDirectory, 0700)
+		if err != nil {
+			level.Error(logger).Log(
+				"msg", "Failure creating directory.",
+				"err", err)
+			os.Exit(1)
+		}
+		scf = &fileClientFactory{
+			dir:    cfg.storeInFilesDirectory,
+			logger: log.With(logger, "component", "storage"),
+		}
+	} else {
+		scf = &stackdriverClientFactory{
 			logger:            log.With(logger, "component", "storage"),
 			projectIdResource: cfg.projectIdResource,
 			url:               cfg.stackdriverAddress,
 			timeout:           10 * time.Second,
 			manualResolver:    cfg.manualResolver,
-		},
+		}
+	}
+
+	queueManager, err := stackdriver.NewQueueManager(
+		log.With(logger, "component", "queue_manager"),
+		config.DefaultQueueConfig,
+		scf,
 		tailer,
 	)
 	if err != nil {
@@ -561,7 +583,7 @@ func main() {
 	level.Info(logger).Log("msg", "See you next time!")
 }
 
-type clientFactory struct {
+type stackdriverClientFactory struct {
 	logger            log.Logger
 	projectIdResource string
 	url               *url.URL
@@ -569,18 +591,42 @@ type clientFactory struct {
 	manualResolver    *manual.Resolver
 }
 
-func (f *clientFactory) New() stackdriver.StorageClient {
+func (s *stackdriverClientFactory) New() stackdriver.StorageClient {
 	return stackdriver.NewClient(&stackdriver.ClientConfig{
-		Logger:    f.logger,
-		ProjectId: f.projectIdResource,
-		URL:       f.url,
-		Timeout:   f.timeout,
-		Resolver:  f.manualResolver,
+		Logger:    s.logger,
+		ProjectId: s.projectIdResource,
+		URL:       s.url,
+		Timeout:   s.timeout,
+		Resolver:  s.manualResolver,
 	})
 }
 
-func (f *clientFactory) Name() string {
-	return f.url.String()
+func (s *stackdriverClientFactory) Name() string {
+	return s.url.String()
+}
+
+// fileClientFactory generates StorageClient which writes to a newly
+// created file under dir. It requires dir an existing valid directory.
+type fileClientFactory struct {
+	dir    string
+	logger log.Logger
+}
+
+// New creates an instance of stackdriver.StorageClient. Each instance
+// writes to a different file under dir. The returned instance is not
+// thread-safe.
+func (fcf *fileClientFactory) New() stackdriver.StorageClient {
+	f, err := ioutil.TempFile(fcf.dir, "*.txt")
+	if err != nil {
+		level.Error(fcf.logger).Log(
+			"msg", "failure creating files.",
+			"err", err)
+	}
+	return stackdriver.NewCreateTimeSeriesRequestWriterCloser(f, fcf.logger)
+}
+
+func (f *fileClientFactory) Name() string {
+	return "fileClientFactory"
 }
 
 func waitForPrometheus(ctx context.Context, logger log.Logger, promURL *url.URL) {
