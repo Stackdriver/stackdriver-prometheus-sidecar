@@ -187,7 +187,6 @@ func main() {
 		stackdriverAddress    *url.URL
 		metricsPrefix         string
 		useGkeResource        bool
-		storeInFiles          bool
 		storeInFilesDirectory string
 		walDirectory          string
 		prometheusURL         *url.URL
@@ -241,11 +240,8 @@ func main() {
 		"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
 		Default("false").BoolVar(&cfg.useGkeResource)
 
-	a.Flag("stackdriver.store-in-files", "Whethere to store payload in filesystem. For use in troubleshooting.").
-		Default("false").BoolVar(&cfg.storeInFiles)
-
-	a.Flag("stackdriver.store-in-files-directory", "Directory to store payload. For use in troubleshooting.").
-		Default(os.TempDir() + "/CreateTimeSeriesRequest").StringVar(&cfg.storeInFilesDirectory)
+	a.Flag("stackdriver.store-in-files-directory", "If specified, store the CreateTimeSeriesRequest protobuf messages to files under this directory, instead of sending protobuf messages to Stackdriver Monitoring API.").
+		StringVar(&cfg.storeInFilesDirectory)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.walDirectory)
@@ -403,7 +399,7 @@ func main() {
 
 	var scf stackdriver.StorageClientFactory
 
-	if cfg.storeInFiles {
+	if len(cfg.storeInFilesDirectory) > 0 {
 		err := os.MkdirAll(cfg.storeInFilesDirectory, 0700)
 		if err != nil {
 			level.Error(logger).Log(
@@ -620,9 +616,9 @@ type fileClientFactory struct {
 }
 
 // New creates a new file for each StorageClient, and configure
-// the newly generated StorageClient to write 
+// the newly generated StorageClient to write
 // monitoring.CreateTimeSeriesRequest to the file.
-// 
+//
 // when multiple StorageClients execute Store(), each client writes
 // to its own file to avoid race condition.
 func (fcf *fileClientFactory) New() stackdriver.StorageClient {
