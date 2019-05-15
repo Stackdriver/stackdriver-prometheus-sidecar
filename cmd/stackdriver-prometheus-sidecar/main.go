@@ -612,10 +612,9 @@ type fileClientFactory struct {
 	logger log.Logger
 }
 
-// New creates a new file for each StorageClient, and configure
-// the newly generated StorageClient to write
-// monitoring.CreateTimeSeriesRequest protobuf in wire format to the newly
-// created file.
+// New creates an instance of stackdriver.StorageClient. Each instance
+// writes to a different file under dir. The returned instance is not
+// thread-safe.
 func (fcf *fileClientFactory) New() stackdriver.StorageClient {
 	f, err := ioutil.TempFile(fcf.dir, "*.txt")
 	if err != nil {
