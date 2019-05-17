@@ -30,6 +30,20 @@ spec:
         - \"--stackdriver.kubernetes.cluster-name=${KUBE_CLUSTER}\"
         #- \"--stackdriver.generic.location=${GCP_REGION}\"
         #- \"--stackdriver.generic.namespace=${KUBE_CLUSTER}\"
+        #- \"--enable-statusz\"
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
         ports:
         - name: sidecar
           containerPort: 9091
