@@ -19,7 +19,7 @@ fi
 ################################
 
 # 1. Update file `VERSION` with the numeric version, e.g. `0.3.1`.
-#    Note that VERSION file is required for building tool promu:
+#    VERSION file is required by building tool promu:
 #    https://github.com/prometheus/promu
 echo "${version}" > VERSION
 
