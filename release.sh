@@ -19,6 +19,8 @@ fi
 ################################
 
 # 1. Update file `VERSION` with the numeric version, e.g. `0.3.1`.
+#    Note that VERSION file is required for building tool promu:
+#    https://github.com/prometheus/promu
 echo "${version}" > VERSION
 
 # 2. Create a git branch for the version, e.g. `release-0.3.1`.
