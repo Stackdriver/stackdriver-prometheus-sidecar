@@ -5,7 +5,7 @@ versioned_release_branch="release-${version}"
 
 if [[ -z "${version}" ]]; then
     echo "Please provide a version: ./release.sh {VERSION}"
-    echo "The current version is: $(cat VERSION)"
+    echo "Look up latest version on https://github.com/Stackdriver/stackdriver-prometheus-sidecar/tags."
     exit 1
 fi
 
@@ -19,6 +19,8 @@ fi
 ################################
 
 # 1. Update file `VERSION` with the numeric version, e.g. `0.3.1`.
+#    VERSION file is required by building tool promu:
+#    https://github.com/prometheus/promu
 echo "${version}" > VERSION
 
 # 2. Create a git branch for the version, e.g. `release-0.3.1`.
