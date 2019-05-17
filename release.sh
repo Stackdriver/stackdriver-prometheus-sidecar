@@ -2,7 +2,6 @@
 
 version="$1"
 versioned_release_branch="release-${version}"
-versioned_release_tag="v${version}"
 
 if [[ -z "${version}" ]]; then
     echo "Please provide a version: ./release.sh {VERSION}"
@@ -35,12 +34,12 @@ DOCKER_IMAGE_NAME="gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar"
 ################################
 # Push branch and tag to GitHub
 ################################
-# 1. Tag the commit to a specific version, e.g. `v0.3.1`. 
-git tag "${versioned_release_tag}"
+# 1. Tag the commit to a specific version, e.g. `0.3.1`.
+git tag "${version}"
 
 # 2. Push release branch to GitHub.
 git push https://github.com/Stackdriver/stackdriver-prometheus-sidecar.git "${versioned_release_branch}"
 
 # 3. Push tag to GitHub.
-git push https://github.com/Stackdriver/stackdriver-prometheus-sidecar.git "${versioned_release_tag}"
+git push https://github.com/Stackdriver/stackdriver-prometheus-sidecar.git "${version}"
 
