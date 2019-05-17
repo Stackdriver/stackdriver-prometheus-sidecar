@@ -5,7 +5,7 @@ versioned_release_branch="release-${version}"
 
 if [[ -z "${version}" ]]; then
     echo "Please provide a version: ./release.sh {VERSION}"
-    echo "The current version is: $(cat VERSION)"
+    echo "Look up latest version on https://github.com/Stackdriver/stackdriver-prometheus-sidecar/tags."
     exit 1
 fi
 
