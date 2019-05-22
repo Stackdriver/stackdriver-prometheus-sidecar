@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"sync"
@@ -122,7 +123,7 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	}
 	address := c.url.Hostname()
 	if len(c.url.Port()) > 0 {
-		address = fmt.Sprintf("%s:%s", address, c.url.Port())
+		address = net.JoinHostPort(address, c.url.Port())
 	}
 	if c.resolver != nil {
 		address = c.resolver.Scheme() + ":///" + address

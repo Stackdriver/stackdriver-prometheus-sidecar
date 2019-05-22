@@ -120,49 +120,53 @@ func TestEmptyRequest(t *testing.T) {
 }
 
 func TestResolver(t *testing.T) {
-	grpcServer := grpc.NewServer()
-	listener := newLocalListener()
-	monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
-	go grpcServer.Serve(listener)
-	defer grpcServer.Stop()
+	addressesToTest := []string{"stackdriver.invalid", "2001:db8::"}
+	for _, address := range addressesToTest {
+		grpcServer := grpc.NewServer()
+		listener := newLocalListener()
+		monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
+		go grpcServer.Serve(listener)
+		defer grpcServer.Stop()
 
-	logBuffer := &bytes.Buffer{}
-	defer func() {
-		if logBuffer.Len() > 0 {
-			t.Log(logBuffer.String())
+		logBuffer := &bytes.Buffer{}
+		defer func() {
+			if logBuffer.Len() > 0 {
+				t.Log(logBuffer.String())
+			}
+		}()
+		logger := log.NewLogfmtLogger(logBuffer)
+
+		// Without ?auth=false, the test fails with context deadline exceeded.
+		serverURL, err := url.Parse("http://" + address + "?auth=false")
+		if err != nil {
+			t.Fatal(err)
 		}
-	}()
-	logger := log.NewLogfmtLogger(logBuffer)
 
-	// Without ?auth=false, the test fails with context deadline exceeded.
-	serverURL, err := url.Parse("http://stackdriver.invalid?auth=false")
-	if err != nil {
-		t.Fatal(err)
-	}
+		res, _ := manual.GenerateAndRegisterManualResolver()
+		res.InitialAddrs([]resolver.Address{
+			{Addr: listener.Addr().String()},
+		})
 
-	res, _ := manual.GenerateAndRegisterManualResolver()
-	res.InitialAddrs([]resolver.Address{
-		{Addr: listener.Addr().String()},
-	})
+		c := NewClient(&ClientConfig{
+			URL:      serverURL,
+			Timeout:  time.Second,
+			Resolver: res,
+			Logger:   logger,
+		})
 
-	c := NewClient(&ClientConfig{
-		URL:      serverURL,
-		Timeout:  time.Second,
-		Resolver: res,
-		Logger:   logger,
-	})
-
-	err = c.Store(&monitoring.CreateTimeSeriesRequest{
-		TimeSeries: []*monitoring.TimeSeries{
-			&monitoring.TimeSeries{},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	requestedTarget := c.conn.Target()
-	if requestedTarget != c.resolver.Scheme()+":///stackdriver.invalid" {
-		t.Errorf("ERROR: Remote address is %s, want stackdriver.invalid.",
-			requestedTarget)
+		err = c.Store(&monitoring.CreateTimeSeriesRequest{
+			TimeSeries: []*monitoring.TimeSeries{
+				&monitoring.TimeSeries{},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		requestedTarget := c.conn.Target()
+		expectedTarget := c.resolver.Scheme()+":///" + address
+		if requestedTarget != expectedTarget {
+			t.Errorf("ERROR: Remote address is %s, want " + expectedTarget,
+				requestedTarget)
+		}
 	}
 }
