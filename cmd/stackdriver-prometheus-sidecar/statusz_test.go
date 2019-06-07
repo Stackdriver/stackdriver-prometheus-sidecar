@@ -46,7 +46,7 @@ func mustParseURL(t *testing.T, rawurl string) *url.URL {
 	return u
 }
 
-func TestStatuzHandler(t *testing.T) {
+func TestStatuszHandler(t *testing.T) {
 	os.Setenv("POD_NAME", "my-pod")
 	os.Setenv("NODE_NAME", "my-node")
 	os.Setenv("NAMESPACE_NAME", "my-namespace")

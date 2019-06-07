@@ -26,6 +26,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -185,6 +186,7 @@ type mainConfig struct {
 	walDirectory          string
 	prometheusURL         *url.URL
 	listenAddress         string
+	enableStatusz         bool
 	filters               []string
 	filtersets            []string
 	aggregations          retrieval.CounterAggregatorConfig
@@ -195,6 +197,30 @@ type mainConfig struct {
 	monitoringBackends    []string
 
 	logLevel promlog.AllowedLevel
+}
+
+// TableForStatusz returns a map suitable for display on the /statusz
+// endpoint.
+//
+// Some fields are not part of this table; for example, metricRenames
+// and staticMetadata are displayed separately.
+func (c *mainConfig) TableForStatusz() map[string]string {
+	return map[string]string{
+		"Config filename":                 c.configFilename,
+		"Filters":                         strings.Join(c.filters, ","),
+		"Generic labels: location":        c.genericLabels.location,
+		"Generic labels: namespace":       c.genericLabels.namespace,
+		"Kubernetes labels: location":     c.kubernetesLabels.location,
+		"Kubernetes labels: cluster name": c.kubernetesLabels.clusterName,
+		"Listen address":                  c.listenAddress,
+		"Log level":                       c.logLevel.String(),
+		"Metrics prefix":                  c.metricsPrefix,
+		"Project ID resource":             c.projectIdResource,
+		"Prometheus URL":                  c.prometheusURL.String(),
+		"Stackdriver address":             c.stackdriverAddress.String(),
+		"Use GKE resource":                strconv.FormatBool(c.useGkeResource),
+		"WAL directory":                   c.walDirectory,
+	}
 }
 
 func main() {
@@ -216,9 +242,6 @@ func main() {
 	projectId := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
 		Required().
 		String()
-
-	enableStatusz := a.Flag("enable-statusz", "If true, then enables a /statusz endpoint on the web server with diagnostic information.").
-		Bool()
 
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
 		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
@@ -259,6 +282,9 @@ func main() {
 
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry.").
 		Default("0.0.0.0:9091").StringVar(&cfg.listenAddress)
+
+	a.Flag("web.enable-statusz", "If true, then enables a /statusz endpoint on the web server with diagnostic information.").
+		Default("false").BoolVar(&cfg.enableStatusz)
 
 	a.Flag("include", "PromQL metric and label matcher which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass any of the filter sets to be forwarded.").
 		StringsVar(&cfg.filtersets)
@@ -476,7 +502,7 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 
-	if *enableStatusz {
+	if cfg.enableStatusz {
 		http.Handle("/statusz", &statuszHandler{
 			logger:    logger,
 			projectId: *projectId,

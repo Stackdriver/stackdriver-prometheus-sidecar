@@ -19,8 +19,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -56,7 +54,7 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			ClusterLocation string
 			ClusterName     string
 		}
-		DisplayConfig  map[string]string
+		ConfigTable    map[string]string
 		MetricRenames  map[string]string
 		StaticMetadata []scrape.MetricMetadata
 	}
@@ -73,6 +71,11 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	data.Uptime = fmt.Sprintf("%d hr %02d min %02d sec",
 		uptime/3600, (uptime/60)%60, uptime%60)
 
+	// We set these environment variables using the Kubernetes Downward API:
+	// https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
+	//
+	// If they variables are not set, the template below will omit links
+	// that depend on them.
 	data.PodName = os.Getenv("POD_NAME")
 	data.NodeName = os.Getenv("NODE_NAME")
 	data.NamespaceName = os.Getenv("NAMESPACE_NAME")
@@ -81,22 +84,7 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	data.GKEInfo.ClusterLocation = h.cfg.kubernetesLabels.location
 	data.GKEInfo.ClusterName = h.cfg.kubernetesLabels.clusterName
 
-	data.DisplayConfig = map[string]string{
-		"Config filename":                 h.cfg.configFilename,
-		"Filters":                         strings.Join(h.cfg.filters, ","),
-		"Generic labels: location":        h.cfg.genericLabels.location,
-		"Generic labels: namespace":       h.cfg.genericLabels.namespace,
-		"Kubernetes labels: location":     h.cfg.kubernetesLabels.location,
-		"Kubernetes labels: cluster name": h.cfg.kubernetesLabels.clusterName,
-		"Listen address":                  h.cfg.listenAddress,
-		"Log level":                       h.cfg.logLevel.String(),
-		"Metrics prefix":                  h.cfg.metricsPrefix,
-		"Project ID resource":             h.cfg.projectIdResource,
-		"Prometheus URL":                  h.cfg.prometheusURL.String(),
-		"Stackdriver address":             h.cfg.stackdriverAddress.String(),
-		"Use GKE resource":                strconv.FormatBool(h.cfg.useGkeResource),
-		"WAL directory":                   h.cfg.walDirectory,
-	}
+	data.ConfigTable = h.cfg.TableForStatusz()
 	data.MetricRenames = h.cfg.metricRenames
 	data.StaticMetadata = h.cfg.staticMetadata
 
@@ -151,7 +139,7 @@ var statuszTmpl = template.Must(template.New("").Parse(`
     Build context: {{.BuildContext}}<br>
     Host details: {{.Uname}}<br>
     FD limits: {{.FdLimits}}<br>
-    {{if (and .GKEInfo.ProjectId .GKEInfo.ClusterLocation .GKEInfo.ClusterName)}}
+    {{if (and .GKEInfo.ProjectId .GKEInfo.ClusterLocation .GKEInfo.ClusterName .PodName .NodeName .NamespaceName)}}
     <p>
     Pod <a href="https://console.cloud.google.com/kubernetes/pod/{{.GKEInfo.ClusterLocation}}/{{.GKEInfo.ClusterName}}/{{if .NamespaceName}}{{.NamespaceName}}{{else}}default{{end}}/{{.PodName}}?project={{.GKEInfo.ProjectId}}">{{.PodName}}</a><br>
     Node <a href="https://console.cloud.google.com/kubernetes/node/{{.GKEInfo.ClusterLocation}}/{{.GKEInfo.ClusterName}}/{{.NodeName}}?project={{.GKEInfo.ProjectId}}">{{.NodeName}}</a><br>
@@ -167,7 +155,7 @@ var statuszTmpl = template.Must(template.New("").Parse(`
 <h1>Parsed configuration</h1>
 
 <table>
-{{range $k, $v := .DisplayConfig}}
+{{range $k, $v := .ConfigTable}}
 <tr><th>{{$k}}</th><td>{{$v}}</td></tr>
 {{end}}
 </table>
