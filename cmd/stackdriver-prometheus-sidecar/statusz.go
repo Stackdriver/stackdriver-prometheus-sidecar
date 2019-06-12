@@ -14,7 +14,6 @@
 package main
 
 import (
-	"fmt"
 	"html/template"
 	"net/http"
 	"os"
@@ -24,11 +23,11 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/common/version"
-	"github.com/prometheus/prometheus/scrape"
 )
 
 var (
 	serverStart = time.Now()
+	statuszTmpl = template.Must(template.ParseFiles("statusz-tmpl.html"))
 )
 
 type statuszHandler struct {
@@ -54,11 +53,8 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			ClusterLocation string
 			ClusterName     string
 		}
-		ConfigTable    map[string]string
-		MetricRenames  map[string]string
-		StaticMetadata []scrape.MetricMetadata
+		Config *mainConfig
 	}
-
 	data.ServerName = filepath.Base(os.Args[0])
 
 	data.VersionInfo = version.Info()
@@ -66,10 +62,8 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	data.Uname = Uname()
 	data.FdLimits = FdLimits()
 
-	data.StartTime = serverStart.Format(time.RFC1123)
-	uptime := int64(time.Since(serverStart).Seconds())
-	data.Uptime = fmt.Sprintf("%d hr %02d min %02d sec",
-		uptime/3600, (uptime/60)%60, uptime%60)
+	data.StartTime = serverStart.Format(time.RFC3339)
+	data.Uptime = time.Since(serverStart).String()
 
 	// We set these environment variables using the Kubernetes Downward API:
 	// https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
@@ -81,105 +75,12 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	data.NamespaceName = os.Getenv("NAMESPACE_NAME")
 
 	data.GKEInfo.ProjectId = h.projectId
-	data.GKEInfo.ClusterLocation = h.cfg.kubernetesLabels.location
-	data.GKEInfo.ClusterName = h.cfg.kubernetesLabels.clusterName
+	data.GKEInfo.ClusterLocation = h.cfg.KubernetesLabels.Location
+	data.GKEInfo.ClusterName = h.cfg.KubernetesLabels.ClusterName
 
-	data.ConfigTable = h.cfg.TableForStatusz()
-	data.MetricRenames = h.cfg.metricRenames
-	data.StaticMetadata = h.cfg.staticMetadata
+	data.Config = h.cfg
 
 	if err := statuszTmpl.Execute(w, data); err != nil {
 		level.Error(h.logger).Log("msg", "couldn't execute template", "err", err)
 	}
 }
-
-var statuszTmpl = template.Must(template.New("").Parse(`
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Status for {{.ServerName}}</title>
-  <style>
-    body {
-      font-family: sans-serif;
-    }
-    h1 {
-      clear: both;
-      width: 100%;
-      text-align: center;
-      font-size: 120%;
-      background: #eef;
-    }
-    h2 {
-      font-size: 110%;
-    }
-    .lefthand {
-      float: left;
-      width: 80%;
-    }
-    .righthand {
-      text-align: right;
-    }
-    td, th {
-      background-color: rgba(0, 0, 0, 0.05);
-    }
-    th {
-      text-align: left;
-    }
-  </style>
-</head>
-
-<body>
-<h1>Status for {{.ServerName}}</h1>
-
-<div>
-  <div class=lefthand>
-    Started: {{.StartTime}}<br>
-    Up {{.Uptime}}<br>
-    Version: {{.VersionInfo}}<br>
-    Build context: {{.BuildContext}}<br>
-    Host details: {{.Uname}}<br>
-    FD limits: {{.FdLimits}}<br>
-    {{if (and .GKEInfo.ProjectId .GKEInfo.ClusterLocation .GKEInfo.ClusterName .PodName .NodeName .NamespaceName)}}
-    <p>
-    Pod <a href="https://console.cloud.google.com/kubernetes/pod/{{.GKEInfo.ClusterLocation}}/{{.GKEInfo.ClusterName}}/{{if .NamespaceName}}{{.NamespaceName}}{{else}}default{{end}}/{{.PodName}}?project={{.GKEInfo.ProjectId}}">{{.PodName}}</a><br>
-    Node <a href="https://console.cloud.google.com/kubernetes/node/{{.GKEInfo.ClusterLocation}}/{{.GKEInfo.ClusterName}}/{{.NodeName}}?project={{.GKEInfo.ProjectId}}">{{.NodeName}}</a><br>
-    Cluster <a href="https://console.cloud.google.com/kubernetes/clusters/details/{{.GKEInfo.ClusterLocation}}/{{.GKEInfo.ClusterName}}?project={{.GKEInfo.ProjectId}}">{{.GKEInfo.ClusterName}}</a>
-    </p>
-    {{end}}
-  </div>
-  <div class=righthand>
-    View <a href=/metrics>metrics</a><br>
-  </div>
-</div>
-
-<h1>Parsed configuration</h1>
-
-<table>
-{{range $k, $v := .ConfigTable}}
-<tr><th>{{$k}}</th><td>{{$v}}</td></tr>
-{{end}}
-</table>
-
-{{if .MetricRenames}}
-<h2>Metric renames</h2>
-<table>
-<tr><th>from</th><th>to</th></tr>
-{{range $from, $to := .MetricRenames}}
-<tr><td>{{$from}}</td><td>{{$to}}</td></tr>
-{{end}}
-</table>
-{{end}}
-
-{{if .StaticMetadata}}
-<h2>Static metadata</h2>
-<table>
-<tr><th>metric</th><th>type</th><th>help</th></tr>
-{{range .StaticMetadata}}
-<tr><td>{{.Metric}}</td><td>{{.Type}}</td><td>{{.Help}}</td></tr>
-{{end}}
-</table>
-{{end}}
-
-</body>
-</html>
-`))

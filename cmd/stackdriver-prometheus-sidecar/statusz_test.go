@@ -22,7 +22,12 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/scrape"
 )
 
 func scrapeStatusz(handler *statuszHandler) ([]byte, error) {
@@ -51,17 +56,46 @@ func TestStatuszHandler(t *testing.T) {
 	os.Setenv("NODE_NAME", "my-node")
 	os.Setenv("NAMESPACE_NAME", "my-namespace")
 
+	matcher, _ := labels.NewMatcher(labels.MatchEqual, "k", "v")
+
+	var logLevel promlog.AllowedLevel
+	logLevel.Set("debug")
+
 	handler := &statuszHandler{
 		logger:    log.NewLogfmtLogger(os.Stdout),
 		projectId: "my-project",
 		cfg: &mainConfig{
-			kubernetesLabels: kubernetesConfig{
-				location:    "us-central1-a",
-				clusterName: "my-cluster",
+			Aggregations: retrieval.CounterAggregatorConfig{
+				"aggmetric1": {Matchers: [][]*labels.Matcher{{matcher}}},
+				"aggmetric2": {Matchers: [][]*labels.Matcher{{matcher}}},
 			},
-			prometheusURL:      mustParseURL(t, "http://127.0.0.1:9090/"),
-			stackdriverAddress: mustParseURL(t, "https://monitoring.googleapis.com:443/"),
-			walDirectory:       "/data/wal",
+			ConfigFilename: "/my/config",
+			Filters:        []string{"filter1", "filter2"},
+			Filtersets:     []string{"filterset1", "filterset2"},
+			GenericLabels: genericConfig{
+				Location:  "asia-east2",
+				Namespace: "my-namespace",
+			},
+			KubernetesLabels: kubernetesConfig{
+				Location:    "us-central1-a",
+				ClusterName: "my-cluster",
+			},
+			ListenAddress:      "0.0.0.0:9091",
+			LogLevel:           logLevel,
+			MetricRenames:      map[string]string{"from1": "to1", "from2": "to2"},
+			MetricsPrefix:      "external.googleapis.com/prometheus",
+			MonitoringBackends: []string{"prometheus", "stackdriver"},
+			ProjectIDResource:  "my-project",
+			PrometheusURL:      mustParseURL(t, "http://127.0.0.1:9090/"),
+			StackdriverAddress: mustParseURL(t, "https://monitoring.googleapis.com:443/"),
+			StaticMetadata: []scrape.MetricMetadata{
+				{"metric1", textparse.MetricType("type1"), "", "unit1"},
+				{"metric2", textparse.MetricType("type2"), "", "unit2"},
+			},
+			StoreInFilesDirectory: "/my/files/directory",
+			UseGKEResource:        true,
+			UseRestrictedIPs:      true,
+			WALDirectory:          "/data/wal",
 		},
 	}
 
@@ -75,7 +109,39 @@ func TestStatuszHandler(t *testing.T) {
 		regexp.MustCompile(`https://console.cloud.google.com/kubernetes/pod/us-central1-a/my-cluster/my-namespace/my-pod\?project=my-project`),
 		regexp.MustCompile(`https://console.cloud.google.com/kubernetes/node/us-central1-a/my-cluster/my-node\?project=my-project`),
 		regexp.MustCompile(`https://console.cloud.google.com/kubernetes/clusters/details/us-central1-a/my-cluster\?project=my-project`),
+
+		// Parsed configuration
+		regexp.MustCompile(`<tr><th>Config filename</th><td>/my/config</td></tr>`),
+		regexp.MustCompile(`<tr><th>Filters</th><td>\[filter1 filter2\]</td></tr>`),
+		regexp.MustCompile(`<tr><th>Filter sets</th><td>\[filterset1 filterset2\]</td></tr>`),
+		regexp.MustCompile(`<tr><th>Generic labels: location</th><td>asia-east2</td></tr>`),
+		regexp.MustCompile(`<tr><th>Generic labels: namespace</th><td>my-namespace</td></tr>`),
+		regexp.MustCompile(`<tr><th>Kubernetes labels: cluster name</th><td>my-cluster</td></tr>`),
+		regexp.MustCompile(`<tr><th>Kubernetes labels: location</th><td>us-central1-a</td></tr>`),
+		regexp.MustCompile(`<tr><th>Listen address</th><td>0.0.0.0:9091</td></tr>`),
+		regexp.MustCompile(`<tr><th>Log level</th><td>{debug .*}</td></tr>`),
+		regexp.MustCompile(`<tr><th>Metrics prefix</th><td>external.googleapis.com/prometheus</td></tr>`),
+		regexp.MustCompile(`<tr><th>Monitoring backends</th><td>\[prometheus stackdriver\]</td></tr>`),
+		regexp.MustCompile(`<tr><th>Project ID resource</th><td>my-project</td></tr>`),
+		regexp.MustCompile(`<tr><th>Prometheus URL</th><td>http://127.0.0.1:9090/</td></tr>`),
+		regexp.MustCompile(`<tr><th>Stackdriver address</th><td>https://monitoring.googleapis.com:443/</td></tr>`),
+		regexp.MustCompile(`<tr><th>Store in files directory</th><td>/my/files/directory</td></tr>`),
+		regexp.MustCompile(`<tr><th>Use GKE resource</th><td>true</td></tr>`),
+		regexp.MustCompile(`<tr><th>Use restricted IPs</th><td>true</td></tr>`),
 		regexp.MustCompile(`<tr><th>WAL directory</th><td>/data/wal</td></tr>`),
+		// for metric renames
+		regexp.MustCompile(`<h2>Metric renames</h2>`),
+		regexp.MustCompile(`<tr><td>from1</td><td>to1</td></tr>`),
+		regexp.MustCompile(`<tr><td>from2</td><td>to2</td></tr>`),
+		// for static metadata
+		regexp.MustCompile(`<h2>Static metadata</h2>`),
+		regexp.MustCompile(`<tr><td>metric1</td><td>type1</td><td>unit1</td></tr>`),
+		regexp.MustCompile(`<tr><td>metric2</td><td>type2</td><td>unit2</td></tr>`),
+		// for aggregations
+		regexp.MustCompile(`<h2>Aggregations</h2>`),
+		regexp.MustCompile(`<tr><td>aggmetric1</td><td>\[\[k=.*v.*\]\]</td></tr>`),
+		regexp.MustCompile(`<tr><td>aggmetric2</td><td>\[\[k=.*v.*\]\]</td></tr>`),
+
 		// closing </html> ensures the template completed execution
 		regexp.MustCompile(`(?m)^</html>$`),
 	}

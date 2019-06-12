@@ -30,7 +30,6 @@ spec:
         - \"--stackdriver.kubernetes.cluster-name=${KUBE_CLUSTER}\"
         #- \"--stackdriver.generic.location=${GCP_REGION}\"
         #- \"--stackdriver.generic.namespace=${KUBE_CLUSTER}\"
-        #- \"--web.enable-statusz\"
         env:
           - name: NODE_NAME
             valueFrom:
