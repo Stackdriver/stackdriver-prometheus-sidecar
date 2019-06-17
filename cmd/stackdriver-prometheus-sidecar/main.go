@@ -145,13 +145,13 @@ func init() {
 }
 
 type kubernetesConfig struct {
-	location    string
-	clusterName string
+	Location    string
+	ClusterName string
 }
 
 type genericConfig struct {
-	location  string
-	namespace string
+	Location  string
+	Namespace string
 }
 
 type fileConfig struct {
@@ -173,35 +173,40 @@ type fileConfig struct {
 	} `json:"aggregated_counters"`
 }
 
+// Note: When adding a new config field, consider adding it to
+// statusz-tmpl.html
+type mainConfig struct {
+	ConfigFilename        string
+	ProjectIDResource     string
+	KubernetesLabels      kubernetesConfig
+	GenericLabels         genericConfig
+	StackdriverAddress    *url.URL
+	MetricsPrefix         string
+	UseGKEResource        bool
+	StoreInFilesDirectory string
+	WALDirectory          string
+	PrometheusURL         *url.URL
+	ListenAddress         string
+	EnableStatusz         bool
+	Filters               []string
+	Filtersets            []string
+	Aggregations          retrieval.CounterAggregatorConfig
+	MetricRenames         map[string]string
+	StaticMetadata        []scrape.MetricMetadata
+	UseRestrictedIPs      bool
+	manualResolver        *manual.Resolver
+	MonitoringBackends    []string
+
+	LogLevel promlog.AllowedLevel
+}
+
 func main() {
 	if os.Getenv("DEBUG") != "" {
 		runtime.SetBlockProfileRate(20)
 		runtime.SetMutexProfileFraction(20)
 	}
 
-	cfg := struct {
-		configFilename        string
-		projectIdResource     string
-		kubernetesLabels      kubernetesConfig
-		genericLabels         genericConfig
-		stackdriverAddress    *url.URL
-		metricsPrefix         string
-		useGkeResource        bool
-		storeInFilesDirectory string
-		walDirectory          string
-		prometheusURL         *url.URL
-		listenAddress         string
-		filters               []string
-		filtersets            []string
-		aggregations          retrieval.CounterAggregatorConfig
-		metricRenames         map[string]string
-		staticMetadata        []scrape.MetricMetadata
-		useRestrictedIps      bool
-		manualResolver        *manual.Resolver
-		monitoringBackends    []string
-
-		logLevel promlog.AllowedLevel
-	}{}
+	var cfg mainConfig
 
 	a := kingpin.New(filepath.Base(os.Args[0]), "The Prometheus monitoring server")
 
@@ -209,59 +214,62 @@ func main() {
 
 	a.HelpFlag.Short('h')
 
-	a.Flag("config-file", "A configuration file.").StringVar(&cfg.configFilename)
+	a.Flag("config-file", "A configuration file.").StringVar(&cfg.ConfigFilename)
 
 	projectId := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
 		Required().
 		String()
 
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
-		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.stackdriverAddress)
+		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.StackdriverAddress)
 
 	a.Flag("stackdriver.use-restricted-ips", "If true, send all requests through restricted VIPs (EXPERIMENTAL).").
-		Default("false").BoolVar(&cfg.useRestrictedIps)
+		Default("false").BoolVar(&cfg.UseRestrictedIPs)
 
 	a.Flag("stackdriver.kubernetes.location", "Value of the 'location' label in the Kubernetes Stackdriver MonitoredResources.").
-		StringVar(&cfg.kubernetesLabels.location)
+		StringVar(&cfg.KubernetesLabels.Location)
 
 	a.Flag("stackdriver.kubernetes.cluster-name", "Value of the 'cluster_name' label in the Kubernetes Stackdriver MonitoredResources.").
-		StringVar(&cfg.kubernetesLabels.clusterName)
+		StringVar(&cfg.KubernetesLabels.ClusterName)
 
 	a.Flag("stackdriver.generic.location", "Location for metrics written with the generic resource, e.g. a cluster or data center name.").
-		StringVar(&cfg.genericLabels.location)
+		StringVar(&cfg.GenericLabels.Location)
 
 	a.Flag("stackdriver.generic.namespace", "Namespace for metrics written with the generic resource, e.g. a cluster or data center name.").
-		StringVar(&cfg.genericLabels.namespace)
+		StringVar(&cfg.GenericLabels.Namespace)
 
 	a.Flag("stackdriver.metrics-prefix", "Customized prefix for Stackdriver metrics. If not set, external.googleapis.com/prometheus will be used").
-		StringVar(&cfg.metricsPrefix)
+		StringVar(&cfg.MetricsPrefix)
 
 	a.Flag("stackdriver.use-gke-resource",
 		"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
-		Default("false").BoolVar(&cfg.useGkeResource)
+		Default("false").BoolVar(&cfg.UseGKEResource)
 
 	a.Flag("stackdriver.store-in-files-directory", "If specified, store the CreateTimeSeriesRequest protobuf messages to files under this directory, instead of sending protobuf messages to Stackdriver Monitoring API.").
-		StringVar(&cfg.storeInFilesDirectory)
+		StringVar(&cfg.StoreInFilesDirectory)
 
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
-		Default("data/wal").StringVar(&cfg.walDirectory)
+		Default("data/wal").StringVar(&cfg.WALDirectory)
 
 	a.Flag("prometheus.api-address", "Address to listen on for UI, API, and telemetry.").
-		Default("http://127.0.0.1:9090/").URLVar(&cfg.prometheusURL)
+		Default("http://127.0.0.1:9090/").URLVar(&cfg.PrometheusURL)
 
 	a.Flag("monitoring.backend", "Monitoring backend(s) for internal metrics").Default("prometheus").
-		EnumsVar(&cfg.monitoringBackends, "prometheus", "stackdriver")
+		EnumsVar(&cfg.MonitoringBackends, "prometheus", "stackdriver")
 
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry.").
-		Default("0.0.0.0:9091").StringVar(&cfg.listenAddress)
+		Default("0.0.0.0:9091").StringVar(&cfg.ListenAddress)
+
+	a.Flag("web.enable-statusz", "If true, then enables a /statusz endpoint on the web server with diagnostic information.").
+		Default("true").BoolVar(&cfg.EnableStatusz)
 
 	a.Flag("include", "PromQL metric and label matcher which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass any of the filter sets to be forwarded.").
-		StringsVar(&cfg.filtersets)
+		StringsVar(&cfg.Filtersets)
 
 	a.Flag("filter", "PromQL-style matcher for a single label which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass all filters to be forwarded. Deprecated, please use --include instead.").
-		StringsVar(&cfg.filters)
+		StringsVar(&cfg.Filters)
 
-	promlogflag.AddFlags(a, &cfg.logLevel)
+	promlogflag.AddFlags(a, &cfg.LogLevel)
 
 	_, err := a.Parse(os.Args[1:])
 	if err != nil {
@@ -270,25 +278,25 @@ func main() {
 		os.Exit(2)
 	}
 
-	logger := promlog.New(cfg.logLevel)
-	if cfg.configFilename != "" {
-		cfg.metricRenames, cfg.staticMetadata, cfg.aggregations, err = parseConfigFile(cfg.configFilename)
+	logger := promlog.New(cfg.LogLevel)
+	if cfg.ConfigFilename != "" {
+		cfg.MetricRenames, cfg.StaticMetadata, cfg.Aggregations, err = parseConfigFile(cfg.ConfigFilename)
 		if err != nil {
-			msg := fmt.Sprintf("Parse config file %s", cfg.configFilename)
+			msg := fmt.Sprintf("Parse config file %s", cfg.ConfigFilename)
 			level.Error(logger).Log("msg", msg, "err", err)
 			os.Exit(2)
 		}
 
 		// Enable Stackdriver monitoring backend if counter aggregator configuration is present.
-		if len(cfg.aggregations) > 0 {
+		if len(cfg.Aggregations) > 0 {
 			sdEnabled := false
-			for _, backend := range cfg.monitoringBackends {
+			for _, backend := range cfg.MonitoringBackends {
 				if backend == "stackdriver" {
 					sdEnabled = true
 				}
 			}
 			if !sdEnabled {
-				cfg.monitoringBackends = append(cfg.monitoringBackends, "stackdriver")
+				cfg.MonitoringBackends = append(cfg.MonitoringBackends, "stackdriver")
 			}
 		}
 	}
@@ -304,7 +312,7 @@ func main() {
 		*projectId = getGCEProjectID()
 	}
 
-	for _, backend := range cfg.monitoringBackends {
+	for _, backend := range cfg.MonitoringBackends {
 		switch backend {
 		case "prometheus":
 			promExporter, err := oc_prometheus.NewExporter(oc_prometheus.Options{
@@ -332,10 +340,10 @@ func main() {
 
 	var staticLabels = map[string]string{
 		retrieval.ProjectIDLabel:             *projectId,
-		retrieval.KubernetesLocationLabel:    cfg.kubernetesLabels.location,
-		retrieval.KubernetesClusterNameLabel: cfg.kubernetesLabels.clusterName,
-		retrieval.GenericLocationLabel:       cfg.genericLabels.location,
-		retrieval.GenericNamespaceLabel:      cfg.genericLabels.namespace,
+		retrieval.KubernetesLocationLabel:    cfg.KubernetesLabels.Location,
+		retrieval.KubernetesClusterNameLabel: cfg.KubernetesLabels.ClusterName,
+		retrieval.GenericLocationLabel:       cfg.GenericLabels.Location,
+		retrieval.GenericNamespaceLabel:      cfg.GenericLabels.Namespace,
 	}
 	fillMetadata(&staticLabels)
 	for k, v := range staticLabels {
@@ -344,14 +352,14 @@ func main() {
 		}
 	}
 
-	filtersets, err := parseFiltersets(logger, cfg.filtersets, cfg.filters)
+	filtersets, err := parseFiltersets(logger, cfg.Filtersets, cfg.Filters)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error parsing --include (or --filter)", "err", err)
 		os.Exit(2)
 	}
 
-	cfg.projectIdResource = fmt.Sprintf("projects/%v", *projectId)
-	if cfg.useRestrictedIps {
+	cfg.ProjectIDResource = fmt.Sprintf("projects/%v", *projectId)
+	if cfg.UseRestrictedIPs {
 		// manual.GenerateAndRegisterManualResolver generates a Resolver and a random scheme.
 		// It also registers the resolver. rb.InitialAddrs adds the addresses we are using
 		// to resolve GCP API calls to the resolver.
@@ -364,23 +372,23 @@ func main() {
 			{Addr: "199.36.153.7:443"},
 		})
 	}
-	targetsURL, err := cfg.prometheusURL.Parse(targets.DefaultAPIEndpoint)
+	targetsURL, err := cfg.PrometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {
 		panic(err)
 	}
 	targetCache := targets.NewCache(logger, httpClient, targetsURL)
 
-	metadataURL, err := cfg.prometheusURL.Parse(metadata.DefaultEndpointPath)
+	metadataURL, err := cfg.PrometheusURL.Parse(metadata.DefaultEndpointPath)
 	if err != nil {
 		panic(err)
 	}
-	metadataCache := metadata.NewCache(httpClient, metadataURL, cfg.staticMetadata)
+	metadataCache := metadata.NewCache(httpClient, metadataURL, cfg.StaticMetadata)
 
 	// We instantiate a context here since the tailer is used by two other components.
 	// The context will be used in the lifecycle of prometheusReader further down.
 	ctx, cancel := context.WithCancel(context.Background())
 
-	tailer, err := tail.Tail(ctx, cfg.walDirectory)
+	tailer, err := tail.Tail(ctx, cfg.WALDirectory)
 	if err != nil {
 		level.Error(logger).Log("msg", "Tailing WAL failed", "err", err)
 		os.Exit(1)
@@ -399,8 +407,8 @@ func main() {
 
 	var scf stackdriver.StorageClientFactory
 
-	if len(cfg.storeInFilesDirectory) > 0 {
-		err := os.MkdirAll(cfg.storeInFilesDirectory, 0700)
+	if len(cfg.StoreInFilesDirectory) > 0 {
+		err := os.MkdirAll(cfg.StoreInFilesDirectory, 0700)
 		if err != nil {
 			level.Error(logger).Log(
 				"msg", "Failure creating directory.",
@@ -408,14 +416,14 @@ func main() {
 			os.Exit(1)
 		}
 		scf = &fileClientFactory{
-			dir:    cfg.storeInFilesDirectory,
+			dir:    cfg.StoreInFilesDirectory,
 			logger: log.With(logger, "component", "storage"),
 		}
 	} else {
 		scf = &stackdriverClientFactory{
 			logger:            log.With(logger, "component", "storage"),
-			projectIdResource: cfg.projectIdResource,
-			url:               cfg.stackdriverAddress,
+			projectIdResource: cfg.ProjectIDResource,
+			url:               cfg.StackdriverAddress,
 			timeout:           10 * time.Second,
 			manualResolver:    cfg.manualResolver,
 		}
@@ -434,7 +442,7 @@ func main() {
 
 	counterAggregator, err := retrieval.NewCounterAggregator(
 		log.With(logger, "component", "counter_aggregator"),
-		&cfg.aggregations)
+		&cfg.Aggregations)
 	if err != nil {
 		level.Error(logger).Log("msg", "Creating counter aggregator failed", "err", err)
 		os.Exit(1)
@@ -443,15 +451,15 @@ func main() {
 
 	prometheusReader := retrieval.NewPrometheusReader(
 		log.With(logger, "component", "Prometheus reader"),
-		cfg.walDirectory,
+		cfg.WALDirectory,
 		tailer,
 		filtersets,
-		cfg.metricRenames,
+		cfg.MetricRenames,
 		retrieval.TargetsWithDiscoveredLabels(targetCache, labels.FromMap(staticLabels)),
 		metadataCache,
 		queueManager,
-		cfg.metricsPrefix,
-		cfg.useGkeResource,
+		cfg.MetricsPrefix,
+		cfg.UseGKEResource,
 		counterAggregator,
 	)
 
@@ -470,6 +478,14 @@ func main() {
 	)
 
 	http.Handle("/metrics", promhttp.Handler())
+
+	if cfg.EnableStatusz {
+		http.Handle("/statusz", &statuszHandler{
+			logger:    logger,
+			projectId: *projectId,
+			cfg:       &cfg,
+		})
+	}
 
 	var g group.Group
 	{
@@ -507,16 +523,16 @@ func main() {
 		// depends on to exit properly.
 		g.Add(
 			func() error {
-				startOffset, err := retrieval.ReadProgressFile(cfg.walDirectory)
+				startOffset, err := retrieval.ReadProgressFile(cfg.WALDirectory)
 				if err != nil {
 					level.Warn(logger).Log("msg", "reading progress file failed", "err", err)
 					startOffset = 0
 				}
 				// Write the file again once to ensure we have write permission on startup.
-				if err := retrieval.SaveProgressFile(cfg.walDirectory, startOffset); err != nil {
+				if err := retrieval.SaveProgressFile(cfg.WALDirectory, startOffset); err != nil {
 					return err
 				}
-				waitForPrometheus(ctx, logger, cfg.prometheusURL)
+				waitForPrometheus(ctx, logger, cfg.PrometheusURL)
 				// Sleep a fixed amount of time to allow the first scrapes to complete.
 				select {
 				case <-time.After(time.Minute):
@@ -557,7 +573,7 @@ func main() {
 	{
 		cancel := make(chan struct{})
 		server := &http.Server{
-			Addr: cfg.listenAddress,
+			Addr: cfg.ListenAddress,
 		}
 		g.Add(
 			func() error {
