@@ -28,15 +28,6 @@ ifdef DEBUG
 	bindata_flags = -debug
 endif
 
-STATICCHECK_IGNORE = \
-  github.com/prometheus/prometheus/discovery/kubernetes/kubernetes.go:SA1019 \
-  github.com/prometheus/prometheus/discovery/kubernetes/node.go:SA1019 \
-  github.com/prometheus/prometheus/documentation/examples/remote_storage/remote_storage_adapter/main.go:SA1019 \
-  github.com/prometheus/prometheus/pkg/textparse/lex.l.go:SA4006 \
-  github.com/prometheus/prometheus/pkg/pool/pool.go:SA6002 \
-  github.com/prometheus/prometheus/promql/engine.go:SA6002 \
-  github.com/prometheus/prometheus/web/web.go:SA1019
-
 all: format staticcheck build test
 
 style:
@@ -70,7 +61,7 @@ vet:
 
 staticcheck: $(STATICCHECK)
 	@echo ">> running staticcheck"
-	@$(STATICCHECK) -ignore "$(STATICCHECK_IGNORE)" $(pkgs)
+	@$(STATICCHECK) $(pkgs)
 
 build: promu
 	@echo ">> building binaries"
