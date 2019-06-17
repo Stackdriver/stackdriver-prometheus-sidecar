@@ -43,8 +43,8 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		BuildContext  string
 		Uname         string
 		FdLimits      string
-		StartTime     string
-		Uptime        string
+		StartTime     time.Time
+		Uptime        time.Duration
 		PodName       string
 		NodeName      string
 		NamespaceName string
@@ -62,8 +62,8 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	data.Uname = Uname()
 	data.FdLimits = FdLimits()
 
-	data.StartTime = serverStart.Format(time.RFC3339)
-	data.Uptime = time.Since(serverStart).String()
+	data.StartTime = serverStart
+	data.Uptime = time.Since(serverStart)
 
 	// We set these environment variables using the Kubernetes Downward API:
 	// https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
