@@ -83,6 +83,7 @@ type seriesCache struct {
 	metricsPrefix     string
 	useGkeResource    bool
 	renames           map[string]string
+	dropLabels        map[string]string
 
 	// lastCheckpoint holds the index of the last checkpoint we garbage collected for.
 	// We don't have to redo garbage collection until a higher checkpoint appears.
@@ -147,6 +148,7 @@ func newSeriesCache(
 	metricsPrefix string,
 	useGkeResource bool,
 	counterAggregator *CounterAggregator,
+	dropLabels map[string]string,
 ) *seriesCache {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -164,6 +166,7 @@ func newSeriesCache(
 		useGkeResource:    useGkeResource,
 		renames:           renames,
 		counterAggregator: counterAggregator,
+		dropLabels:        dropLabels,
 	}
 }
 
@@ -365,14 +368,6 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 			break
 		}
 	}
-	// Drop series with too many labels.
-	if len(finalLabels) > maxLabelCount {
-		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "too_many_labels"))
-		stats.Record(ctx, droppedSeries.M(1))
-		level.Debug(c.logger).Log("msg", "too many labels", "labels", entry.lset)
-		return nil
-	}
-
 	resource, ok := c.getResource(target.DiscoveredLabels, target.Labels)
 	if !ok {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "unknown_resource"))
@@ -418,10 +413,25 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 			}
 		}
 	}
+	// Explicitly drop blacklisted labels
+	filteredLabels := finalLabels[:0]
+	for _, l := range finalLabels {
+		if _, ok := c.dropLabels[l.Name]; !ok {
+			filteredLabels = append(filteredLabels, l)
+		}
+	}
+	// Drop series with too many labels.
+	if len(filteredLabels) > maxLabelCount {
+		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "too_many_labels"))
+		stats.Record(ctx, droppedSeries.M(1))
+		level.Debug(c.logger).Log("msg", "too many labels", "labels", filteredLabels)
+		return nil
+	}
+
 	ts := &monitoring_pb.TimeSeries{
 		Metric: &metric_pb.Metric{
 			Type:   c.getMetricType(c.metricsPrefix, metricName),
-			Labels: finalLabels.Map(),
+			Labels: filteredLabels.Map(),
 		},
 		Resource: resource,
 	}

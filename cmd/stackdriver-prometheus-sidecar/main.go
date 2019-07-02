@@ -190,6 +190,7 @@ type mainConfig struct {
 	EnableStatusz         bool
 	Filters               []string
 	Filtersets            []string
+	DropLabels            []string
 	Aggregations          retrieval.CounterAggregatorConfig
 	MetricRenames         map[string]string
 	StaticMetadata        []scrape.MetricMetadata
@@ -268,6 +269,9 @@ func main() {
 
 	a.Flag("filter", "PromQL-style matcher for a single label which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass all filters to be forwarded. Deprecated, please use --include instead.").
 		StringsVar(&cfg.Filters)
+
+	a.Flag("droplabel", "Exact match for a prometheus label to drop from a metric before conversion to a stackdriver label.  To drop multiple labels, repeat the flag.").
+		StringsVar(&cfg.DropLabels)
 
 	promlogflag.AddFlags(a, &cfg.LogLevel)
 
@@ -449,6 +453,12 @@ func main() {
 	}
 	defer counterAggregator.Close()
 
+	dropLabels := make(map[string]string)
+	for _, tag := range cfg.DropLabels {
+		dropLabels[tag] = ""
+	}
+	level.Debug(logger).Log("msg", "dropping tags", "tags", fmt.Sprintf("%v", dropLabels))
+
 	prometheusReader := retrieval.NewPrometheusReader(
 		log.With(logger, "component", "Prometheus reader"),
 		cfg.WALDirectory,
@@ -461,6 +471,7 @@ func main() {
 		cfg.MetricsPrefix,
 		cfg.UseGKEResource,
 		counterAggregator,
+		dropLabels,
 	)
 
 	// Exclude kingpin default flags to expose only Prometheus ones.

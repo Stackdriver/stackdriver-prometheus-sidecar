@@ -88,6 +88,7 @@ func NewPrometheusReader(
 	metricsPrefix string,
 	useGkeResource bool,
 	counterAggregator *CounterAggregator,
+	dropLabels map[string]string,
 ) *PrometheusReader {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -105,6 +106,7 @@ func NewPrometheusReader(
 		metricsPrefix:        metricsPrefix,
 		useGkeResource:       useGkeResource,
 		counterAggregator:    counterAggregator,
+		dropLabels:           dropLabels,
 	}
 }
 
@@ -121,6 +123,7 @@ type PrometheusReader struct {
 	metricsPrefix        string
 	useGkeResource       bool
 	counterAggregator    *CounterAggregator
+	dropLabels           map[string]string
 }
 
 var (
@@ -163,6 +166,7 @@ func (r *PrometheusReader) Run(ctx context.Context, startOffset int) error {
 		r.metricsPrefix,
 		r.useGkeResource,
 		r.counterAggregator,
+		r.dropLabels,
 	)
 	go seriesCache.run(ctx)
 

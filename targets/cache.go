@@ -203,7 +203,7 @@ type Target struct {
 }
 
 // DropTargetLabels drops labels from the series that are found in the target with
-// exact name/value matches.
+// exact name/value matches
 func DropTargetLabels(series, target labels.Labels) labels.Labels {
 	repl := series[:0]
 	for _, l := range series {

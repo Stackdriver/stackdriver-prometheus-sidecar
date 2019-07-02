@@ -39,6 +39,10 @@ type nopAppender struct {
 	samples []*monitoring_pb.TimeSeries
 }
 
+var (
+	dropLabels map[string]string
+)
+
 func (a *nopAppender) Append(hash uint64, s *monitoring_pb.TimeSeries) error {
 	a.samples = append(a.samples, s)
 	return nil
@@ -86,7 +90,7 @@ func TestReader_Progress(t *testing.T) {
 	}
 
 	aggr, _ := NewCounterAggregator(log.NewNopLogger(), new(CounterAggregatorConfig))
-	r := NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, &nopAppender{}, "", false, aggr)
+	r := NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, &nopAppender{}, "", false, aggr, dropLabels)
 	r.progressSaveInterval = 200 * time.Millisecond
 
 	// Populate sample data
@@ -143,7 +147,7 @@ func TestReader_Progress(t *testing.T) {
 	}
 
 	recorder := &nopAppender{}
-	r = NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, recorder, "", false, aggr)
+	r = NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, recorder, "", false, aggr, dropLabels)
 	go r.Run(ctx, progressOffset)
 
 	// Wait for reader to process until the end.

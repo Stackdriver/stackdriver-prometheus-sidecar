@@ -638,7 +638,7 @@ func TestSampleBuilder(t *testing.T) {
 		var result []*monitoring_pb.TimeSeries
 
 		aggr, _ := NewCounterAggregator(log.NewNopLogger(), new(CounterAggregatorConfig))
-		series := newSeriesCache(nil, "", nil, nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false, aggr)
+		series := newSeriesCache(nil, "", nil, nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false, aggr, dropLabels)
 		for ref, s := range c.series {
 			series.set(ctx, ref, s, 0)
 		}

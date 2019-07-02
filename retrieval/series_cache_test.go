@@ -61,7 +61,7 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 		[]ResourceMap{
 			{Type: "resource1", LabelMap: map[string]labelTranslation{}},
 		},
-		"", false, aggr,
+		"", false, aggr, dropLabels,
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -202,7 +202,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	}()
 	logger := log.NewLogfmtLogger(logBuffer)
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
-	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr, dropLabels)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -278,7 +278,7 @@ func TestSeriesCache_RefreshTooManyLabels(t *testing.T) {
 		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
 	}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
-	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr, dropLabels)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -330,7 +330,7 @@ func TestSeriesCache_RefreshUnknownResource(t *testing.T) {
 		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
 	}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
-	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr, dropLabels)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -376,7 +376,7 @@ func TestSeriesCache_RefreshMetadataNotFound(t *testing.T) {
 	}
 	metadataMap := metadataMap{}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
-	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr, dropLabels)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -431,7 +431,7 @@ func TestSeriesCache_Filter(t *testing.T) {
 			&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"},
 		},
 		{&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "c", Value: "c1"}},
-	}, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	}, nil, targetMap, metadataMap, resourceMaps, "", false, aggr, dropLabels)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -487,7 +487,7 @@ func TestSeriesCache_CounterAggregator(t *testing.T) {
 	})
 	c := newSeriesCache(logger, "", [][]*promlabels.Matcher{
 		{&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"}},
-	}, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	}, nil, targetMap, metadataMap, resourceMaps, "", false, aggr, dropLabels)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -559,7 +559,7 @@ func TestSeriesCache_RenameMetric(t *testing.T) {
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
 	c := newSeriesCache(logger, "", nil,
 		map[string]string{"metric2": "metric3"},
-		targetMap, metadataMap, resourceMaps, "", false, aggr)
+		targetMap, metadataMap, resourceMaps, "", false, aggr, dropLabels)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
