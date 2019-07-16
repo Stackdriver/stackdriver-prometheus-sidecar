@@ -16,6 +16,7 @@ GOFMT        ?= $(GO)fmt
 FIRST_GOPATH := $(firstword $(subst :, ,$(shell $(GO) env GOPATH)))
 PROMU        := $(FIRST_GOPATH)/bin/promu
 STATICCHECK  := $(FIRST_GOPATH)/bin/staticcheck
+GOVERALLS    := $(FIRST_GOPATH)/bin/goveralls
 pkgs          = $(shell $(GO) list ./... | grep -v /vendor/)
 
 PREFIX                  ?= $(shell pwd)
@@ -63,6 +64,13 @@ staticcheck: $(STATICCHECK)
 	@echo ">> running staticcheck"
 	@$(STATICCHECK) $(pkgs)
 
+goveralls: cover $(GOVERALLS)
+ifndef COVERALLS_TOKEN
+	$(error COVERALLS_TOKEN is undefined, follow https://docs.coveralls.io/go to create one and go to https://coveralls.io to retrieve existing ones)
+endif
+	@echo ">> running goveralls"
+	@$(GOVERALLS) -coverprofile=coverage.out -service=travis-ci -repotoken "${COVERALLS_TOKEN}"
+
 build: promu
 	@echo ">> building binaries"
 	@$(PROMU) build --prefix $(PREFIX)
@@ -99,4 +107,7 @@ promu:
 $(FIRST_GOPATH)/bin/staticcheck:
 	@GOOS= GOARCH= $(GO) get -u honnef.co/go/tools/cmd/staticcheck
 
-.PHONY: all style check_license format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck
+$(FIRST_GOPATH)/bin/goveralls:
+	@GOOS= GOARCH= $(GO) get -u github.com/mattn/goveralls
+
+.PHONY: all style check_license format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck goveralls $(FIRST_GOPATH)/bin/goveralls
