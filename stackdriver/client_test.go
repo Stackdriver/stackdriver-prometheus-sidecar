@@ -163,9 +163,9 @@ func TestResolver(t *testing.T) {
 			t.Fatal(err)
 		}
 		requestedTarget := c.conn.Target()
-		expectedTarget := c.resolver.Scheme()+":///" + address
+		expectedTarget := c.resolver.Scheme() + ":///" + address
 		if requestedTarget != expectedTarget {
-			t.Errorf("ERROR: Remote address is %s, want " + expectedTarget,
+			t.Errorf("ERROR: Remote address is %s, want "+expectedTarget,
 				requestedTarget)
 		}
 	}
