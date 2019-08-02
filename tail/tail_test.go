@@ -65,13 +65,13 @@ func TestTailFuzz(t *testing.T) {
 			}
 			written = append(written, rec)
 		}
-		time.Sleep(time.Second)
-		cancel()
 	}()
 
 	wr := wal.NewReader(rc)
 
-	for wr.Next() {
+	// Expect `count` records; read them all, if possible. The test will
+	// time out if fewer records show up.
+	for len(read) < count && wr.Next() {
 		read = append(read, append([]byte(nil), wr.Record()...))
 	}
 	if wr.Err() != nil {
@@ -84,6 +84,22 @@ func TestTailFuzz(t *testing.T) {
 		if !bytes.Equal(r, written[i]) {
 			t.Fatalf("record %d doesn't match", i)
 		}
+	}
+	// Attempt to read one more record, but expect no more records.
+	// Give the reader a chance to run for a while, then cancel its
+	// context so the test doesn't time out.
+	go func() {
+		time.Sleep(time.Second)
+		cancel()
+	}()
+	// It's safe to call Next() again. The last invocation must have returned `true`,
+	// or else the comparison between `read` and `written` above will fail and cause
+	// the test to end early.
+	if wr.Next() {
+		t.Fatal("read unexpected record")
+	}
+	if wr.Err() != nil {
+		t.Fatal(wr.Err())
 	}
 }
 
