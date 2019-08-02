@@ -92,6 +92,9 @@ func TestTailFuzz(t *testing.T) {
 		time.Sleep(time.Second)
 		cancel()
 	}()
+	// It's safe to call Next() again. The last invocation must have returned `true`,
+	// or else the comparison between `read` and `written` above will fail and cause
+	// the test to end early.
 	if wr.Next() {
 		t.Fatal("read unexpected record")
 	}
