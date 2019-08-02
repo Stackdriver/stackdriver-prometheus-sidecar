@@ -29,7 +29,8 @@ ifdef DEBUG
 	bindata_flags = -debug
 endif
 
-all: format staticcheck build test
+# TODO(jkohen): Reenable staticcheck once it no longer crashes.
+all: format build test
 
 style:
 	@echo ">> checking code style"
