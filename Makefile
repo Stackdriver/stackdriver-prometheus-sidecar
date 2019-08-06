@@ -11,13 +11,58 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Ensure GOBIN is not set during build so that promu is installed to the correct path
+unexport GOBIN
+
 GO           ?= go
 GOFMT        ?= $(GO)fmt
 FIRST_GOPATH := $(firstword $(subst :, ,$(shell $(GO) env GOPATH)))
-PROMU        := $(FIRST_GOPATH)/bin/promu
+GOOPTS       ?=
+GOHOSTOS     ?= $(shell $(GO) env GOHOSTOS)
+GOHOSTARCH   ?= $(shell $(GO) env GOHOSTARCH)
+
+GO_VERSION        ?= $(shell $(GO) version)
+GO_VERSION_NUMBER ?= $(word 3, $(GO_VERSION))
+PRE_GO_111        ?= $(shell echo $(GO_VERSION_NUMBER) | grep -E 'go1\.(10|[0-9])\.')
+
 STATICCHECK  := $(FIRST_GOPATH)/bin/staticcheck
 GOVERALLS    := $(FIRST_GOPATH)/bin/goveralls
-pkgs          = $(shell $(GO) list ./... | grep -v /vendor/)
+
+GOVENDOR :=
+GO111MODULE :=
+ifeq (, $(PRE_GO_111))
+	ifneq (,$(wildcard go.mod))
+		# Enforce Go modules support just in case the directory is inside GOPATH (and for Travis CI).
+		GO111MODULE := on
+
+		ifneq (,$(wildcard vendor))
+			# Always use the local vendor/ directory to satisfy the dependencies.
+			GOOPTS := $(GOOPTS) -mod=vendor
+		endif
+	endif
+else
+	ifneq (,$(wildcard go.mod))
+		ifneq (,$(wildcard vendor))
+$(warning This repository requires Go >= 1.11 because of Go modules)
+$(warning Some recipes may not work as expected as the current Go runtime is '$(GO_VERSION_NUMBER)')
+		endif
+	else
+		# This repository isn't using Go modules (yet).
+		GOVENDOR := $(FIRST_GOPATH)/bin/govendor
+	endif
+endif
+PROMU        := $(FIRST_GOPATH)/bin/promu
+pkgs          = ./...
+
+ifeq (arm, $(GOHOSTARCH))
+	GOHOSTARM ?= $(shell GOARM= $(GO) env GOARM)
+	GO_BUILD_PLATFORM ?= $(GOHOSTOS)-$(GOHOSTARCH)v$(GOHOSTARM)
+else
+	GO_BUILD_PLATFORM ?= $(GOHOSTOS)-$(GOHOSTARCH)
+endif
+
+PROMU_VERSION ?= 0.5.0
+PROMU_URL     := https://github.com/prometheus/promu/releases/download/v$(PROMU_VERSION)/promu-$(PROMU_VERSION).$(GO_BUILD_PLATFORM).tar.gz
 
 PREFIX                  ?= $(shell pwd)
 BIN_DIR                 ?= $(shell pwd)
@@ -100,10 +145,11 @@ assets:
 
 promu:
 	@echo ">> fetching promu"
-	@GOOS=$(shell uname -s | tr A-Z a-z) \
-	GOARCH=$(subst x86_64,amd64,$(patsubst i%86,386,$(shell uname -m))) \
-	GO="$(GO)" \
-	$(GO) get -u github.com/prometheus/promu
+	$(eval PROMU_TMP := $(shell mktemp -d))
+	curl -s -L $(PROMU_URL) | tar -xvzf - -C $(PROMU_TMP)
+	mkdir -p $(FIRST_GOPATH)/bin
+	cp $(PROMU_TMP)/promu-$(PROMU_VERSION).$(GO_BUILD_PLATFORM)/promu $(FIRST_GOPATH)/bin/promu
+	rm -r $(PROMU_TMP)
 
 $(FIRST_GOPATH)/bin/staticcheck:
 	@GOOS= GOARCH= $(GO) get -u honnef.co/go/tools/cmd/staticcheck
