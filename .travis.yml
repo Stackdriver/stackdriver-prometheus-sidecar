@@ -3,7 +3,18 @@ language: go
 go:
   - 1.12.x
 
-script: make goveralls
+go_import_path: github.com/Stackdriver/stackdriver-prometheus-sidecar
+
+# This ensures that the local cache is filled before running the CI.
+# travis_retry retries the command 3 times if it fails as we've experienced
+# random issues on Travis.
+before_install:
+- travis_retry make deps
+
+script:
+- make test goveralls
+- git diff --exit-code
+
 # Contains tokens for Coveralls. See https://docs.coveralls.io/go
 env:
   global:
