@@ -85,18 +85,17 @@ check_license:
 	@echo ">> checking license header"
 	@./scripts/check_license.sh
 
-# TODO(fabxc): example tests temporarily removed.
 test-short:
 	@echo ">> running short tests"
-	@$(GO) test -short $(shell $(GO) list ./... | grep -v /vendor/ | grep -v examples)
+	@$(GO) test -short $(GOOPTS) $(pkgs)
 
 test:
 	@echo ">> running all tests"
-	@$(GO) test $(shell $(GO) list ./... | grep -v /vendor/ | grep -v examples)
+	@$(GO) test $(GOOPTS) $(pkgs)
 
 cover:
 	@echo ">> running all tests with coverage"
-	@$(GO) test -coverprofile=coverage.out $(shell $(GO) list ./... | grep -v /vendor/ | grep -v examples)
+	@$(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
 
 format:
 	@echo ">> formatting code"
@@ -104,7 +103,7 @@ format:
 
 vet:
 	@echo ">> vetting code"
-	@$(GO) vet $(pkgs)
+	@$(GO) vet $(GOOPTS) $(pkgs)
 
 staticcheck: $(STATICCHECK)
 	@echo ">> running staticcheck"
