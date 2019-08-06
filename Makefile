@@ -17,41 +17,17 @@ unexport GOBIN
 GO           ?= go
 GOFMT        ?= $(GO)fmt
 FIRST_GOPATH := $(firstword $(subst :, ,$(shell $(GO) env GOPATH)))
-GOOPTS       ?=
 GOHOSTOS     ?= $(shell $(GO) env GOHOSTOS)
 GOHOSTARCH   ?= $(shell $(GO) env GOHOSTARCH)
 
-GO_VERSION        ?= $(shell $(GO) version)
-GO_VERSION_NUMBER ?= $(word 3, $(GO_VERSION))
-PRE_GO_111        ?= $(shell echo $(GO_VERSION_NUMBER) | grep -E 'go1\.(10|[0-9])\.')
+# Enforce Go modules support just in case the directory is inside GOPATH (and for Travis CI).
+GO111MODULE := on
+# Always use the local vendor/ directory to satisfy the dependencies.
+GOOPTS := $(GOOPTS) -mod=vendor
 
+PROMU        := $(FIRST_GOPATH)/bin/promu
 STATICCHECK  := $(FIRST_GOPATH)/bin/staticcheck
 GOVERALLS    := $(FIRST_GOPATH)/bin/goveralls
-
-GOVENDOR :=
-GO111MODULE :=
-ifeq (, $(PRE_GO_111))
-	ifneq (,$(wildcard go.mod))
-		# Enforce Go modules support just in case the directory is inside GOPATH (and for Travis CI).
-		GO111MODULE := on
-
-		ifneq (,$(wildcard vendor))
-			# Always use the local vendor/ directory to satisfy the dependencies.
-			GOOPTS := $(GOOPTS) -mod=vendor
-		endif
-	endif
-else
-	ifneq (,$(wildcard go.mod))
-		ifneq (,$(wildcard vendor))
-$(warning This repository requires Go >= 1.11 because of Go modules)
-$(warning Some recipes may not work as expected as the current Go runtime is '$(GO_VERSION_NUMBER)')
-		endif
-	else
-		# This repository isn't using Go modules (yet).
-		GOVENDOR := $(FIRST_GOPATH)/bin/govendor
-	endif
-endif
-PROMU        := $(FIRST_GOPATH)/bin/promu
 pkgs          = ./...
 
 ifeq (arm, $(GOHOSTARCH))
