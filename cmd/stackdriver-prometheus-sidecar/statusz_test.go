@@ -119,7 +119,7 @@ func TestStatuszHandler(t *testing.T) {
 		regexp.MustCompile(`<tr><th>Kubernetes labels: cluster name</th><td>my-cluster</td></tr>`),
 		regexp.MustCompile(`<tr><th>Kubernetes labels: location</th><td>us-central1-a</td></tr>`),
 		regexp.MustCompile(`<tr><th>Listen address</th><td>0.0.0.0:9091</td></tr>`),
-		regexp.MustCompile(`<tr><th>Log level</th><td>debug</td></tr>`),
+		regexp.MustCompile(`<tr><th>Log config</th><td>{debug &lt;nil&gt;}</td></tr>`),
 		regexp.MustCompile(`<tr><th>Metrics prefix</th><td>external.googleapis.com/prometheus</td></tr>`),
 		regexp.MustCompile(`<tr><th>Monitoring backends</th><td>\[prometheus stackdriver\]</td></tr>`),
 		regexp.MustCompile(`<tr><th>Project ID resource</th><td>my-project</td></tr>`),
