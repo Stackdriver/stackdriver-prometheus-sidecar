@@ -71,38 +71,38 @@ endif
 
 test-short:
 	@echo ">> running short tests"
-	@$(GO) test -short $(GOOPTS) $(pkgs)
+	$(GO) test -short $(GOOPTS) $(pkgs)
 
 test:
 	@echo ">> running all tests"
-	@$(GO) test $(GOOPTS) $(pkgs)
+	$(GO) test $(GOOPTS) $(pkgs)
 
 cover:
 	@echo ">> running all tests with coverage"
-	@$(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
+	$(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
 
 format:
 	@echo ">> formatting code"
-	@$(GO) fmt $(pkgs)
+	$(GO) fmt $(pkgs)
 
 vet:
 	@echo ">> vetting code"
-	@$(GO) vet $(GOOPTS) $(pkgs)
+	$(GO) vet $(GOOPTS) $(pkgs)
 
 staticcheck: $(STATICCHECK)
 	@echo ">> running staticcheck"
-	@$(STATICCHECK) $(pkgs)
+	$(STATICCHECK) $(pkgs)
 
 goveralls: cover $(GOVERALLS)
 ifndef COVERALLS_TOKEN
 	$(error COVERALLS_TOKEN is undefined, follow https://docs.coveralls.io/go to create one and go to https://coveralls.io to retrieve existing ones)
 endif
 	@echo ">> running goveralls"
-	@$(GOVERALLS) -coverprofile=coverage.out -service=travis-ci -repotoken "${COVERALLS_TOKEN}"
+	$(GOVERALLS) -coverprofile=coverage.out -service=travis-ci -repotoken "${COVERALLS_TOKEN}"
 
 build: promu
 	@echo ">> building binaries"
-	@$(PROMU) build --prefix $(PREFIX)
+	$(PROMU) build --prefix $(PREFIX)
 
 build-linux-amd64: promu
 	@echo ">> building linux amd64 binaries"
@@ -114,7 +114,7 @@ tarball: promu
 
 docker: build-linux-amd64
 	@echo ">> building docker image"
-	@docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
+	docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
 
 push: test docker
 	@echo ">> pushing docker image"
@@ -122,9 +122,9 @@ push: test docker
 
 assets:
 	@echo ">> writing assets"
-	@$(GO) get -u github.com/jteeuwen/go-bindata/...
-	@go-bindata $(bindata_flags) -pkg ui -o web/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  web/ui/templates/... web/ui/static/...
-	@$(GO) fmt ./web/ui
+	$(GO) get -u github.com/jteeuwen/go-bindata/...
+	go-bindata $(bindata_flags) -pkg ui -o web/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  web/ui/templates/... web/ui/static/...
+	$(GO) fmt ./web/ui
 
 promu:
 	@echo ">> fetching promu"
@@ -135,9 +135,9 @@ promu:
 	rm -r $(PROMU_TMP)
 
 $(FIRST_GOPATH)/bin/staticcheck:
-	@GOOS= GOARCH= $(GO) get -u honnef.co/go/tools/cmd/staticcheck
+	GOOS= GOARCH= $(GO) get -u honnef.co/go/tools/cmd/staticcheck
 
 $(FIRST_GOPATH)/bin/goveralls:
-	@GOOS= GOARCH= $(GO) get -u github.com/mattn/goveralls
+	GOOS= GOARCH= $(GO) get -u github.com/mattn/goveralls
 
 .PHONY: all style check_license deps format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck goveralls $(FIRST_GOPATH)/bin/goveralls
