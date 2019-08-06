@@ -79,7 +79,7 @@ test:
 
 cover:
 	@echo ">> running all tests with coverage"
-	$(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
+	$(GO) test -v -coverprofile=coverage.out $(GOOPTS) $(pkgs)
 
 format:
 	@echo ">> formatting code"
