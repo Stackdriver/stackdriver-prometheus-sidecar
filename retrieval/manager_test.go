@@ -53,7 +53,7 @@ func TestReader_Progress(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	w, err := wal.New(nil, nil, dir)
+	w, err := wal.New(nil, nil, dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}

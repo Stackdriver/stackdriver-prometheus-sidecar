@@ -58,8 +58,8 @@ func TestStatuszHandler(t *testing.T) {
 
 	matcher, _ := labels.NewMatcher(labels.MatchEqual, "k", "v")
 
-	var logLevel promlog.AllowedLevel
-	logLevel.Set("debug")
+	logConfig := promlog.Config{Level: &promlog.AllowedLevel{}}
+	logConfig.Level.Set("debug")
 
 	handler := &statuszHandler{
 		logger:    log.NewLogfmtLogger(os.Stdout),
@@ -81,7 +81,7 @@ func TestStatuszHandler(t *testing.T) {
 				ClusterName: "my-cluster",
 			},
 			ListenAddress:      "0.0.0.0:9091",
-			LogLevel:           logLevel,
+			PromlogConfig:      logConfig,
 			MetricRenames:      map[string]string{"from1": "to1", "from2": "to2"},
 			MetricsPrefix:      "external.googleapis.com/prometheus",
 			MonitoringBackends: []string{"prometheus", "stackdriver"},

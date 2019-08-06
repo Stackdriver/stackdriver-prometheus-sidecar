@@ -15,7 +15,6 @@ package retrieval
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -196,7 +195,7 @@ func (c *seriesCache) garbageCollect() error {
 	if cpNum <= c.lastCheckpoint {
 		return nil
 	}
-	sr, err := wal.NewSegmentsReader(filepath.Join(c.dir, cpDir))
+	sr, err := wal.NewSegmentsReader(cpDir)
 	if err != nil {
 		return errors.Wrap(err, "open segments")
 	}

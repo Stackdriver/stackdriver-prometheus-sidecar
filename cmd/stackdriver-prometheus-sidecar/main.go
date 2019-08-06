@@ -196,8 +196,7 @@ type mainConfig struct {
 	UseRestrictedIPs      bool
 	manualResolver        *manual.Resolver
 	MonitoringBackends    []string
-
-	promlogConfig promlog.Config
+	PromlogConfig         promlog.Config
 }
 
 func main() {
@@ -269,7 +268,7 @@ func main() {
 	a.Flag("filter", "PromQL-style matcher for a single label which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass all filters to be forwarded. Deprecated, please use --include instead.").
 		StringsVar(&cfg.Filters)
 
-	promlogflag.AddFlags(a, &cfg.promlogConfig)
+	promlogflag.AddFlags(a, &cfg.PromlogConfig)
 
 	_, err := a.Parse(os.Args[1:])
 	if err != nil {
@@ -278,7 +277,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	logger := promlog.New(&cfg.promlogConfig)
+	logger := promlog.New(&cfg.PromlogConfig)
 	if cfg.ConfigFilename != "" {
 		cfg.MetricRenames, cfg.StaticMetadata, cfg.Aggregations, err = parseConfigFile(cfg.ConfigFilename)
 		if err != nil {

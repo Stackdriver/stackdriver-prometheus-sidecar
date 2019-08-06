@@ -18,7 +18,6 @@ package stackdriver
 
 import (
 	"bytes"
-	"reflect"
 	"testing"
 
 	"github.com/go-kit/kit/log"
@@ -57,7 +56,7 @@ func TestRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(req, storedReq) {
-		t.Fatalf("Expect requests as %v, but stored as: %v", req, storedReq)
+	if !proto.Equal(req, storedReq) {
+		t.Errorf("Expect requests as %v, but stored as: %v", req, storedReq)
 	}
 }

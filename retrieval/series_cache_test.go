@@ -97,7 +97,7 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 			{Ref: 3, Labels: labels.FromStrings("a", "3")},
 			{Ref: 4, Labels: labels.FromStrings("a", "4")},
 		}
-		w, err := wal.New(nil, nil, cp10dir)
+		w, err := wal.New(nil, nil, cp10dir, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -144,7 +144,7 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 		series := []tsdb.RefSeries{
 			{Ref: 4, Labels: labels.FromStrings("a", "4")},
 		}
-		w, err := wal.New(nil, nil, cp12dir)
+		w, err := wal.New(nil, nil, cp12dir, false)
 		if err != nil {
 			t.Fatal(err)
 		}
