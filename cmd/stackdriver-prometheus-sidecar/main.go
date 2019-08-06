@@ -197,7 +197,7 @@ type mainConfig struct {
 	manualResolver        *manual.Resolver
 	MonitoringBackends    []string
 
-	LogLevel promlog.AllowedLevel
+	promlogConfig promlog.Config
 }
 
 func main() {
@@ -269,7 +269,7 @@ func main() {
 	a.Flag("filter", "PromQL-style matcher for a single label which must pass for a series to be forwarded to Stackdriver. If repeated, the series must pass all filters to be forwarded. Deprecated, please use --include instead.").
 		StringsVar(&cfg.Filters)
 
-	promlogflag.AddFlags(a, &cfg.LogLevel)
+	promlogflag.AddFlags(a, &cfg.promlogConfig)
 
 	_, err := a.Parse(os.Args[1:])
 	if err != nil {
@@ -278,7 +278,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	logger := promlog.New(cfg.LogLevel)
+	logger := promlog.New(&cfg.promlogConfig)
 	if cfg.ConfigFilename != "" {
 		cfg.MetricRenames, cfg.StaticMetadata, cfg.Aggregations, err = parseConfigFile(cfg.ConfigFilename)
 		if err != nil {
@@ -365,11 +365,13 @@ func main() {
 		// to resolve GCP API calls to the resolver.
 		cfg.manualResolver, _ = manual.GenerateAndRegisterManualResolver()
 		// These IP addresses correspond to restricted.googleapis.com and are not expected to change.
-		cfg.manualResolver.InitialAddrs([]resolver.Address{
-			{Addr: "199.36.153.4:443"},
-			{Addr: "199.36.153.5:443"},
-			{Addr: "199.36.153.6:443"},
-			{Addr: "199.36.153.7:443"},
+		cfg.manualResolver.InitialState(resolver.State{
+			Addresses: []resolver.Address{
+				{Addr: "199.36.153.4:443"},
+				{Addr: "199.36.153.5:443"},
+				{Addr: "199.36.153.6:443"},
+				{Addr: "199.36.153.7:443"},
+			},
 		})
 	}
 	targetsURL, err := cfg.PrometheusURL.Parse(targets.DefaultAPIEndpoint)

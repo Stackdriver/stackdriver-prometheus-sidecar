@@ -75,10 +75,10 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 			return nil, 0, samples[1:], nil
 		}
 		point.Interval.StartTime = getTimestamp(resetTimestamp)
-		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
+		point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{v}}
 
 	case textparse.MetricTypeGauge, textparse.MetricTypeUnknown:
-		point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{sample.V}}
+		point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{sample.V}}
 
 	case textparse.MetricTypeSummary:
 		switch entry.suffix {
@@ -89,7 +89,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 				return nil, 0, samples[1:], nil
 			}
 			point.Interval.StartTime = getTimestamp(resetTimestamp)
-			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{v}}
+			point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{v}}
 		case metricSuffixCount:
 			var v float64
 			resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
@@ -97,9 +97,9 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 				return nil, 0, samples[1:], nil
 			}
 			point.Interval.StartTime = getTimestamp(resetTimestamp)
-			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_Int64Value{int64(v)}}
+			point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_Int64Value{int64(v)}}
 		case "": // Actual quantiles.
-			point.Value = &monitoring_pb.TypedValue{&monitoring_pb.TypedValue_DoubleValue{sample.V}}
+			point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{sample.V}}
 		default:
 			return nil, 0, samples[1:], errors.Errorf("unexpected metric name suffix %q", entry.suffix)
 		}
