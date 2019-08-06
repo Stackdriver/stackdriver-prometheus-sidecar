@@ -8,8 +8,8 @@ go_import_path: github.com/Stackdriver/stackdriver-prometheus-sidecar
 # This ensures that the local cache is filled before running the CI.
 # travis_retry retries the command 3 times if it fails as we've experienced
 # random issues on Travis.
-before_install:
-- travis_retry make deps
+#before_install:
+#- travis_retry make deps
 
 script:
 - make test goveralls
