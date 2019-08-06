@@ -31,6 +31,7 @@ import (
 	"time"
 
 	md "cloud.google.com/go/compute/metadata"
+	oc_prometheus "contrib.go.opencensus.io/exporter/prometheus"
 	oc_stackdriver "contrib.go.opencensus.io/exporter/stackdriver"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
@@ -53,7 +54,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/scrape"
-	oc_prometheus "go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/stats/view"
