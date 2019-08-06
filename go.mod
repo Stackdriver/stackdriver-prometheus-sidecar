@@ -3,6 +3,7 @@ module github.com/Stackdriver/stackdriver-prometheus-sidecar
 require (
 	cloud.google.com/go v0.43.0
 	contrib.go.opencensus.io/exporter/ocagent v0.6.0 // indirect
+	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.12.4
 	github.com/Azure/azure-sdk-for-go v32.1.0+incompatible // indirect
 	github.com/Azure/go-autorest v12.4.1+incompatible // indirect
@@ -40,10 +41,12 @@ require (
 	github.com/gogo/protobuf v1.2.2-0.20190730201129-28a6bbf47e48 // indirect
 	github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 // indirect
 	github.com/golang/protobuf v1.3.2
+	github.com/google/go-github/v25 v25.1.3 // indirect
 	github.com/google/pprof v0.0.0-20190723021845-34ac40c74b70 // indirect
 	github.com/googleapis/gnostic v0.3.0 // indirect
 	github.com/gophercloud/gophercloud v0.3.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20190430165422-3e4dfb77656c // indirect
+	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.9.5 // indirect
 	github.com/hashicorp/go-immutable-radix v1.1.0 // indirect
@@ -54,6 +57,7 @@ require (
 	github.com/hashicorp/mdns v1.0.1 // indirect
 	github.com/hashicorp/memberlist v0.1.4 // indirect
 	github.com/hashicorp/serf v0.8.3 // indirect
+	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/influxdata/influxdb v1.7.7 // indirect
 	github.com/jackc/pgx v3.5.0+incompatible // indirect
 	github.com/jpillora/backoff v0.0.0-20180909062703-3050d21c67d7 // indirect
@@ -71,6 +75,7 @@ require (
 	github.com/oklog/oklog v0.3.2
 	github.com/opentracing-contrib/go-stdlib v0.0.0-20190519235532-cf7a6c988dc9 // indirect
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
+	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/posener/complete v1.2.1 // indirect
@@ -78,6 +83,7 @@ require (
 	github.com/prometheus/client_golang v1.1.0
 	github.com/prometheus/common v0.6.0
 	github.com/prometheus/prometheus v0.0.0-20190710134608-e5b22494857d
+	github.com/prometheus/promu v0.5.0 // indirect
 	github.com/prometheus/tsdb v0.10.0
 	github.com/rogpeppe/fastuuid v1.2.0 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20190801204459-3c104360edc8 // indirect
