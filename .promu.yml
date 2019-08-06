@@ -4,7 +4,7 @@ build:
     binaries:
         - name: stackdriver-prometheus-sidecar
           path: ./cmd/stackdriver-prometheus-sidecar
-    flags: -a -tags netgo
+    flags: -a -mod=vendor -tags netgo
     ldflags: |
         -X {{repoPath}}/vendor/github.com/prometheus/common/version.Version={{.Version}}
         -X {{repoPath}}/vendor/github.com/prometheus/common/version.Revision={{.Revision}}

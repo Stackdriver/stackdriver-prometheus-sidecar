@@ -19,6 +19,7 @@ require (
 	github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/aws/aws-sdk-go v1.21.10 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/biogo/store v0.0.0-20190426020002-884f370e325d // indirect
 	github.com/cenk/backoff v2.2.1+incompatible // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
@@ -61,6 +62,7 @@ require (
 	github.com/influxdata/influxdb v1.7.7 // indirect
 	github.com/jackc/pgx v3.5.0+incompatible // indirect
 	github.com/jpillora/backoff v0.0.0-20180909062703-3050d21c67d7 // indirect
+	github.com/json-iterator/go v1.1.7 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
@@ -72,7 +74,10 @@ require (
 	github.com/montanaflynn/stats v0.5.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20190414153302-2ae31c8b6b30 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
+	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
 	github.com/oklog/oklog v0.3.2
+	github.com/onsi/ginkgo v1.8.0 // indirect
+	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/opentracing-contrib/go-stdlib v0.0.0-20190519235532-cf7a6c988dc9 // indirect
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
@@ -80,10 +85,11 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/posener/complete v1.2.1 // indirect
 	github.com/prometheus/alertmanager v0.18.0 // indirect
-	github.com/prometheus/client_golang v1.1.0
-	github.com/prometheus/common v0.6.0
+	github.com/prometheus/client_golang v1.0.0
+	github.com/prometheus/common v0.4.1
+	github.com/prometheus/procfs v0.0.3 // indirect
 	github.com/prometheus/prometheus v0.0.0-20190710134608-e5b22494857d
-	github.com/prometheus/promu v0.5.0 // indirect
+	github.com/prometheus/promu v0.4.0 // indirect
 	github.com/prometheus/tsdb v0.10.0
 	github.com/rogpeppe/fastuuid v1.2.0 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20190801204459-3c104360edc8 // indirect
@@ -110,7 +116,6 @@ require (
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 	honnef.co/go/tools v0.0.1-2019.2.2 // indirect
-	k8s.io/api v0.0.0-20190806064354-8b51d7113622 // indirect
 	k8s.io/gengo v0.0.0-20190327210449-e17681d19d3a // indirect
 	k8s.io/klog v0.3.3 // indirect
 	k8s.io/kube-openapi v0.0.0-20190722073852-5e22f3d471e6 // indirect
