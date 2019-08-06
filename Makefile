@@ -85,6 +85,14 @@ check_license:
 	@echo ">> checking license header"
 	@./scripts/check_license.sh
 
+deps:
+	@echo ">> getting dependencies"
+ifdef GO111MODULE
+	GO111MODULE=$(GO111MODULE) $(GO) mod download
+else
+	$(GO) get $(GOOPTS) -t ./...
+endif
+
 test-short:
 	@echo ">> running short tests"
 	@$(GO) test -short $(GOOPTS) $(pkgs)
@@ -156,4 +164,4 @@ $(FIRST_GOPATH)/bin/staticcheck:
 $(FIRST_GOPATH)/bin/goveralls:
 	@GOOS= GOARCH= $(GO) get -u github.com/mattn/goveralls
 
-.PHONY: all style check_license format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck goveralls $(FIRST_GOPATH)/bin/goveralls
+.PHONY: all style check_license deps format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck goveralls $(FIRST_GOPATH)/bin/goveralls
