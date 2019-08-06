@@ -1,4 +1,8 @@
 language: go
+
+go:
+  - 1.12.x
+
 script: make goveralls
 # Contains tokens for Coveralls. See https://docs.coveralls.io/go
 env:
