@@ -44,17 +44,11 @@ type Chunk interface {
 	Bytes() []byte
 	Encoding() Encoding
 	Appender() (Appender, error)
-	Iterator() Iterator
+	// The iterator passed as argument is for re-use.
+	// Depending on implementation, the iterator can
+	// be re-used or a new iterator can be allocated.
+	Iterator(Iterator) Iterator
 	NumSamples() int
-}
-
-// FromData returns a chunk from a byte slice of chunk data.
-func FromData(e Encoding, d []byte) (Chunk, error) {
-	switch e {
-	case EncXOR:
-		return &XORChunk{b: &bstream{count: 0, stream: d}}, nil
-	}
-	return nil, fmt.Errorf("unknown chunk encoding: %d", e)
 }
 
 // Appender adds sample pairs to a chunk.
@@ -80,21 +74,23 @@ func (nopIterator) At() (int64, float64) { return 0, 0 }
 func (nopIterator) Next() bool           { return false }
 func (nopIterator) Err() error           { return nil }
 
+// Pool is used to create and reuse chunk references to avoid allocations.
 type Pool interface {
 	Put(Chunk) error
 	Get(e Encoding, b []byte) (Chunk, error)
 }
 
-// Pool is a memory pool of chunk objects.
+// pool is a memory pool of chunk objects.
 type pool struct {
 	xor sync.Pool
 }
 
+// NewPool returns a new pool.
 func NewPool() Pool {
 	return &pool{
 		xor: sync.Pool{
 			New: func() interface{} {
-				return &XORChunk{b: &bstream{}}
+				return &XORChunk{b: bstream{}}
 			},
 		},
 	}
@@ -128,4 +124,15 @@ func (p *pool) Put(c Chunk) error {
 		return errors.Errorf("invalid encoding %q", c.Encoding())
 	}
 	return nil
+}
+
+// FromData returns a chunk from a byte slice of chunk data.
+// This is there so that users of the library can easily create chunks from
+// bytes.
+func FromData(e Encoding, d []byte) (Chunk, error) {
+	switch e {
+	case EncXOR:
+		return &XORChunk{b: bstream{count: 0, stream: d}}, nil
+	}
+	return nil, fmt.Errorf("unknown chunk encoding: %d", e)
 }
