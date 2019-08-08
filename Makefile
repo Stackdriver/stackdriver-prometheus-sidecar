@@ -21,7 +21,7 @@ GOHOSTOS     ?= $(shell $(GO) env GOHOSTOS)
 GOHOSTARCH   ?= $(shell $(GO) env GOHOSTARCH)
 
 # Enforce Go modules support just in case the directory is inside GOPATH (and for Travis CI).
-export GO111MODULE=on
+GO111MODULE := on
 # Always use the local vendor/ directory to satisfy the dependencies.
 GOOPTS := $(GOOPTS) -mod=vendor
 
