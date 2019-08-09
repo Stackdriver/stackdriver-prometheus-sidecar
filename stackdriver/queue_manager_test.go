@@ -26,6 +26,7 @@ import (
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -257,7 +258,7 @@ func TestSampleDeliveryTimeout(t *testing.T) {
 	c := NewTestStorageClient(t)
 	cfg := config.DefaultQueueConfig
 	cfg.MaxShards = 1
-	cfg.BatchSendDeadline = 100 * time.Millisecond
+	cfg.BatchSendDeadline = model.Duration(100 * time.Millisecond)
 
 	tailer, err := tail.Tail(context.Background(), dir)
 	if err != nil {

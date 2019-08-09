@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/internal/sdkuri"
 )
 
 // GetMetadata uses the path provided to request information from the EC2
@@ -19,13 +19,14 @@ func (c *EC2Metadata) GetMetadata(p string) (string, error) {
 	op := &request.Operation{
 		Name:       "GetMetadata",
 		HTTPMethod: "GET",
-		HTTPPath:   path.Join("/", "meta-data", p),
+		HTTPPath:   sdkuri.PathJoin("/meta-data", p),
 	}
 
 	output := &metadataOutput{}
 	req := c.NewRequest(op, nil, output)
+	err := req.Send()
 
-	return output.Content, req.Send()
+	return output.Content, err
 }
 
 // GetUserData returns the userdata that was configured for the service. If
@@ -35,7 +36,7 @@ func (c *EC2Metadata) GetUserData() (string, error) {
 	op := &request.Operation{
 		Name:       "GetUserData",
 		HTTPMethod: "GET",
-		HTTPPath:   path.Join("/", "user-data"),
+		HTTPPath:   "/user-data",
 	}
 
 	output := &metadataOutput{}
@@ -45,8 +46,9 @@ func (c *EC2Metadata) GetUserData() (string, error) {
 			r.Error = awserr.New("NotFoundError", "user-data not found", r.Error)
 		}
 	})
+	err := req.Send()
 
-	return output.Content, req.Send()
+	return output.Content, err
 }
 
 // GetDynamicData uses the path provided to request information from the EC2
@@ -56,13 +58,14 @@ func (c *EC2Metadata) GetDynamicData(p string) (string, error) {
 	op := &request.Operation{
 		Name:       "GetDynamicData",
 		HTTPMethod: "GET",
-		HTTPPath:   path.Join("/", "dynamic", p),
+		HTTPPath:   sdkuri.PathJoin("/dynamic", p),
 	}
 
 	output := &metadataOutput{}
 	req := c.NewRequest(op, nil, output)
+	err := req.Send()
 
-	return output.Content, req.Send()
+	return output.Content, err
 }
 
 // GetInstanceIdentityDocument retrieves an identity document describing an
@@ -79,7 +82,7 @@ func (c *EC2Metadata) GetInstanceIdentityDocument() (EC2InstanceIdentityDocument
 	doc := EC2InstanceIdentityDocument{}
 	if err := json.NewDecoder(strings.NewReader(resp)).Decode(&doc); err != nil {
 		return EC2InstanceIdentityDocument{},
-			awserr.New("SerializationError",
+			awserr.New(request.ErrCodeSerialization,
 				"failed to decode EC2 instance identity document", err)
 	}
 
@@ -98,7 +101,7 @@ func (c *EC2Metadata) IAMInfo() (EC2IAMInfo, error) {
 	info := EC2IAMInfo{}
 	if err := json.NewDecoder(strings.NewReader(resp)).Decode(&info); err != nil {
 		return EC2IAMInfo{},
-			awserr.New("SerializationError",
+			awserr.New(request.ErrCodeSerialization,
 				"failed to decode EC2 IAM info", err)
 	}
 
@@ -118,6 +121,10 @@ func (c *EC2Metadata) Region() (string, error) {
 		return "", err
 	}
 
+	if len(resp) == 0 {
+		return "", awserr.New("EC2MetadataError", "invalid Region response", nil)
+	}
+
 	// returns region without the suffix. Eg: us-west-2a becomes us-west-2
 	return resp[:len(resp)-1], nil
 }
@@ -133,7 +140,7 @@ func (c *EC2Metadata) Available() bool {
 	return true
 }
 
-// An EC2IAMInfo provides the shape for unmarshalling
+// An EC2IAMInfo provides the shape for unmarshaling
 // an IAM info from the metadata API
 type EC2IAMInfo struct {
 	Code               string
@@ -142,7 +149,7 @@ type EC2IAMInfo struct {
 	InstanceProfileID  string
 }
 
-// An EC2InstanceIdentityDocument provides the shape for unmarshalling
+// An EC2InstanceIdentityDocument provides the shape for unmarshaling
 // an instance identity document
 type EC2InstanceIdentityDocument struct {
 	DevpayProductCodes []string  `json:"devpayProductCodes"`

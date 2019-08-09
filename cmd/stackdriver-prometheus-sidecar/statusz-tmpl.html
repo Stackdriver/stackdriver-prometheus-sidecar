@@ -69,7 +69,8 @@
       <tr><th>Kubernetes labels: cluster name</th><td>{{.KubernetesLabels.ClusterName}}</td></tr>
       <tr><th>Kubernetes labels: location</th><td>{{.KubernetesLabels.Location}}</td></tr>
       <tr><th>Listen address</th><td>{{.ListenAddress}}</td></tr>
-      <tr><th>Log level</th><td>{{.LogLevel.String}}</td></tr>
+      <tr><th>Log level</th><td>{{.PromlogConfig.Level}}</td></tr>
+      <tr><th>Log format</th><td>{{.PromlogConfig.Format}}</td></tr>
       <tr><th>Metrics prefix</th><td>{{.MetricsPrefix}}</td></tr>
       <tr><th>Monitoring backends</th><td>{{.MonitoringBackends}}</td></tr>
       <tr><th>Project ID resource</th><td>{{.ProjectIDResource}}</td></tr>

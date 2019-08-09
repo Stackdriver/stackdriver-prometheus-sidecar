@@ -40,7 +40,7 @@ func TestTailFuzz(t *testing.T) {
 	}
 	defer rc.Close()
 
-	w, err := wal.NewSize(nil, nil, dir, 2*1024*1024)
+	w, err := wal.NewSize(nil, nil, dir, 2*1024*1024, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func BenchmarkTailFuzz(t *testing.B) {
 	}
 	defer rc.Close()
 
-	w, err := wal.NewSize(nil, nil, dir, 32*1024*1024)
+	w, err := wal.NewSize(nil, nil, dir, 32*1024*1024, false)
 	if err != nil {
 		t.Fatal(err)
 	}

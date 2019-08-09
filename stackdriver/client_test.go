@@ -143,9 +143,10 @@ func TestResolver(t *testing.T) {
 		}
 
 		res, _ := manual.GenerateAndRegisterManualResolver()
-		res.InitialAddrs([]resolver.Address{
-			{Addr: listener.Addr().String()},
-		})
+		res.InitialState(resolver.State{
+			Addresses: []resolver.Address{
+				{Addr: listener.Addr().String()},
+			}})
 
 		c := NewClient(&ClientConfig{
 			URL:      serverURL,

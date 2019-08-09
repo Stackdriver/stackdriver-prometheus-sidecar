@@ -58,8 +58,8 @@ func TestStatuszHandler(t *testing.T) {
 
 	matcher, _ := labels.NewMatcher(labels.MatchEqual, "k", "v")
 
-	var logLevel promlog.AllowedLevel
-	logLevel.Set("debug")
+	logConfig := promlog.Config{Level: &promlog.AllowedLevel{}}
+	logConfig.Level.Set("debug")
 
 	handler := &statuszHandler{
 		logger:    log.NewLogfmtLogger(os.Stdout),
@@ -81,7 +81,7 @@ func TestStatuszHandler(t *testing.T) {
 				ClusterName: "my-cluster",
 			},
 			ListenAddress:      "0.0.0.0:9091",
-			LogLevel:           logLevel,
+			PromlogConfig:      logConfig,
 			MetricRenames:      map[string]string{"from1": "to1", "from2": "to2"},
 			MetricsPrefix:      "external.googleapis.com/prometheus",
 			MonitoringBackends: []string{"prometheus", "stackdriver"},
@@ -120,6 +120,7 @@ func TestStatuszHandler(t *testing.T) {
 		regexp.MustCompile(`<tr><th>Kubernetes labels: location</th><td>us-central1-a</td></tr>`),
 		regexp.MustCompile(`<tr><th>Listen address</th><td>0.0.0.0:9091</td></tr>`),
 		regexp.MustCompile(`<tr><th>Log level</th><td>debug</td></tr>`),
+		regexp.MustCompile(`<tr><th>Log format</th><td>&lt;nil&gt;</td></tr>`),
 		regexp.MustCompile(`<tr><th>Metrics prefix</th><td>external.googleapis.com/prometheus</td></tr>`),
 		regexp.MustCompile(`<tr><th>Monitoring backends</th><td>\[prometheus stackdriver\]</td></tr>`),
 		regexp.MustCompile(`<tr><th>Project ID resource</th><td>my-project</td></tr>`),

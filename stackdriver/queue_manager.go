@@ -461,7 +461,7 @@ func (s *shardCollection) runShard(i int) {
 	// whenever samples are extracted from pendingSamples.
 	shard.resetSeen()
 
-	timer := time.NewTimer(s.qm.cfg.BatchSendDeadline)
+	timer := time.NewTimer(time.Duration(s.qm.cfg.BatchSendDeadline))
 	stop := func() {
 		if !timer.Stop() {
 			select {
@@ -502,7 +502,7 @@ func (s *shardCollection) runShard(i int) {
 				shard.resetSeen()
 
 				stop()
-				timer.Reset(s.qm.cfg.BatchSendDeadline)
+				timer.Reset(time.Duration(s.qm.cfg.BatchSendDeadline))
 			}
 			if seen {
 				pendingSamples = append(pendingSamples, sample)
@@ -514,7 +514,7 @@ func (s *shardCollection) runShard(i int) {
 				pendingSamples = pendingSamples[:0]
 				shard.resetSeen()
 			}
-			timer.Reset(s.qm.cfg.BatchSendDeadline)
+			timer.Reset(time.Duration(s.qm.cfg.BatchSendDeadline))
 		}
 	}
 }
@@ -532,7 +532,7 @@ func (s *shardCollection) sendSamples(client StorageClient, samples []*monitorin
 // sendSamples to the remote storage with backoff for recoverable errors.
 func (s *shardCollection) sendSamplesWithBackoff(client StorageClient, samples []*monitoring_pb.TimeSeries) {
 	backoff := s.qm.cfg.MinBackoff
-	for retries := s.qm.cfg.MaxRetries; retries > 0; retries-- {
+	for {
 		begin := time.Now()
 		err := client.Store(&monitoring_pb.CreateTimeSeriesRequest{TimeSeries: samples})
 
@@ -546,7 +546,7 @@ func (s *shardCollection) sendSamplesWithBackoff(client StorageClient, samples [
 			level.Warn(s.qm.logger).Log("msg", "Unrecoverable error sending samples to remote storage", "err", err)
 			break
 		}
-		time.Sleep(backoff)
+		time.Sleep(time.Duration(backoff))
 		backoff = backoff * 2
 		if backoff > s.qm.cfg.MaxBackoff {
 			backoff = s.qm.cfg.MaxBackoff

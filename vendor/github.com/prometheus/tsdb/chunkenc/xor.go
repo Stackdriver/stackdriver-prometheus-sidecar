@@ -51,13 +51,13 @@ import (
 
 // XORChunk holds XOR encoded sample data.
 type XORChunk struct {
-	b *bstream
+	b bstream
 }
 
 // NewXORChunk returns a new chunk with XOR encoding of the given size.
 func NewXORChunk() *XORChunk {
 	b := make([]byte, 2, 128)
-	return &XORChunk{b: &bstream{stream: b, count: 0}}
+	return &XORChunk{b: bstream{stream: b, count: 0}}
 }
 
 // Encoding returns the encoding type.
@@ -77,7 +77,7 @@ func (c *XORChunk) NumSamples() int {
 
 // Appender implements the Chunk interface.
 func (c *XORChunk) Appender() (Appender, error) {
-	it := c.iterator()
+	it := c.iterator(nil)
 
 	// To get an appender we must know the state it would have if we had
 	// appended all existing data from scratch.
@@ -89,7 +89,7 @@ func (c *XORChunk) Appender() (Appender, error) {
 	}
 
 	a := &xorAppender{
-		b:        c.b,
+		b:        &c.b,
 		t:        it.t,
 		v:        it.val,
 		tDelta:   it.tDelta,
@@ -102,19 +102,25 @@ func (c *XORChunk) Appender() (Appender, error) {
 	return a, nil
 }
 
-func (c *XORChunk) iterator() *xorIterator {
+func (c *XORChunk) iterator(it Iterator) *xorIterator {
 	// Should iterators guarantee to act on a copy of the data so it doesn't lock append?
 	// When using striped locks to guard access to chunks, probably yes.
 	// Could only copy data if the chunk is not completed yet.
+	if xorIter, ok := it.(*xorIterator); ok {
+		xorIter.Reset(c.b.bytes())
+		return xorIter
+	}
 	return &xorIterator{
+		// The first 2 bytes contain chunk headers.
+		// We skip that for actual samples.
 		br:       newBReader(c.b.bytes()[2:]),
 		numTotal: binary.BigEndian.Uint16(c.b.bytes()),
 	}
 }
 
 // Iterator implements the Chunk interface.
-func (c *XORChunk) Iterator() Iterator {
-	return c.iterator()
+func (c *XORChunk) Iterator(it Iterator) Iterator {
+	return c.iterator(it)
 }
 
 type xorAppender struct {
@@ -221,7 +227,7 @@ func (a *xorAppender) writeVDelta(v float64) {
 }
 
 type xorIterator struct {
-	br       *bstream
+	br       bstream
 	numTotal uint16
 	numRead  uint16
 
@@ -243,13 +249,28 @@ func (it *xorIterator) Err() error {
 	return it.err
 }
 
+func (it *xorIterator) Reset(b []byte) {
+	// The first 2 bytes contain chunk headers.
+	// We skip that for actual samples.
+	it.br = newBReader(b[2:])
+	it.numTotal = binary.BigEndian.Uint16(b)
+
+	it.numRead = 0
+	it.t = 0
+	it.val = 0
+	it.leading = 0
+	it.trailing = 0
+	it.tDelta = 0
+	it.err = nil
+}
+
 func (it *xorIterator) Next() bool {
 	if it.err != nil || it.numRead == it.numTotal {
 		return false
 	}
 
 	if it.numRead == 0 {
-		t, err := binary.ReadVarint(it.br)
+		t, err := binary.ReadVarint(&it.br)
 		if err != nil {
 			it.err = err
 			return false
@@ -266,7 +287,7 @@ func (it *xorIterator) Next() bool {
 		return true
 	}
 	if it.numRead == 1 {
-		tDelta, err := binary.ReadUvarint(it.br)
+		tDelta, err := binary.ReadUvarint(&it.br)
 		if err != nil {
 			it.err = err
 			return false

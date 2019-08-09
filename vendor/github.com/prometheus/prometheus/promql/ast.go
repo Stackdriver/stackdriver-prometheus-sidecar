@@ -14,8 +14,9 @@
 package promql
 
 import (
-	"fmt"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -48,18 +49,6 @@ type Statement interface {
 	stmt()
 }
 
-// Statements is a list of statement nodes that implements Node.
-type Statements []Statement
-
-// AlertStmt represents an added alert rule.
-type AlertStmt struct {
-	Name        string
-	Expr        Expr
-	Duration    time.Duration
-	Labels      labels.Labels
-	Annotations labels.Labels
-}
-
 // EvalStmt holds an expression and information on the range it should
 // be evaluated on.
 type EvalStmt struct {
@@ -72,16 +61,7 @@ type EvalStmt struct {
 	Interval time.Duration
 }
 
-// RecordStmt represents an added recording rule.
-type RecordStmt struct {
-	Name   string
-	Expr   Expr
-	Labels labels.Labels
-}
-
-func (*AlertStmt) stmt()  {}
-func (*EvalStmt) stmt()   {}
-func (*RecordStmt) stmt() {}
+func (*EvalStmt) stmt() {}
 
 // Expr is a generic interface for all expression types.
 type Expr interface {
@@ -132,8 +112,17 @@ type MatrixSelector struct {
 	Offset        time.Duration
 	LabelMatchers []*labels.Matcher
 
-	// The series are populated at query preparation time.
-	series []storage.Series
+	// The unexpanded seriesSet populated at query preparation time.
+	unexpandedSeriesSet storage.SeriesSet
+	series              []storage.Series
+}
+
+// SubqueryExpr represents a subquery.
+type SubqueryExpr struct {
+	Expr   Expr
+	Range  time.Duration
+	Offset time.Duration
+	Step   time.Duration
 }
 
 // NumberLiteral represents a number.
@@ -165,13 +154,15 @@ type VectorSelector struct {
 	Offset        time.Duration
 	LabelMatchers []*labels.Matcher
 
-	// The series are populated at query preparation time.
-	series []storage.Series
+	// The unexpanded seriesSet populated at query preparation time.
+	unexpandedSeriesSet storage.SeriesSet
+	series              []storage.Series
 }
 
 func (e *AggregateExpr) Type() ValueType  { return ValueTypeVector }
 func (e *Call) Type() ValueType           { return e.Func.ReturnType }
 func (e *MatrixSelector) Type() ValueType { return ValueTypeMatrix }
+func (e *SubqueryExpr) Type() ValueType   { return ValueTypeMatrix }
 func (e *NumberLiteral) Type() ValueType  { return ValueTypeScalar }
 func (e *ParenExpr) Type() ValueType      { return e.Expr.Type() }
 func (e *StringLiteral) Type() ValueType  { return ValueTypeString }
@@ -188,6 +179,7 @@ func (*AggregateExpr) expr()  {}
 func (*BinaryExpr) expr()     {}
 func (*Call) expr()           {}
 func (*MatrixSelector) expr() {}
+func (*SubqueryExpr) expr()   {}
 func (*NumberLiteral) expr()  {}
 func (*ParenExpr) expr()      {}
 func (*StringLiteral) expr()  {}
@@ -237,80 +229,100 @@ type VectorMatching struct {
 
 // Visitor allows visiting a Node and its child nodes. The Visit method is
 // invoked for each node with the path leading to the node provided additionally.
-// If the result visitor w is not nil, Walk visits each of the children
+// If the result visitor w is not nil and no error, Walk visits each of the children
 // of node with the visitor w, followed by a call of w.Visit(nil, nil).
 type Visitor interface {
-	Visit(node Node, path []Node) (w Visitor)
+	Visit(node Node, path []Node) (w Visitor, err error)
 }
 
 // Walk traverses an AST in depth-first order: It starts by calling
 // v.Visit(node, path); node must not be nil. If the visitor w returned by
-// v.Visit(node, path) is not nil, Walk is invoked recursively with visitor
-// w for each of the non-nil children of node, followed by a call of
-// w.Visit(nil).
+// v.Visit(node, path) is not nil and the visitor returns no error, Walk is
+// invoked recursively with visitor w for each of the non-nil children of node,
+// followed by a call of w.Visit(nil), returning an error
 // As the tree is descended the path of previous nodes is provided.
-func Walk(v Visitor, node Node, path []Node) {
-	if v = v.Visit(node, path); v == nil {
-		return
+func Walk(v Visitor, node Node, path []Node) error {
+	var err error
+	if v, err = v.Visit(node, path); v == nil || err != nil {
+		return err
 	}
 	path = append(path, node)
 
 	switch n := node.(type) {
-	case Statements:
-		for _, s := range n {
-			Walk(v, s, path)
-		}
-	case *AlertStmt:
-		Walk(v, n.Expr, path)
-
 	case *EvalStmt:
-		Walk(v, n.Expr, path)
-
-	case *RecordStmt:
-		Walk(v, n.Expr, path)
+		if err := Walk(v, n.Expr, path); err != nil {
+			return err
+		}
 
 	case Expressions:
 		for _, e := range n {
-			Walk(v, e, path)
+			if err := Walk(v, e, path); err != nil {
+				return err
+			}
 		}
 	case *AggregateExpr:
-		Walk(v, n.Expr, path)
+		if n.Param != nil {
+			if err := Walk(v, n.Param, path); err != nil {
+				return err
+			}
+		}
+		if err := Walk(v, n.Expr, path); err != nil {
+			return err
+		}
 
 	case *BinaryExpr:
-		Walk(v, n.LHS, path)
-		Walk(v, n.RHS, path)
+		if err := Walk(v, n.LHS, path); err != nil {
+			return err
+		}
+		if err := Walk(v, n.RHS, path); err != nil {
+			return err
+		}
 
 	case *Call:
-		Walk(v, n.Args, path)
+		if err := Walk(v, n.Args, path); err != nil {
+			return err
+		}
+
+	case *SubqueryExpr:
+		if err := Walk(v, n.Expr, path); err != nil {
+			return err
+		}
 
 	case *ParenExpr:
-		Walk(v, n.Expr, path)
+		if err := Walk(v, n.Expr, path); err != nil {
+			return err
+		}
 
 	case *UnaryExpr:
-		Walk(v, n.Expr, path)
+		if err := Walk(v, n.Expr, path); err != nil {
+			return err
+		}
 
 	case *MatrixSelector, *NumberLiteral, *StringLiteral, *VectorSelector:
 		// nothing to do
 
 	default:
-		panic(fmt.Errorf("promql.Walk: unhandled node type %T", node))
+		panic(errors.Errorf("promql.Walk: unhandled node type %T", node))
 	}
 
-	v.Visit(nil, nil)
+	_, err = v.Visit(nil, nil)
+	return err
 }
 
-type inspector func(Node, []Node) bool
+type inspector func(Node, []Node) error
 
-func (f inspector) Visit(node Node, path []Node) Visitor {
-	if f(node, path) {
-		return f
+func (f inspector) Visit(node Node, path []Node) (Visitor, error) {
+	if err := f(node, path); err != nil {
+		return nil, err
 	}
-	return nil
+
+	return f, nil
 }
 
 // Inspect traverses an AST in depth-first order: It starts by calling
-// f(node, path); node must not be nil. If f returns true, Inspect invokes f
+// f(node, path); node must not be nil. If f returns a nil error, Inspect invokes f
 // for all the non-nil children of node, recursively.
-func Inspect(node Node, f func(Node, []Node) bool) {
+func Inspect(node Node, f inspector) {
+	//nolint: errcheck
 	Walk(inspector(f), node, nil)
 }
