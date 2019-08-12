@@ -626,6 +626,88 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 		},
+		// Metrics with the _total suffix should be preserved if metadata can be found for the original metric name.
+		{
+			series: seriesMap{
+				1: labels.FromStrings("job", "job1", "instance", "instance1", "a", "1", "__name__", "metric1_total"),
+			},
+			targets: targetMap{
+				"job1/instance1": &targets.Target{
+					Labels:           promlabels.FromStrings("job", "job1", "instance", "instance1"),
+					DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+				},
+			},
+			metadata: metadataMap{
+				"job1/instance1/metric1_total": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1_total"},
+			},
+			metricPrefix: "test.googleapis.com",
+			input: []tsdb.RefSample{
+				{Ref: 1, T: 1000, V: 200},
+			},
+			result: []*monitoring_pb.TimeSeries{
+				{
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "test.googleapis.com/metric1_total",
+						Labels: map[string]string{"a": "1"},
+					},
+					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{200},
+						},
+					}},
+				},
+			},
+		},
+		// Metrics with the _total suffix should fail over to the metadata for the metric with the _total suffix removed.
+		{
+			series: seriesMap{
+				1: labels.FromStrings("job", "job1", "instance", "instance1", "a", "1", "__name__", "metric1_total"),
+			},
+			targets: targetMap{
+				"job1/instance1": &targets.Target{
+					Labels:           promlabels.FromStrings("job", "job1", "instance", "instance1"),
+					DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+				},
+			},
+			metadata: metadataMap{
+				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+			},
+			metricPrefix: "test.googleapis.com",
+			input: []tsdb.RefSample{
+				{Ref: 1, T: 1000, V: 200},
+			},
+			result: []*monitoring_pb.TimeSeries{
+				{
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "test.googleapis.com/metric1",
+						Labels: map[string]string{"a": "1"},
+					},
+					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{200},
+						},
+					}},
+				},
+			},
+		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

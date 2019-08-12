@@ -380,11 +380,12 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		return nil
 	}
 	var (
-		metricName     = entry.lset.Get("__name__")
-		baseMetricName string
-		suffix         string
-		job            = entry.lset.Get("job")
-		instance       = entry.lset.Get("instance")
+		metricName        = entry.lset.Get("__name__")
+		baseMetricName    string
+		suffix            string
+		useBaseMetricName bool
+		job               = entry.lset.Get("job")
+		instance          = entry.lset.Get("instance")
 	)
 	metadata, err := c.metadata.Get(ctx, job, instance, metricName)
 	if err != nil {
@@ -394,10 +395,13 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		// The full name didn't turn anything up. Check again in case it's a summary or histogram without
 		// the metric name suffix.
 		var ok bool
-		if baseMetricName, suffix, ok = stripComplexMetricSuffix(metricName); ok {
+		if baseMetricName, suffix, useBaseMetricName, ok = stripComplexMetricSuffix(metricName); ok {
 			metadata, err = c.metadata.Get(ctx, job, instance, baseMetricName)
 			if err != nil {
 				return errors.Wrap(err, "get metadata")
+			}
+			if useBaseMetricName {
+				metricName = baseMetricName
 			}
 		}
 		if metadata == nil {
