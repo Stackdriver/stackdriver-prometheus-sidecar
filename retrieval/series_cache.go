@@ -391,8 +391,8 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		return errors.Wrap(err, "get metadata")
 	}
 	if metadata == nil {
-		// The full name didn't turn anything up. Check again in case it's a summary or histogram without
-		// the metric name suffix.
+		// The full name didn't turn anything up. Check again in case it's a summary,
+		// histogram, or counter without the metric name suffix.
 		var ok bool
 		if baseMetricName, suffix, ok = stripComplexMetricSuffix(metricName); ok {
 			metadata, err = c.metadata.Get(ctx, job, instance, baseMetricName)
