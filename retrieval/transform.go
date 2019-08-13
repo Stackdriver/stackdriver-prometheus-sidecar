@@ -135,20 +135,20 @@ const (
 	metricSuffixTotal  = "_total"
 )
 
-func stripComplexMetricSuffix(name string) (prefix string, suffix string, useBaseMetricName bool, ok bool) {
+func stripComplexMetricSuffix(name string) (prefix string, suffix string, ok bool) {
 	if strings.HasSuffix(name, metricSuffixBucket) {
-		return name[:len(name)-len(metricSuffixBucket)], metricSuffixBucket, false, true
+		return name[:len(name)-len(metricSuffixBucket)], metricSuffixBucket, true
 	}
 	if strings.HasSuffix(name, metricSuffixCount) {
-		return name[:len(name)-len(metricSuffixCount)], metricSuffixCount, false, true
+		return name[:len(name)-len(metricSuffixCount)], metricSuffixCount, true
 	}
 	if strings.HasSuffix(name, metricSuffixSum) {
-		return name[:len(name)-len(metricSuffixSum)], metricSuffixSum, false, true
+		return name[:len(name)-len(metricSuffixSum)], metricSuffixSum, true
 	}
 	if strings.HasSuffix(name, metricSuffixTotal) {
-		return name[:len(name)-len(metricSuffixTotal)], metricSuffixTotal, true, true
+		return name[:len(name)-len(metricSuffixTotal)], metricSuffixTotal, true
 	}
-	return name, "", false, false
+	return name, "", false
 }
 
 const (

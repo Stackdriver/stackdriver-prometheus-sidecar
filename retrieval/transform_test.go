@@ -638,13 +638,15 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1_total": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1_total"},
+				"job1/instance1/metric1_total": &scrape.MetricMetadata{Type: textparse.MetricTypeCounter, Metric: "metric1_total"},
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{
-				{Ref: 1, T: 1000, V: 200},
+				{Ref: 1, T: 2000, V: 5.5},
+				{Ref: 1, T: 3000, V: 8},
 			},
 			result: []*monitoring_pb.TimeSeries{
+				nil, // Skipped by reset timestamp handling.
 				{
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
@@ -654,14 +656,15 @@ func TestSampleBuilder(t *testing.T) {
 						Type:   "test.googleapis.com/metric1_total",
 						Labels: map[string]string{"a": "1"},
 					},
-					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
 					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
 					Points: []*monitoring_pb.Point{{
 						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
 						},
 						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{200},
+							Value: &monitoring_pb.TypedValue_DoubleValue{2.5},
 						},
 					}},
 				},
@@ -679,13 +682,15 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeCounter, Metric: "metric1"},
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{
-				{Ref: 1, T: 1000, V: 200},
+				{Ref: 1, T: 2000, V: 5.5},
+				{Ref: 1, T: 3000, V: 8},
 			},
 			result: []*monitoring_pb.TimeSeries{
+				nil, // Skipped by reset timestamp handling.
 				{
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
@@ -695,14 +700,15 @@ func TestSampleBuilder(t *testing.T) {
 						Type:   "test.googleapis.com/metric1",
 						Labels: map[string]string{"a": "1"},
 					},
-					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
 					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
 					Points: []*monitoring_pb.Point{{
 						Interval: &monitoring_pb.TimeInterval{
-							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
 						},
 						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{200},
+							Value: &monitoring_pb.TypedValue_DoubleValue{2.5},
 						},
 					}},
 				},
