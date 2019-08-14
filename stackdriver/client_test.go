@@ -179,7 +179,7 @@ func TestResolver(t *testing.T) {
 		expectedTarget := fmt.Sprintf("%s:///%s",
 			c.resolver.Scheme(), test.expectedAddress)
 		if requestedTarget != expectedTarget {
-			t.Errorf("ERROR: get target as %s, want %s",
+			t.Errorf("ERROR: got target as %s, want %s",
 				requestedTarget, expectedTarget)
 		}
 	}
