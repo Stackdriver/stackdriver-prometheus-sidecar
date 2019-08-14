@@ -3,6 +3,8 @@
 This repository contains a sidecar for the Prometheus server that can send
 metrics to Stackdriver. This is based on [this design](docs/design.md).
 
+Custom metrics are a chargeable feature of Stackdriver Monitoring and there could be costs for your custom metrics. For more information on pricing, see [Stackdriver Pricing](https://cloud.google.com/stackdriver/pricing).
+
 [![Build Status](https://travis-ci.com/Stackdriver/stackdriver-prometheus-sidecar.svg?branch=master)](https://travis-ci.com/Stackdriver/stackdriver-prometheus-sidecar)
 [![Coverage Status](https://coveralls.io/repos/github/Stackdriver/stackdriver-prometheus-sidecar/badge.svg?branch=master)](https://coveralls.io/github/Stackdriver/stackdriver-prometheus-sidecar?branch=master)
 
