@@ -120,8 +120,20 @@ func TestEmptyRequest(t *testing.T) {
 }
 
 func TestResolver(t *testing.T) {
-	addressesToTest := []string{"stackdriver.invalid", "2001:db8::"}
-	for _, address := range addressesToTest {
+	tests := []struct {
+		address       string
+		isLiteralIPV6 bool
+	}{
+		{
+			"stackdriver.invalid",
+			false,
+		},
+		{
+			"2001:db8::",
+			true,
+		},
+	}
+	for _, test := range tests {
 		grpcServer := grpc.NewServer()
 		listener := newLocalListener()
 		monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
@@ -137,7 +149,12 @@ func TestResolver(t *testing.T) {
 		logger := log.NewLogfmtLogger(logBuffer)
 
 		// Without ?auth=false, the test fails with context deadline exceeded.
-		serverURL, err := url.Parse("http://" + address + "?auth=false")
+		var urlStr string
+		urlStr = fmt.Sprintf("http://%s?auth=false", test.address)
+		if test.isLiteralIPV6 {
+			urlStr = fmt.Sprintf("http://[%s]?auth=false", test.address)
+		}
+		serverURL, err := url.Parse(urlStr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,10 +181,10 @@ func TestResolver(t *testing.T) {
 			t.Fatal(err)
 		}
 		requestedTarget := c.conn.Target()
-		expectedTarget := c.resolver.Scheme() + ":///" + address
+		expectedTarget := c.resolver.Scheme() + ":///" + test.address
 		if requestedTarget != expectedTarget {
-			t.Errorf("ERROR: Remote address is %s, want "+expectedTarget,
-				requestedTarget)
+			t.Errorf("ERROR: Remote address is %s, want %s",
+				requestedTarget, expectedTarget)
 		}
 	}
 }
