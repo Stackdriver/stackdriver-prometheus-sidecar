@@ -120,8 +120,20 @@ func TestEmptyRequest(t *testing.T) {
 }
 
 func TestResolver(t *testing.T) {
-	addressesToTest := []string{"stackdriver.invalid", "2001:db8::"}
-	for _, address := range addressesToTest {
+	tests := []struct {
+		host            string
+		expectedAddress string
+	}{
+		{
+			"stackdriver.invalid",
+			"stackdriver.invalid",
+		},
+		{
+			"[2001:db8::]",
+			"2001:db8::",
+		},
+	}
+	for _, test := range tests {
 		grpcServer := grpc.NewServer()
 		listener := newLocalListener()
 		monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
@@ -137,7 +149,7 @@ func TestResolver(t *testing.T) {
 		logger := log.NewLogfmtLogger(logBuffer)
 
 		// Without ?auth=false, the test fails with context deadline exceeded.
-		serverURL, err := url.Parse("http://" + address + "?auth=false")
+		serverURL, err := url.Parse(fmt.Sprintf("http://%s?auth=false", test.host))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,10 +176,11 @@ func TestResolver(t *testing.T) {
 			t.Fatal(err)
 		}
 		requestedTarget := c.conn.Target()
-		expectedTarget := c.resolver.Scheme() + ":///" + address
+		expectedTarget := fmt.Sprintf("%s:///%s",
+			c.resolver.Scheme(), test.expectedAddress)
 		if requestedTarget != expectedTarget {
-			t.Errorf("ERROR: Remote address is %s, want "+expectedTarget,
-				requestedTarget)
+			t.Errorf("ERROR: got target as %s, want %s",
+				requestedTarget, expectedTarget)
 		}
 	}
 }
