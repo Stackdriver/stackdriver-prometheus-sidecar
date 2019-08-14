@@ -391,8 +391,8 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		return errors.Wrap(err, "get metadata")
 	}
 	if metadata == nil {
-		// The full name didn't turn anything up. Check again in case it's a summary or histogram without
-		// the metric name suffix.
+		// The full name didn't turn anything up. Check again in case it's a summary,
+		// histogram, or counter without the metric name suffix.
 		var ok bool
 		if baseMetricName, suffix, ok = stripComplexMetricSuffix(metricName); ok {
 			metadata, err = c.metadata.Get(ctx, job, instance, baseMetricName)
@@ -429,6 +429,9 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	case textparse.MetricTypeCounter:
 		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 		ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
+		if baseMetricName != "" && suffix == metricSuffixTotal {
+			ts.Metric.Type = c.getMetricType(c.metricsPrefix, baseMetricName)
+		}
 	case textparse.MetricTypeGauge, textparse.MetricTypeUnknown:
 		ts.MetricKind = metric_pb.MetricDescriptor_GAUGE
 		ts.ValueType = metric_pb.MetricDescriptor_DOUBLE

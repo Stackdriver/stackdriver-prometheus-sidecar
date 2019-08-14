@@ -132,9 +132,10 @@ const (
 	metricSuffixBucket = "_bucket"
 	metricSuffixSum    = "_sum"
 	metricSuffixCount  = "_count"
+	metricSuffixTotal  = "_total"
 )
 
-func stripComplexMetricSuffix(name string) (string, string, bool) {
+func stripComplexMetricSuffix(name string) (prefix string, suffix string, ok bool) {
 	if strings.HasSuffix(name, metricSuffixBucket) {
 		return name[:len(name)-len(metricSuffixBucket)], metricSuffixBucket, true
 	}
@@ -143,6 +144,9 @@ func stripComplexMetricSuffix(name string) (string, string, bool) {
 	}
 	if strings.HasSuffix(name, metricSuffixSum) {
 		return name[:len(name)-len(metricSuffixSum)], metricSuffixSum, true
+	}
+	if strings.HasSuffix(name, metricSuffixTotal) {
+		return name[:len(name)-len(metricSuffixTotal)], metricSuffixTotal, true
 	}
 	return name, "", false
 }
