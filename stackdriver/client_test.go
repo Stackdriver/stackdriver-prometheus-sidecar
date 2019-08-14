@@ -121,16 +121,16 @@ func TestEmptyRequest(t *testing.T) {
 
 func TestResolver(t *testing.T) {
 	tests := []struct {
-		address       string
-		isLiteralIPV6 bool
+		host            string
+		expectedAddress string
 	}{
 		{
 			"stackdriver.invalid",
-			false,
+			"stackdriver.invalid",
 		},
 		{
+			"[2001:db8::]",
 			"2001:db8::",
-			true,
 		},
 	}
 	for _, test := range tests {
@@ -149,12 +149,7 @@ func TestResolver(t *testing.T) {
 		logger := log.NewLogfmtLogger(logBuffer)
 
 		// Without ?auth=false, the test fails with context deadline exceeded.
-		var urlStr string
-		urlStr = fmt.Sprintf("http://%s?auth=false", test.address)
-		if test.isLiteralIPV6 {
-			urlStr = fmt.Sprintf("http://[%s]?auth=false", test.address)
-		}
-		serverURL, err := url.Parse(urlStr)
+		serverURL, err := url.Parse(fmt.Sprintf("http://%s?auth=false", test.host))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -181,9 +176,10 @@ func TestResolver(t *testing.T) {
 			t.Fatal(err)
 		}
 		requestedTarget := c.conn.Target()
-		expectedTarget := c.resolver.Scheme() + ":///" + test.address
+		expectedTarget := fmt.Sprintf("%s:///%s",
+			c.resolver.Scheme(), test.expectedAddress)
 		if requestedTarget != expectedTarget {
-			t.Errorf("ERROR: Remote address is %s, want %s",
+			t.Errorf("ERROR: get target as %s, want %s",
 				requestedTarget, expectedTarget)
 		}
 	}
