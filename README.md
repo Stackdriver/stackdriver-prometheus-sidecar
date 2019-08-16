@@ -118,6 +118,7 @@ The matrix below lists the versions of Prometheus Server and other dependencies 
 | **0.2.x**       |          ✓          |          ✗          |          ✗          |
 | **0.3.x**       |          ✓          |          ✗          |          ✓          |
 | **0.4.x**       |          ?          |          ✗          |          ✓          |
+| **0.5.x**       |          ?          |          ✗          |          ✓          |
 
 - ✓: Verified as compatible.
 - ✗: Verified as incompatible.
