@@ -12,11 +12,13 @@ steps:
   args: [
     'build',
     '-t', 'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${TAG_NAME}${BRANCH_NAME}',
+    '-t', 'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${TAG_NAME}${BRANCH_NAME}-${SHORT_SHA}',
     '-t', 'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${SHORT_SHA}',
     '.'
   ]
 images: [
   'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${TAG_NAME}${BRANCH_NAME}',
+  'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${TAG_NAME}${BRANCH_NAME}-${SHORT_SHA}',
   'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${SHORT_SHA}'
 ]
 options:
