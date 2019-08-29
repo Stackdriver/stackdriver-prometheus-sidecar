@@ -43,8 +43,16 @@ var (
 	keyReason, _ = tag.NewKey("reason")
 )
 
-type unknownMetricError struct {
-	error
+type recoverableError struct {
+	e &error
+}
+
+func (r *recoverableError) Cause() error {
+	return r.e
+}
+
+func (r *recoverableError) Error() string {
+	return r.e.Error()
 }
 
 func init() {
@@ -349,7 +357,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	// If either of those pieces of data is missing, the series will be skipped.
 	target, err := c.targets.Get(ctx, pkgLabels(entry.lset))
 	if err != nil {
-		return errors.Wrap(err, "retrieving target failed")
+		return recoverableError{e: errors.Wrap(err, "retrieving target failed")}
 	}
 	if target == nil {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "target_not_found"))
@@ -392,7 +400,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	)
 	metadata, err := c.metadata.Get(ctx, job, instance, metricName)
 	if err != nil {
-		return errors.Wrap(err, "get metadata")
+		return recoverableError{Error: errors.Wrap(err, "get metadata")}
 	}
 	if metadata == nil {
 		// The full name didn't turn anything up. Check again in case it's a summary,
@@ -401,7 +409,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		if baseMetricName, suffix, ok = stripComplexMetricSuffix(metricName); ok {
 			metadata, err = c.metadata.Get(ctx, job, instance, baseMetricName)
 			if err != nil {
-				return errors.Wrap(err, "get metadata")
+				return recoverableError{Error: errors.Wrap(err, "get metadata")}
 			}
 		}
 		if metadata == nil {
@@ -451,14 +459,14 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 			ts.MetricKind = metric_pb.MetricDescriptor_GAUGE
 			ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
 		default:
-			return unknownMetricError{errors.Errorf("unexpected metric name suffix %q", suffix)}
+			return errors.Errorf("unexpected metric name suffix %q", suffix)
 		}
 	case textparse.MetricTypeHistogram:
 		ts.Metric.Type = c.getMetricType(c.metricsPrefix, baseMetricName)
 		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 		ts.ValueType = metric_pb.MetricDescriptor_DISTRIBUTION
 	default:
-		return unknownMetricError{errors.Errorf("unexpected metric type %s", metadata.Type)}
+		return errors.Errorf("unexpected metric type %s", metadata.Type)
 	}
 
 	entry.proto = ts
