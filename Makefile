@@ -57,10 +57,6 @@ style:
 	@echo ">> checking code style"
 	@! $(GOFMT) -d $(shell find . -path ./vendor -prune -o -name '*.go' -print) | grep '^'
 
-check_license:
-	@echo ">> checking license header"
-	@./scripts/check_license.sh
-
 deps:
 	@echo ">> getting dependencies"
 ifdef GO111MODULE
@@ -140,4 +136,4 @@ $(FIRST_GOPATH)/bin/staticcheck:
 $(FIRST_GOPATH)/bin/goveralls:
 	GOOS= GOARCH= $(GO) get -u github.com/mattn/goveralls
 
-.PHONY: all style check_license deps format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck goveralls $(FIRST_GOPATH)/bin/goveralls
+.PHONY: all style deps format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck goveralls $(FIRST_GOPATH)/bin/goveralls
