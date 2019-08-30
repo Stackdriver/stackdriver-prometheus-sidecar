@@ -67,7 +67,7 @@ func TestCache_Get(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Create cache with static metadata.
-	c := NewCache(nil, u, []scrape.MetricMetadata{
+	c := NewCache(nil, u, "recorded_", []scrape.MetricMetadata{
 		{Metric: "static_metric1", Type: textparse.MetricTypeCounter, Help: "help_static1"},
 		{Metric: "static_metric2", Type: textparse.MetricTypeCounter, Help: "help_static2"},
 		{Metric: "metric_with_override", Type: textparse.MetricTypeCounter, Help: "help_metric_override"},
@@ -237,16 +237,25 @@ func TestCache_Get(t *testing.T) {
 	handler = func(qMetric, qMatch string) *apiResponse {
 		return nil
 	}
-	md, err = c.Get(ctx, "prometheus", "localhost:9090", "some:recording:rule")
+	md, err = c.Get(ctx, "prometheus", "localhost:9090", "recorded_some_rule")
 	if err != nil {
 		t.Fatal(err)
 	}
 	want = &scrape.MetricMetadata{
-		Metric: "some:recording:rule",
+		Metric: "recorded_some_rule",
 		Type:   textparse.MetricTypeGauge,
 	}
 	if !reflect.DeepEqual(md, want) {
 		t.Fatalf("expected metadata %v but got %v", want, md)
+	}
+
+	// Test prometheus-style recording rule
+	handler = func(qMetric, qMatch string) *apiResponse {
+		return nil
+	}
+	md, err = c.Get(ctx, "prometheus", "localhost:9090", "some:recording:rule")
+	if err == nil {
+		t.Fatal(err)
 	}
 }
 
@@ -255,7 +264,7 @@ func TestNewCache(t *testing.T) {
 		{Metric: "a", Help: "a"},
 		{Metric: "b", Help: "b"},
 	}
-	c := NewCache(nil, nil, static)
+	c := NewCache(nil, nil, "recorded_", static)
 
 	want := map[string]scrape.MetricMetadata{
 		"a": {Metric: "a", Help: "a"},

@@ -37,9 +37,10 @@ type Cache struct {
 	promURL *url.URL
 	client  *http.Client
 
-	metadata       map[string]*metadataEntry
-	seenJobs       map[string]struct{}
-	staticMetadata map[string]scrape.MetricMetadata
+	metadata             map[string]*metadataEntry
+	seenJobs             map[string]struct{}
+	staticMetadata       map[string]scrape.MetricMetadata
+	recordedMetricPrefix string
 }
 
 // DefaultEndpointPath is the default HTTP path on which Prometheus serves
@@ -53,16 +54,17 @@ const MetricTypeUntyped = "untyped"
 // NewCache returns a new cache that gets populated by the metadata endpoint
 // at the given URL.
 // It uses the default endpoint path if no specific path is provided.
-func NewCache(client *http.Client, promURL *url.URL, staticMetadata []scrape.MetricMetadata) *Cache {
+func NewCache(client *http.Client, promURL *url.URL, recordedMetricPrefix string, staticMetadata []scrape.MetricMetadata) *Cache {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	c := &Cache{
-		promURL:        promURL,
-		client:         client,
-		staticMetadata: map[string]scrape.MetricMetadata{},
-		metadata:       map[string]*metadataEntry{},
-		seenJobs:       map[string]struct{}{},
+		promURL:              promURL,
+		client:               client,
+		recordedMetricPrefix: recordedMetricPrefix,
+		staticMetadata:       map[string]scrape.MetricMetadata{},
+		metadata:             map[string]*metadataEntry{},
+		seenJobs:             map[string]struct{}{},
 	}
 	for _, m := range staticMetadata {
 		c.staticMetadata[m.Metric] = m
@@ -121,10 +123,18 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.
 	if md != nil && md.found {
 		return &md.MetricMetadata, nil
 	}
-	// The metric might also be produced by a recording rule, which by convention
-	// contain at least one `:` character. In that case we can generally assume that
-	// it is a gauge. We leave the help text empty.
+
+	// The suggested format for recorded metric names is `level:metric:operation`,
+	// but stackdriver metric names cannot have colon characters in them, so
+	// return an error.
 	if strings.Contains(metric, ":") {
+		return nil, errors.New(fmt.Sprintf("metric name '%s' cannot be forwarded due to illegal characters", metric))
+	}
+
+	// Treat metric names prefixed with the flagged prefix as recorded metrics. In that
+	// case we can generally assume that it is a gauge. We leave the help text
+	// empty.
+	if strings.HasPrefix(metric, c.recordedMetricPrefix) {
 		return &scrape.MetricMetadata{
 			Metric: metric,
 			Type:   textparse.MetricTypeGauge,

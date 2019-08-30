@@ -182,6 +182,7 @@ type mainConfig struct {
 	GenericLabels         genericConfig
 	StackdriverAddress    *url.URL
 	MetricsPrefix         string
+	RecordedMetricPrefix  string
 	UseGKEResource        bool
 	StoreInFilesDirectory string
 	WALDirectory          string
@@ -239,6 +240,9 @@ func main() {
 
 	a.Flag("stackdriver.metrics-prefix", "Customized prefix for Stackdriver metrics. If not set, external.googleapis.com/prometheus will be used").
 		StringVar(&cfg.MetricsPrefix)
+
+	a.Flag("stackdriver.recorded-metric-prefix", "Prometheus metric name prefix used to detect recorded metrics. If not set, 'recorded_' will be used.").
+		StringVar(&cfg.RecordedMetricPrefix)
 
 	a.Flag("stackdriver.use-gke-resource",
 		"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
@@ -383,7 +387,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	metadataCache := metadata.NewCache(httpClient, metadataURL, cfg.StaticMetadata)
+	metadataCache := metadata.NewCache(httpClient, metadataURL, cfg.RecordedMetricPrefix, cfg.StaticMetadata)
 
 	// We instantiate a context here since the tailer is used by two other components.
 	// The context will be used in the lifecycle of prometheusReader further down.
