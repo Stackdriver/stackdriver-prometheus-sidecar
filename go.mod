@@ -61,3 +61,6 @@ require (
 	k8s.io/kube-openapi v0.0.0-20190722073852-5e22f3d471e6 // indirect
 	k8s.io/utils v0.0.0-20190801114015-581e00157fb1 // indirect
 )
+replace (
+       git.apache.org/thrift.git => github.com/apache/thrift v0.0.0-20180902110319-2566ecd5d999
+)
