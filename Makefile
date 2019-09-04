@@ -102,7 +102,7 @@ build: promu
 
 build-linux-amd64: promu
 	@echo ">> building linux amd64 binaries"
-	GO111MODULE=$(GO111MODULE) @GOOS=linux GOARCH=amd64 $(PROMU) build --prefix $(PREFIX)
+	@GO111MODULE=$(GO111MODULE) GOOS=linux GOARCH=amd64 $(PROMU) build --prefix $(PREFIX)
 
 tarball: promu
 	@echo ">> building release tarball"
