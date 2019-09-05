@@ -67,23 +67,23 @@ endif
 
 test-short:
 	@echo ">> running short tests"
-	GO111MODULE=$(GO111MODULE) $(GO) test -short $(GOOPTS) $(pkgs)
+	$(GO) test -short $(GOOPTS) $(pkgs)
 
 test:
 	@echo ">> running all tests"
-	GO111MODULE=$(GO111MODULE) $(GO) test $(GOOPTS) $(pkgs)
+	$(GO) test $(GOOPTS) $(pkgs)
 
 cover:
 	@echo ">> running all tests with coverage"
-	GO111MODULE=$(GO111MODULE) $(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
+	$(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
 
 format:
 	@echo ">> formatting code"
-	GO111MODULE=$(GO111MODULE) $(GO) fmt $(pkgs)
+	$(GO) fmt $(pkgs)
 
 vet:
 	@echo ">> vetting code"
-	GO111MODULE=$(GO111MODULE) $(GO) vet $(GOOPTS) $(pkgs)
+	$(GO) vet $(GOOPTS) $(pkgs)
 
 staticcheck: $(STATICCHECK)
 	@echo ">> running staticcheck"
@@ -98,11 +98,11 @@ endif
 
 build: promu
 	@echo ">> building binaries"
-	GO111MODULE=$(GO111MODULE) $(PROMU) build --prefix $(PREFIX)
+	$(PROMU) build --prefix $(PREFIX)
 
 build-linux-amd64: promu
 	@echo ">> building linux amd64 binaries"
-	@GO111MODULE=$(GO111MODULE) GOOS=linux GOARCH=amd64 $(PROMU) build --prefix $(PREFIX)
+	@GOOS=linux GOARCH=amd64 $(PROMU) build --prefix $(PREFIX)
 
 tarball: promu
 	@echo ">> building release tarball"
