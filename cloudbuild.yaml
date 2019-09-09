@@ -22,5 +22,5 @@ images: [
   'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${SHORT_SHA}'
 ]
 options:
- diskSizeGb: 200
- machineType: 'N1_HIGHCPU_8'
+  diskSizeGb: 200
+  machineType: 'N1_HIGHCPU_8'
