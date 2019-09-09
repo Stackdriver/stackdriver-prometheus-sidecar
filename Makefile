@@ -57,10 +57,6 @@ style:
 	@echo ">> checking code style"
 	@! $(GOFMT) -d $(shell find . -path ./vendor -prune -o -name '*.go' -print) | grep '^'
 
-check_license:
-	@echo ">> checking license header"
-	@./scripts/check_license.sh
-
 deps:
 	@echo ">> getting dependencies"
 ifdef GO111MODULE
@@ -71,23 +67,23 @@ endif
 
 test-short:
 	@echo ">> running short tests"
-	$(GO) test -short $(GOOPTS) $(pkgs)
+	GO111MODULE=$(GO111MODULE) $(GO) test -short $(GOOPTS) $(pkgs)
 
 test:
 	@echo ">> running all tests"
-	$(GO) test $(GOOPTS) $(pkgs)
+	GO111MODULE=$(GO111MODULE) $(GO) test $(GOOPTS) $(pkgs)
 
 cover:
 	@echo ">> running all tests with coverage"
-	$(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
+	GO111MODULE=$(GO111MODULE) $(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
 
 format:
 	@echo ">> formatting code"
-	$(GO) fmt $(pkgs)
+	GO111MODULE=$(GO111MODULE) $(GO) fmt $(pkgs)
 
 vet:
 	@echo ">> vetting code"
-	$(GO) vet $(GOOPTS) $(pkgs)
+	GO111MODULE=$(GO111MODULE) $(GO) vet $(GOOPTS) $(pkgs)
 
 staticcheck: $(STATICCHECK)
 	@echo ">> running staticcheck"
@@ -102,11 +98,11 @@ endif
 
 build: promu
 	@echo ">> building binaries"
-	$(PROMU) build --prefix $(PREFIX)
+	GO111MODULE=$(GO111MODULE) $(PROMU) build --prefix $(PREFIX)
 
 build-linux-amd64: promu
 	@echo ">> building linux amd64 binaries"
-	@GOOS=linux GOARCH=amd64 $(PROMU) build --prefix $(PREFIX)
+	@GO111MODULE=$(GO111MODULE) GOOS=linux GOARCH=amd64 $(PROMU) build --prefix $(PREFIX)
 
 tarball: promu
 	@echo ">> building release tarball"
@@ -140,4 +136,4 @@ $(FIRST_GOPATH)/bin/staticcheck:
 $(FIRST_GOPATH)/bin/goveralls:
 	GOOS= GOARCH= $(GO) get -u github.com/mattn/goveralls
 
-.PHONY: all style check_license deps format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck goveralls $(FIRST_GOPATH)/bin/goveralls
+.PHONY: all style deps format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck goveralls $(FIRST_GOPATH)/bin/goveralls
