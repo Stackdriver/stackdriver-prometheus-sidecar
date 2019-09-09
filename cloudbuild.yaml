@@ -1,3 +1,6 @@
+# This config is provided for development/testing purposes only.
+# The official Docker image of stackdriver-prometheus-sidecar is not built
+# using this config.
 steps:
 - name: 'mirror.gcr.io/library/golang'
   entrypoint: make
