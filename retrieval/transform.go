@@ -116,7 +116,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		point.Value = &monitoring_pb.TypedValue{
 			Value: &monitoring_pb.TypedValue_DistributionValue{v},
 		}
-		return &ts, 0, samples, nil
+		return &ts, entry.hash, samples, nil
 
 	default:
 		return nil, 0, samples[1:], errors.Errorf("unexpected metric type %s", entry.metadata.Type)
