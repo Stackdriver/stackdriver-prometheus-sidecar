@@ -116,6 +116,9 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		point.Value = &monitoring_pb.TypedValue{
 			Value: &monitoring_pb.TypedValue_DistributionValue{v},
 		}
+		if !b.series.updateSampleInterval(entry.hash, resetTimestamp, sample.T) {
+			return nil, 0, samples, nil
+		}
 		return &ts, entry.hash, samples, nil
 
 	default:
