@@ -38,13 +38,14 @@ type sampleBuilder struct {
 // the remainder of the input.
 func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, uint64, []tsdb.RefSample, error) {
 	sample := samples[0]
+	tailSamples := samples[1:]
 
 	entry, ok, err := b.series.get(ctx, sample.Ref)
 	if err != nil {
 		return nil, 0, samples, errors.Wrap(err, "get series information")
 	}
 	if !ok {
-		return nil, 0, samples[1:], nil
+		return nil, 0, tailSamples, nil
 	}
 
 	if entry.tracker != nil {
@@ -52,7 +53,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	}
 
 	if !entry.exported {
-		return nil, 0, samples[1:], nil
+		return nil, 0, tailSamples, nil
 	}
 	// Get a shallow copy of the proto so we can overwrite the point field
 	// and safely send it into the remote queues.
@@ -72,7 +73,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		var v float64
 		resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 		if !ok {
-			return nil, 0, samples[1:], nil
+			return nil, 0, tailSamples, nil
 		}
 		point.Interval.StartTime = getTimestamp(resetTimestamp)
 		point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{v}}
@@ -86,7 +87,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 			var v float64
 			resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 			if !ok {
-				return nil, 0, samples[1:], nil
+				return nil, 0, tailSamples, nil
 			}
 			point.Interval.StartTime = getTimestamp(resetTimestamp)
 			point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{v}}
@@ -94,41 +95,37 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 			var v float64
 			resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 			if !ok {
-				return nil, 0, samples[1:], nil
+				return nil, 0, tailSamples, nil
 			}
 			point.Interval.StartTime = getTimestamp(resetTimestamp)
 			point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_Int64Value{int64(v)}}
 		case "": // Actual quantiles.
 			point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{sample.V}}
 		default:
-			return nil, 0, samples[1:], errors.Errorf("unexpected metric name suffix %q", entry.suffix)
+			return nil, 0, tailSamples, errors.Errorf("unexpected metric name suffix %q", entry.suffix)
 		}
 
 	case textparse.MetricTypeHistogram:
 		// We pass in the original lset for matching since Prometheus's target label must
 		// be the same as well.
 		var v *distribution_pb.Distribution
-		v, resetTimestamp, samples, err = b.buildDistribution(ctx, entry.metadata.Metric, entry.lset, samples)
+		v, resetTimestamp, tailSamples, err = b.buildDistribution(ctx, entry.metadata.Metric, entry.lset, samples)
 		if v == nil || err != nil {
-			return nil, 0, samples, err
+			return nil, 0, tailSamples, err
 		}
 		point.Interval.StartTime = getTimestamp(resetTimestamp)
 		point.Value = &monitoring_pb.TypedValue{
 			Value: &monitoring_pb.TypedValue_DistributionValue{v},
 		}
-		if !b.series.updateSampleInterval(entry.hash, resetTimestamp, sample.T) {
-			return nil, 0, samples, nil
-		}
-		return &ts, entry.hash, samples, nil
 
 	default:
 		return nil, 0, samples[1:], errors.Errorf("unexpected metric type %s", entry.metadata.Type)
 	}
 
 	if !b.series.updateSampleInterval(entry.hash, resetTimestamp, sample.T) {
-		return nil, 0, samples[1:], nil
+		return nil, 0, tailSamples, nil
 	}
-	return &ts, entry.hash, samples[1:], nil
+	return &ts, entry.hash, tailSamples, nil
 }
 
 const (
