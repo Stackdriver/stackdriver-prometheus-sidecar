@@ -768,8 +768,10 @@ func TestSampleBuilder(t *testing.T) {
 		t.Logf("Test case %d", i)
 
 		var s *monitoring_pb.TimeSeries
+		var h uint64
 		var err error
 		var result []*monitoring_pb.TimeSeries
+		var hashes []uint64
 
 		aggr, _ := NewCounterAggregator(log.NewNopLogger(), new(CounterAggregatorConfig))
 		series := newSeriesCache(nil, "", nil, nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false, aggr)
@@ -780,11 +782,12 @@ func TestSampleBuilder(t *testing.T) {
 		b := &sampleBuilder{series: series}
 
 		for k := 0; len(c.input) > 0; k++ {
-			s, _, c.input, err = b.next(context.Background(), c.input)
+			s, h, c.input, err = b.next(context.Background(), c.input)
 			if err != nil {
 				break
 			}
 			result = append(result, s)
+			hashes = append(hashes, h)
 		}
 		if err == nil && c.fail {
 			t.Fatal("expected error but got none")
@@ -801,7 +804,13 @@ func TestSampleBuilder(t *testing.T) {
 				t.Logf("expres %v", c.result)
 				t.Fatalf("unexpected sample %d: got\n\t%v\nwant\n\t%v", k, res, c.result[k])
 			}
+			expectedHash := uint64(0)
+			if c.result[k] != nil {
+				expectedHash = hashSeries(c.result[k])
+			}
+			if hashes[k] != expectedHash {
+				t.Fatalf("unexpected hash %v; want %v", hashes[k], expectedHash)
+			}
 		}
-
 	}
 }
