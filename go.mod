@@ -61,8 +61,3 @@ require (
 	k8s.io/kube-openapi v0.0.0-20190722073852-5e22f3d471e6 // indirect
 	k8s.io/utils v0.0.0-20190801114015-581e00157fb1 // indirect
 )
-
-// TODO(qingling128): Change git.apache.org to github.com/apache/thrift in
-// go.sum instead once all our dependencies move off git.apache.org (e.g. grep
-// no longer shows git.apache.org in the vendor folder).
-replace git.apache.org/thrift.git => github.com/apache/thrift v0.12.0
