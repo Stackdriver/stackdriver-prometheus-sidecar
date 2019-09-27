@@ -130,7 +130,7 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	}
 	conn, err := grpc.DialContext(ctx, address, dopts...)
 	c.conn = conn
-	if err != nil {
+	if err == context.DeadlineExceeded {
 		return conn, recoverableError{err}
 	}
 	return conn, err
