@@ -43,6 +43,32 @@ func newLocalListener() net.Listener {
 	return l
 }
 
+func TestStoreErrorHandlingOnTimeout(t *testing.T) {
+	listener := newLocalListener()
+	grpcServer := grpc.NewServer()
+	monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
+	go grpcServer.Serve(listener)
+	defer grpcServer.Stop()
+
+	serverURL, err := url.Parse("https://" + listener.Addr().String() + "?auth=false")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := NewClient(&ClientConfig{
+		URL:     serverURL,
+		Timeout: 0, // Immeditate Timeout.
+	})
+	err = c.Store(&monitoring.CreateTimeSeriesRequest{
+		TimeSeries: []*monitoring.TimeSeries{
+			&monitoring.TimeSeries{},
+		},
+	})
+	if _, recoverable := err.(recoverableError); !recoverable {
+		t.Errorf("expected recoverableError in error %v", err)
+	}
+}
+
 func TestStoreErrorHandling(t *testing.T) {
 	tests := []struct {
 		status      *status.Status
@@ -57,6 +83,10 @@ func TestStoreErrorHandling(t *testing.T) {
 		},
 		{
 			status:      status.New(codes.Unavailable, longErrMessage),
+			recoverable: true,
+		},
+		{
+			status:      status.New(codes.DeadlineExceeded, longErrMessage),
 			recoverable: true,
 		},
 	}

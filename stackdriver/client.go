@@ -130,6 +130,9 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	}
 	conn, err := grpc.DialContext(ctx, address, dopts...)
 	c.conn = conn
+	if err == context.DeadlineExceeded {
+		return conn, recoverableError{err}
+	}
 	return conn, err
 }
 
@@ -176,9 +179,10 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 					errors <- err
 					return
 				}
-				if status.Code() == codes.Unavailable {
+				switch status.Code() {
+				case codes.DeadlineExceeded, codes.Unavailable:
 					errors <- recoverableError{err}
-				} else {
+				default:
 					errors <- err
 				}
 			}
