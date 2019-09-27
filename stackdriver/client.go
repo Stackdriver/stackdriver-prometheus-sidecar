@@ -179,9 +179,10 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 					errors <- err
 					return
 				}
-				if status.Code() == codes.Unavailable {
+				switch status.Code() {
+				case codes.DeadlineExceeded, codes.Unavailable:
 					errors <- recoverableError{err}
-				} else {
+				default:
 					errors <- err
 				}
 			}

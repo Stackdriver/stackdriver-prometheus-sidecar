@@ -85,6 +85,10 @@ func TestStoreErrorHandling(t *testing.T) {
 			status:      status.New(codes.Unavailable, longErrMessage),
 			recoverable: true,
 		},
+		{
+			status:      status.New(codes.DeadlineExceeded, longErrMessage),
+			recoverable: true,
+		},
 	}
 
 	for i, test := range tests {
