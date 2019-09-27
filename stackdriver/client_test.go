@@ -43,7 +43,7 @@ func newLocalListener() net.Listener {
 	return l
 }
 
-func TestStoreContextExceed(t *testing.T) {
+func TestStoreErrorHandlingOnTimeout(t *testing.T) {
 	listener := newLocalListener()
 	grpcServer := grpc.NewServer()
 	monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
@@ -59,7 +59,6 @@ func TestStoreContextExceed(t *testing.T) {
 		URL:     serverURL,
 		Timeout: 0, // Immeditate Timeout.
 	})
-
 	err = c.Store(&monitoring.CreateTimeSeriesRequest{
 		TimeSeries: []*monitoring.TimeSeries{
 			&monitoring.TimeSeries{},
