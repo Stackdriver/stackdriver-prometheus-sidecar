@@ -62,7 +62,7 @@ func Tail(ctx context.Context, dir string) (*Tailer, error) {
 		}
 		// Open the entire checkpoint first. It has to be consumed before
 		// the tailer proceeds to any segments.
-		t.cur, err = wal.NewSegmentsReader(filepath.Join(dir, cpdir))
+		t.cur, err = wal.NewSegmentsReader(cpdir)
 		if err != nil {
 			return nil, errors.Wrap(err, "open checkpoint")
 		}
