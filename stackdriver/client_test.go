@@ -43,6 +43,32 @@ func newLocalListener() net.Listener {
 	return l
 }
 
+func TestStoreErrorHandlingOnCredentialRetrieval(t *testing.T) {
+        listener := newLocalListener()
+        grpcServer := grpc.NewServer()
+        monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
+        go grpcServer.Serve(listener)
+        defer grpcServer.Stop()
+
+        serverURL, err := url.Parse("https://" + listener.Addr().String())
+        if err != nil {
+                t.Fatal(err)
+        }
+
+        c := NewClient(&ClientConfig{
+                URL:     serverURL,
+                Timeout: time.Second,
+        })
+        err = c.Store(&monitoring.CreateTimeSeriesRequest{
+                TimeSeries: []*monitoring.TimeSeries{
+                        &monitoring.TimeSeries{},
+                },
+        })
+        if _, recoverable := err.(recoverableError); !recoverable {
+                t.Errorf("expected recoverableError in error %v", err)
+        }
+}
+
 func TestStoreErrorHandlingOnTimeout(t *testing.T) {
 	listener := newLocalListener()
 	grpcServer := grpc.NewServer()
