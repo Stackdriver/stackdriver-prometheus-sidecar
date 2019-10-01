@@ -82,11 +82,23 @@ func TestStoreErrorHandling(t *testing.T) {
 			recoverable: false,
 		},
 		{
-			status:      status.New(codes.Unavailable, longErrMessage),
+			status:      status.New(codes.Canceled, longErrMessage),
 			recoverable: true,
 		},
 		{
 			status:      status.New(codes.DeadlineExceeded, longErrMessage),
+			recoverable: true,
+		},
+		{
+			status:      status.New(codes.PermissionDenied, longErrMessage),
+			recoverable: true,
+		},
+		{
+			status:      status.New(codes.Unauthenticated, longErrMessage),
+			recoverable: true,
+		},
+		{
+			status:      status.New(codes.Unavailable, longErrMessage),
 			recoverable: true,
 		},
 	}

@@ -180,7 +180,9 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 					return
 				}
 				switch status.Code() {
-				case codes.DeadlineExceeded, codes.Unavailable:
+				case codes.Canceled, codes.DeadlineExceeded,
+				     codes.PermissionDenied,
+				     codes.Unauthenticated, codes.Unavailable:
 					errors <- recoverableError{err}
 				default:
 					errors <- err
