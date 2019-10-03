@@ -66,3 +66,5 @@ require (
 // go.sum instead once all our dependencies move off git.apache.org (e.g. grep
 // no longer shows git.apache.org in the vendor folder).
 replace git.apache.org/thrift.git => github.com/apache/thrift v0.12.0
+
+replace git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999 => github.com/apache/thrift v0.0.0-20180902110319-2566ecd5d999
