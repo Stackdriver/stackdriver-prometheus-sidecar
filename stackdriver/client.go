@@ -180,6 +180,16 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 					return
 				}
 				switch status.Code() {
+				// codes.DeadlineExceeded:
+				//   It is safe to retry
+				//   google.monitoring.v3.MetricService.CreateTimeSeries
+				//   requests with backoff because QueueManager
+				//   enforces in-order writes on a time series, which
+				//   is a requirement for Stackdriver monitoring.
+				//
+				// codes.Unavailable:
+				//   The condition is most likely transient. The request can
+				//   be retried with backoff.
 				case codes.DeadlineExceeded, codes.Unavailable:
 					errors <- recoverableError{err}
 				default:
