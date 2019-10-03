@@ -181,16 +181,11 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 				}
 				switch status.Code() {
 				// codes.DeadlineExceeded:
-				//   It is safe to recover and retry
-				//   for all cases of
-				//   google.monitoring.v3.MetricService.CreateTimeSeries.
-				//
-				//   On the client side, if the client is unable to
-				//   send the request to server, it's safe to retry
-				//   until the client can send the request to server.
-				//
-				//   On the server side, no sample is unrecoverable
-				//   permanently within the server side timeout.
+				//   It is safe to retry
+				//   google.monitoring.v3.MetricService.CreateTimeSeries
+				//   requests with backoff because QueueManager
+				//   enforces in-order write on a time series, which
+				//   is a requirement for Stackdriver Monitoring writes.
 				//
 				// codes.Unavailable:
 				//   The condition is most likely transient. It can
