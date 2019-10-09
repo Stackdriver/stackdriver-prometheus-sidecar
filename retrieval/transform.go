@@ -40,6 +40,10 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	sample := samples[0]
 	tailSamples := samples[1:]
 
+	if (math.IsNaN(sample.V)) {
+		return nil, 0, tailSamples, nil
+	}
+
 	entry, ok, err := b.series.get(ctx, sample.Ref)
 	if err != nil {
 		return nil, 0, samples, errors.Wrap(err, "get series information")
