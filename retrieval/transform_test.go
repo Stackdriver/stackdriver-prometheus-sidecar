@@ -787,6 +787,7 @@ func TestSampleBuilder(t *testing.T) {
 				nil, // due to NaN
 			},
 		},
+		// Samples with a NaN value should be dropped.
 		{
 			targets: targetMap{
 				"job1/instance1": &targets.Target{
