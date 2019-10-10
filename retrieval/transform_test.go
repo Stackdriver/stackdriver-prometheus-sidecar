@@ -777,35 +777,14 @@ func TestSampleBuilder(t *testing.T) {
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{
-				// Need multiple samples, since the first will always be nil due to reset timestamp handling
+				// A first non-NaN sample is necessary to avoid false-positives, since the
+				// first result will always be nil due to reset timestamp handling.
 				{Ref: 1, T: 2000, V: 5},
-				{Ref: 1, T: 3000, V: 8},
 				{Ref: 1, T: 4000, V: math.NaN()},
 			},
 			result: []*monitoring_pb.TimeSeries{
-				nil,
-				{
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "test.googleapis.com/metric1_count",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_INT64,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
-						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_Int64Value{3},
-						},
-					}},
-				},
-				nil,
+				nil, // due to reset timestamp handling
+				nil, // due to NaN
 			},
 		},
 		{
@@ -823,36 +802,15 @@ func TestSampleBuilder(t *testing.T) {
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{
-				// Need multiple samples, since the first will always be nil due to reset timestamp handling
+				// A first non-NaN sample is necessary to avoid false-positives, since the
+				// first result will always be nil due to reset timestamp handling.
 				{Ref: 1, T: 2000, V: 5},
-				{Ref: 1, T: 3000, V: 8},
 				{Ref: 1, T: 4000, V: math.NaN()},
 				{Ref: 1, T: 5000, V: 9},
 			},
 			result: []*monitoring_pb.TimeSeries{
-				nil,
-				{
-					Resource: &monitoredres_pb.MonitoredResource{
-						Type:   "resource2",
-						Labels: map[string]string{"resource_a": "resource2_a"},
-					},
-					Metric: &metric_pb.Metric{
-						Type:   "test.googleapis.com/metric1_count",
-						Labels: map[string]string{},
-					},
-					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
-					ValueType:  metric_pb.MetricDescriptor_INT64,
-					Points: []*monitoring_pb.Point{{
-						Interval: &monitoring_pb.TimeInterval{
-							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
-							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
-						},
-						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_Int64Value{3},
-						},
-					}},
-				},
-				nil,
+				nil, // due to reset timestamp handling
+				nil, // due to NaN
 				{
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
