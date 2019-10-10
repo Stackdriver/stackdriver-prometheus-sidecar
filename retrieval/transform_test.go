@@ -808,6 +808,74 @@ func TestSampleBuilder(t *testing.T) {
 				nil,
 			},
 		},
+		{
+			targets: targetMap{
+				"job1/instance1": &targets.Target{
+					Labels:           promlabels.FromStrings("job", "job1", "instance", "instance1"),
+					DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
+				},
+			},
+			series: seriesMap{
+				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_count"),
+			},
+			metadata: metadataMap{
+				"job1/instance1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeSummary, Metric: "metric1_count"},
+			},
+			metricPrefix: "test.googleapis.com",
+			input: []tsdb.RefSample{
+				// Need multiple samples, since the first will always be nil due to reset timestamp handling
+				{Ref: 1, T: 2000, V: 5},
+				{Ref: 1, T: 3000, V: 8},
+				{Ref: 1, T: 4000, V: math.NaN()},
+				{Ref: 1, T: 5000, V: 9},
+			},
+			result: []*monitoring_pb.TimeSeries{
+				nil,
+				{
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "test.googleapis.com/metric1_count",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_INT64,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 3},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_Int64Value{3},
+						},
+					}},
+				},
+				nil,
+				{
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "test.googleapis.com/metric1_count",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_INT64,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Seconds: 2},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 5},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_Int64Value{4},
+						},
+					}},
+				},
+			},
+		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
