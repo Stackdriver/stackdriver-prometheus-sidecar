@@ -16,12 +16,12 @@ package retrieval
 import (
 	"context"
 	"math"
-	"reflect"
 	"testing"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/google/go-cmp/cmp"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/scrape"
@@ -874,10 +874,8 @@ func TestSampleBuilder(t *testing.T) {
 			t.Fatalf("mismatching count %d of received samples, want %d", len(result), len(c.result))
 		}
 		for k, res := range result {
-			if !reflect.DeepEqual(res, c.result[k]) {
-				t.Logf("gotres %v", result)
-				t.Logf("expres %v", c.result)
-				t.Fatalf("unexpected sample %d: got\n\t%v\nwant\n\t%v", k, res, c.result[k])
+			if diff := cmp.Diff(c.result[k], res); len(diff) > 0 {
+				t.Fatalf("unexpected sample %d:\n%v", k, diff)
 			}
 			expectedHash := uint64(0)
 			if c.result[k] != nil {

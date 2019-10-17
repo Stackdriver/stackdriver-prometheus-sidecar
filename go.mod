@@ -22,6 +22,7 @@ require (
 	github.com/gogo/protobuf v1.2.2-0.20190730201129-28a6bbf47e48 // indirect
 	github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 // indirect
 	github.com/golang/protobuf v1.3.2
+	github.com/google/go-cmp v0.3.0
 	github.com/googleapis/gnostic v0.3.0 // indirect
 	github.com/gophercloud/gophercloud v0.3.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
