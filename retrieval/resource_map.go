@@ -42,6 +42,8 @@ func constValue(labelName string) labelTranslation {
 type ResourceMap struct {
 	// The name of the Stackdriver MonitoredResource.
 	Type string
+	// The name of the Prometheus label that must match `Type`. Ignored if `nil`.
+	TypeLabel string
 	// Mapping from Prometheus to Stackdriver labels
 	LabelMap map[string]labelTranslation
 }
@@ -89,7 +91,8 @@ var GKEResourceMap = ResourceMap{
 }
 
 var DevappResourceMap = ResourceMap{
-	Type: "devapp",
+	Type:      "devapp",
+	TypeLabel: "__meta_kubernetes_pod_label_resource_type",
 	LabelMap: map[string]labelTranslation{
 		"__meta_kubernetes_pod_label_resource_container": constValue("resource_container"),
 		"__meta_kubernetes_pod_label_location":           constValue("location"),
@@ -100,7 +103,8 @@ var DevappResourceMap = ResourceMap{
 }
 
 var ProxyResourceMap = ResourceMap{
-	Type: "proxy",
+	Type:      "proxy",
+	TypeLabel: "__meta_kubernetes_pod_label_resource_type",
 	LabelMap: map[string]labelTranslation{
 		"__meta_kubernetes_pod_label_resource_container": constValue("resource_container"),
 		"__meta_kubernetes_pod_label_location":           constValue("location"),
@@ -178,8 +182,12 @@ func (m *ResourceMap) BestEffortTranslate(discovered, final labels.Labels) map[s
 }
 
 func (m *ResourceMap) tryTranslate(discovered, final labels.Labels) map[string]string {
+	resourceType := ""
 	stackdriverLabels := make(map[string]string, len(m.LabelMap))
 	for _, l := range discovered {
+		if l.Name == m.TypeLabel {
+			resourceType = l.Value
+		}
 		if translator, ok := m.LabelMap[l.Name]; ok {
 			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
 		}
@@ -188,9 +196,15 @@ func (m *ResourceMap) tryTranslate(discovered, final labels.Labels) map[string]s
 	// This ensures, that the Prometheus's relabeling rules are respected for labels that
 	// appear in both label sets, e.g. the "job" label for generic resources.
 	for _, l := range final {
+		if l.Name == m.TypeLabel {
+			resourceType = l.Value
+		}
 		if translator, ok := m.LabelMap[l.Name]; ok {
 			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
 		}
+	}
+	if len(m.TypeLabel) > 0 && resourceType != m.Type {
+		return nil
 	}
 	return stackdriverLabels
 }

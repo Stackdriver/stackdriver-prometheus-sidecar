@@ -33,6 +33,7 @@ func TestTranslate(t *testing.T) {
 	noMatchTarget := labels.Labels{
 		{"ignored", "x"},
 		{"__target2", "y"},
+		{"__type", "my_type"},
 	}
 	if labels := r.Translate(noMatchTarget, nil); labels != nil {
 		t.Errorf("Expected no match, matched %v", labels)
@@ -41,10 +42,12 @@ func TestTranslate(t *testing.T) {
 		{"ignored", "x"},
 		{"__target2", "y"},
 		{"__target1", "z"},
+		{"__type", "my_type"},
 	}
 	matchTargetFinal := labels.Labels{
 		{"__target1", "z2"},
 		{"__target3", "v"},
+		{"__type", "my_type"},
 	}
 	expectedLabels := map[string]string{
 		"sdt1": "z2",
@@ -55,6 +58,25 @@ func TestTranslate(t *testing.T) {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	}
+	// Test type matching.
+	r.TypeLabel = "__type"
+	missingType := labels.Labels{
+		{"__target1", "x"},
+		{"__target2", "y"},
+		{"__target3", "z"},
+	}
+	if labels := r.Translate(missingType, nil); labels != nil {
+		t.Errorf("Expected no match, matched %v", labels)
+	}
+	wrongType := labels.Labels{
+		{"__target1", "x"},
+		{"__target2", "y"},
+		{"__target3", "z"},
+		{"__type", "wrong_type"},
+	}
+	if labels := r.Translate(wrongType, nil); labels != nil {
+		t.Errorf("Expected no match, matched %v", labels)
 	}
 }
 
@@ -120,6 +142,7 @@ func TestBestEffortTranslate(t *testing.T) {
 
 func TestTranslateDevapp(t *testing.T) {
 	discoveredLabels := labels.Labels{
+		{"__meta_kubernetes_pod_label_resource_type", "devapp"},
 		{"__meta_kubernetes_pod_label_resource_container", "my-container"},
 		{"__meta_kubernetes_pod_label_location", "my-location"},
 		{"__meta_kubernetes_pod_label_org", "my-org"},
@@ -145,6 +168,7 @@ func TestTranslateDevapp(t *testing.T) {
 
 func TestTranslateProxy(t *testing.T) {
 	discoveredLabels := labels.Labels{
+		{"__meta_kubernetes_pod_label_resource_type", "proxy"},
 		{"__meta_kubernetes_pod_label_resource_container", "my-container"},
 		{"__meta_kubernetes_pod_label_location", "my-location"},
 		{"__meta_kubernetes_pod_label_org", "my-org"},
