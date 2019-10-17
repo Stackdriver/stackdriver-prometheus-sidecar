@@ -88,6 +88,29 @@ var GKEResourceMap = ResourceMap{
 	},
 }
 
+var DevappResourceMap = ResourceMap{
+	Type: "devapp",
+	LabelMap: map[string]labelTranslation{
+		"__meta_kubernetes_pod_label_resource_container": constValue("resource_container"),
+		"__meta_kubernetes_pod_label_location":           constValue("location"),
+		"__meta_kubernetes_pod_label_org":                constValue("org"),
+		"__meta_kubernetes_pod_label_env":                constValue("env"),
+		"api_product_name":                               constValue("api_product_name"),
+	},
+}
+
+var ProxyResourceMap = ResourceMap{
+	Type: "proxy",
+	LabelMap: map[string]labelTranslation{
+		"__meta_kubernetes_pod_label_resource_container": constValue("resource_container"),
+		"__meta_kubernetes_pod_label_location":           constValue("location"),
+		"__meta_kubernetes_pod_label_org":                constValue("org"),
+		"__meta_kubernetes_pod_label_env":                constValue("env"),
+		"proxy_name":                                     constValue("proxy_name"),
+		"revision":                                       constValue("revision"),
+	},
+}
+
 // TODO(jkohen): ensure these are sorted from more specific to less specific.
 var ResourceMappings = []ResourceMap{
 	{

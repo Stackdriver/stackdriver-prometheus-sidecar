@@ -118,6 +118,58 @@ func TestBestEffortTranslate(t *testing.T) {
 	}
 }
 
+func TestTranslateDevapp(t *testing.T) {
+	discoveredLabels := labels.Labels{
+		{"__meta_kubernetes_pod_label_resource_container", "my-container"},
+		{"__meta_kubernetes_pod_label_location", "my-location"},
+		{"__meta_kubernetes_pod_label_org", "my-org"},
+		{"__meta_kubernetes_pod_label_env", "my-env"},
+	}
+	metricLabels := labels.Labels{
+		{"api_product_name", "my-name"},
+		{"extra_label", "my-label"},
+	}
+	expectedLabels := map[string]string{
+		"resource_container": "my-container",
+		"location":           "my-location",
+		"org":                "my-org",
+		"env":                "my-env",
+		"api_product_name":   "my-name",
+	}
+	if labels := DevappResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else if !reflect.DeepEqual(labels, expectedLabels) {
+		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	}
+}
+
+func TestTranslateProxy(t *testing.T) {
+	discoveredLabels := labels.Labels{
+		{"__meta_kubernetes_pod_label_resource_container", "my-container"},
+		{"__meta_kubernetes_pod_label_location", "my-location"},
+		{"__meta_kubernetes_pod_label_org", "my-org"},
+		{"__meta_kubernetes_pod_label_env", "my-env"},
+	}
+	metricLabels := labels.Labels{
+		{"proxy_name", "my-name"},
+		{"revision", "my-revision"},
+		{"extra_label", "my-label"},
+	}
+	expectedLabels := map[string]string{
+		"resource_container": "my-container",
+		"location":           "my-location",
+		"org":                "my-org",
+		"env":                "my-env",
+		"proxy_name":         "my-name",
+		"revision":           "my-revision",
+	}
+	if labels := ProxyResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else if !reflect.DeepEqual(labels, expectedLabels) {
+		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	}
+}
+
 func BenchmarkTranslate(b *testing.B) {
 	r := ResourceMap{
 		Type: "gke_container",
