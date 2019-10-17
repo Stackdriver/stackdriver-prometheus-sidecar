@@ -149,6 +149,8 @@ var ResourceMappings = []ResourceMap{
 	},
 	EC2ResourceMap,
 	GCEResourceMap,
+	ProxyResourceMap,
+	DevappResourceMap,
 	{
 		Type: "generic_task",
 		LabelMap: map[string]labelTranslation{
