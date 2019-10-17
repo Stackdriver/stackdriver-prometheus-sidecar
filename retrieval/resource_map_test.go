@@ -22,7 +22,8 @@ import (
 
 func TestTranslate(t *testing.T) {
 	r := ResourceMap{
-		Type: "my_type",
+		Type:      "my_type",
+		TypeLabel: "__type",
 		LabelMap: map[string]labelTranslation{
 			"__target1": constValue("sdt1"),
 			"__target2": constValue("sdt2"),
@@ -59,8 +60,6 @@ func TestTranslate(t *testing.T) {
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
 	}
-	// Test type matching.
-	r.TypeLabel = "__type"
 	missingType := labels.Labels{
 		{"__target1", "x"},
 		{"__target2", "y"},
