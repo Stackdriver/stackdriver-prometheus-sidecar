@@ -42,8 +42,8 @@ func constValue(labelName string) labelTranslation {
 type ResourceMap struct {
 	// The name of the Stackdriver MonitoredResource.
 	Type string
-	// The name of the Prometheus label that must match `Type`. Ignored if `nil`.
-	TypeLabel string
+	// MatchLabel must exist in the set of Prometheus labels in order for this map to match. Ignored if empty.
+	MatchLabel string
 	// Mapping from Prometheus to Stackdriver labels
 	LabelMap map[string]labelTranslation
 }
@@ -91,27 +91,27 @@ var GKEResourceMap = ResourceMap{
 }
 
 var DevappResourceMap = ResourceMap{
-	Type:      "devapp",
-	TypeLabel: "__meta_kubernetes_pod_label_resource_type",
+	Type:       "devapp",
+	MatchLabel: "__meta_kubernetes_pod_label_type_devapp",
 	LabelMap: map[string]labelTranslation{
-		"__meta_kubernetes_pod_label_resource_container": constValue("resource_container"),
-		"__meta_kubernetes_pod_label_location":           constValue("location"),
-		"__meta_kubernetes_pod_label_org":                constValue("org"),
-		"__meta_kubernetes_pod_label_env":                constValue("env"),
-		"api_product_name":                               constValue("api_product_name"),
+		ProjectIDLabel:                    constValue("resource_container"),
+		KubernetesLocationLabel:           constValue("location"),
+		"__meta_kubernetes_pod_label_org": constValue("org"),
+		"__meta_kubernetes_pod_label_env": constValue("env"),
+		"api_product_name":                constValue("api_product_name"),
 	},
 }
 
 var ProxyResourceMap = ResourceMap{
-	Type:      "proxy",
-	TypeLabel: "__meta_kubernetes_pod_label_resource_type",
+	Type:       "proxy",
+	MatchLabel: "__meta_kubernetes_pod_label_type_proxy",
 	LabelMap: map[string]labelTranslation{
-		"__meta_kubernetes_pod_label_resource_container": constValue("resource_container"),
-		"__meta_kubernetes_pod_label_location":           constValue("location"),
-		"__meta_kubernetes_pod_label_org":                constValue("org"),
-		"__meta_kubernetes_pod_label_env":                constValue("env"),
-		"proxy_name":                                     constValue("proxy_name"),
-		"revision":                                       constValue("revision"),
+		ProjectIDLabel:                    constValue("resource_container"),
+		KubernetesLocationLabel:           constValue("location"),
+		"__meta_kubernetes_pod_label_org": constValue("org"),
+		"__meta_kubernetes_pod_label_env": constValue("env"),
+		"proxy_name":                      constValue("proxy_name"),
+		"proxy_revision":                  constValue("proxy_revision"),
 	},
 }
 
@@ -184,11 +184,11 @@ func (m *ResourceMap) BestEffortTranslate(discovered, final labels.Labels) map[s
 }
 
 func (m *ResourceMap) tryTranslate(discovered, final labels.Labels) map[string]string {
-	resourceType := ""
+	matched := false
 	stackdriverLabels := make(map[string]string, len(m.LabelMap))
 	for _, l := range discovered {
-		if l.Name == m.TypeLabel {
-			resourceType = l.Value
+		if l.Name == m.MatchLabel {
+			matched = true
 		}
 		if translator, ok := m.LabelMap[l.Name]; ok {
 			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
@@ -198,14 +198,14 @@ func (m *ResourceMap) tryTranslate(discovered, final labels.Labels) map[string]s
 	// This ensures, that the Prometheus's relabeling rules are respected for labels that
 	// appear in both label sets, e.g. the "job" label for generic resources.
 	for _, l := range final {
-		if l.Name == m.TypeLabel {
-			resourceType = l.Value
+		if l.Name == m.MatchLabel {
+			matched = true
 		}
 		if translator, ok := m.LabelMap[l.Name]; ok {
 			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
 		}
 	}
-	if len(m.TypeLabel) > 0 && resourceType != m.Type {
+	if len(m.MatchLabel) > 0 && !matched {
 		return nil
 	}
 	return stackdriverLabels

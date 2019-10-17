@@ -22,8 +22,8 @@ import (
 
 func TestTranslate(t *testing.T) {
 	r := ResourceMap{
-		Type:      "my_type",
-		TypeLabel: "__type",
+		Type:       "my_type",
+		MatchLabel: "__match_type",
 		LabelMap: map[string]labelTranslation{
 			"__target1": constValue("sdt1"),
 			"__target2": constValue("sdt2"),
@@ -34,7 +34,7 @@ func TestTranslate(t *testing.T) {
 	noMatchTarget := labels.Labels{
 		{"ignored", "x"},
 		{"__target2", "y"},
-		{"__type", "my_type"},
+		{"__match_type", "true"},
 	}
 	if labels := r.Translate(noMatchTarget, nil); labels != nil {
 		t.Errorf("Expected no match, matched %v", labels)
@@ -43,12 +43,12 @@ func TestTranslate(t *testing.T) {
 		{"ignored", "x"},
 		{"__target2", "y"},
 		{"__target1", "z"},
-		{"__type", "my_type"},
+		{"__match_type", "true"},
 	}
 	matchTargetFinal := labels.Labels{
 		{"__target1", "z2"},
 		{"__target3", "v"},
-		{"__type", "my_type"},
+		{"__match_type", "true"},
 	}
 	expectedLabels := map[string]string{
 		"sdt1": "z2",
@@ -66,15 +66,6 @@ func TestTranslate(t *testing.T) {
 		{"__target3", "z"},
 	}
 	if labels := r.Translate(missingType, nil); labels != nil {
-		t.Errorf("Expected no match, matched %v", labels)
-	}
-	wrongType := labels.Labels{
-		{"__target1", "x"},
-		{"__target2", "y"},
-		{"__target3", "z"},
-		{"__type", "wrong_type"},
-	}
-	if labels := r.Translate(wrongType, nil); labels != nil {
 		t.Errorf("Expected no match, matched %v", labels)
 	}
 }
@@ -141,9 +132,9 @@ func TestBestEffortTranslate(t *testing.T) {
 
 func TestTranslateDevapp(t *testing.T) {
 	discoveredLabels := labels.Labels{
-		{"__meta_kubernetes_pod_label_resource_type", "devapp"},
-		{"__meta_kubernetes_pod_label_resource_container", "my-container"},
-		{"__meta_kubernetes_pod_label_location", "my-location"},
+		{"__meta_kubernetes_pod_label_type_devapp", "true"},
+		{ProjectIDLabel, "my-project"},
+		{KubernetesLocationLabel, "us-central1-a"},
 		{"__meta_kubernetes_pod_label_org", "my-org"},
 		{"__meta_kubernetes_pod_label_env", "my-env"},
 	}
@@ -152,8 +143,8 @@ func TestTranslateDevapp(t *testing.T) {
 		{"extra_label", "my-label"},
 	}
 	expectedLabels := map[string]string{
-		"resource_container": "my-container",
-		"location":           "my-location",
+		"resource_container": "my-project",
+		"location":           "us-central1-a",
 		"org":                "my-org",
 		"env":                "my-env",
 		"api_product_name":   "my-name",
@@ -167,24 +158,24 @@ func TestTranslateDevapp(t *testing.T) {
 
 func TestTranslateProxy(t *testing.T) {
 	discoveredLabels := labels.Labels{
-		{"__meta_kubernetes_pod_label_resource_type", "proxy"},
-		{"__meta_kubernetes_pod_label_resource_container", "my-container"},
-		{"__meta_kubernetes_pod_label_location", "my-location"},
+		{"__meta_kubernetes_pod_label_type_proxy", "true"},
+		{ProjectIDLabel, "my-project"},
+		{KubernetesLocationLabel, "us-central1-a"},
 		{"__meta_kubernetes_pod_label_org", "my-org"},
 		{"__meta_kubernetes_pod_label_env", "my-env"},
 	}
 	metricLabels := labels.Labels{
 		{"proxy_name", "my-name"},
-		{"revision", "my-revision"},
+		{"proxy_revision", "my-revision"},
 		{"extra_label", "my-label"},
 	}
 	expectedLabels := map[string]string{
-		"resource_container": "my-container",
-		"location":           "my-location",
+		"resource_container": "my-project",
+		"location":           "us-central1-a",
 		"org":                "my-org",
 		"env":                "my-env",
 		"proxy_name":         "my-name",
-		"revision":           "my-revision",
+		"proxy_revision":     "my-revision",
 	}
 	if labels := ProxyResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
