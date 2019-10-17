@@ -166,7 +166,7 @@ func TestTranslateProxy(t *testing.T) {
 	}
 	metricLabels := labels.Labels{
 		{"proxy_name", "my-name"},
-		{"proxy_revision", "my-revision"},
+		{"revision", "my-revision"},
 		{"extra_label", "my-label"},
 	}
 	expectedLabels := map[string]string{
@@ -175,7 +175,7 @@ func TestTranslateProxy(t *testing.T) {
 		"org":                "my-org",
 		"env":                "my-env",
 		"proxy_name":         "my-name",
-		"proxy_revision":     "my-revision",
+		"revision":           "my-revision",
 	}
 	if labels := ProxyResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)

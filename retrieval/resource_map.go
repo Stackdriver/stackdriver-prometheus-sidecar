@@ -111,7 +111,7 @@ var ProxyResourceMap = ResourceMap{
 		"__meta_kubernetes_pod_label_org": constValue("org"),
 		"__meta_kubernetes_pod_label_env": constValue("env"),
 		"proxy_name":                      constValue("proxy_name"),
-		"proxy_revision":                  constValue("proxy_revision"),
+		"revision":                        constValue("revision"),
 	},
 }
 
