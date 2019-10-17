@@ -163,27 +163,34 @@ var ResourceMappings = []ResourceMap{
 	},
 }
 
-func (m *ResourceMap) Translate(discovered, final labels.Labels) map[string]string {
-	stackdriverLabels := m.tryTranslate(discovered, final)
+// Translate translates labels to a monitored resource and entry labels, if
+// possible. Returns the resource and the modified entry labels.
+//
+// The labels in `discovered` and `entryLabels` are used as input. If a label
+// exists in both sets, the one in `entryLabels` takes precedence. Whenever a
+// label from `entryLabels` is used, it is removed from the set that is
+// returned.
+func (m *ResourceMap) Translate(discovered, entryLabels labels.Labels) (map[string]string, labels.Labels) {
+	stackdriverLabels, entryLabels := m.tryTranslate(discovered, entryLabels)
 	if len(m.LabelMap) == len(stackdriverLabels) {
-		return stackdriverLabels
+		return stackdriverLabels, entryLabels
 	}
-	return nil
+	return nil, nil
 }
 
 // BestEffortTranslate translates labels to resource with best effort. If the resource label
 // cannot be filled, use empty string instead.
-func (m *ResourceMap) BestEffortTranslate(discovered, final labels.Labels) map[string]string {
-	stackdriverLabels := m.tryTranslate(discovered, final)
+func (m *ResourceMap) BestEffortTranslate(discovered, entryLabels labels.Labels) (map[string]string, labels.Labels) {
+	stackdriverLabels, entryLabels := m.tryTranslate(discovered, entryLabels)
 	for _, t := range m.LabelMap {
 		if _, ok := stackdriverLabels[t.stackdriverLabelName]; !ok {
 			stackdriverLabels[t.stackdriverLabelName] = ""
 		}
 	}
-	return stackdriverLabels
+	return stackdriverLabels, entryLabels
 }
 
-func (m *ResourceMap) tryTranslate(discovered, final labels.Labels) map[string]string {
+func (m *ResourceMap) tryTranslate(discovered, entryLabels labels.Labels) (map[string]string, labels.Labels) {
 	matched := false
 	stackdriverLabels := make(map[string]string, len(m.LabelMap))
 	for _, l := range discovered {
@@ -194,19 +201,22 @@ func (m *ResourceMap) tryTranslate(discovered, final labels.Labels) map[string]s
 			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
 		}
 	}
-	// The final labels are applied second so they overwrite mappings from discovered labels.
+	// The entryLabels labels are applied second so they overwrite mappings from discovered labels.
 	// This ensures, that the Prometheus's relabeling rules are respected for labels that
 	// appear in both label sets, e.g. the "job" label for generic resources.
-	for _, l := range final {
+	var finalLabels labels.Labels
+	for _, l := range entryLabels {
 		if l.Name == m.MatchLabel {
 			matched = true
 		}
 		if translator, ok := m.LabelMap[l.Name]; ok {
 			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
+		} else {
+			finalLabels = append(finalLabels, l)
 		}
 	}
 	if len(m.MatchLabel) > 0 && !matched {
-		return nil
+		return nil, finalLabels
 	}
-	return stackdriverLabels
+	return stackdriverLabels, finalLabels
 }

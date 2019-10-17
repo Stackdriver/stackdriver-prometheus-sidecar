@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
@@ -36,7 +37,7 @@ func TestTranslate(t *testing.T) {
 		{"__target2", "y"},
 		{"__match_type", "true"},
 	}
-	if labels := r.Translate(noMatchTarget, nil); labels != nil {
+	if labels, _ := r.Translate(noMatchTarget, nil); labels != nil {
 		t.Errorf("Expected no match, matched %v", labels)
 	}
 	matchTargetDiscovered := labels.Labels{
@@ -55,7 +56,7 @@ func TestTranslate(t *testing.T) {
 		"sdt2": "y",
 		"sdt3": "v",
 	}
-	if labels := r.Translate(matchTargetDiscovered, matchTargetFinal); labels == nil {
+	if labels, _ := r.Translate(matchTargetDiscovered, matchTargetFinal); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
@@ -65,7 +66,7 @@ func TestTranslate(t *testing.T) {
 		{"__target2", "y"},
 		{"__target3", "z"},
 	}
-	if labels := r.Translate(missingType, nil); labels != nil {
+	if labels, _ := r.Translate(missingType, nil); labels != nil {
 		t.Errorf("Expected no match, matched %v", labels)
 	}
 }
@@ -83,7 +84,7 @@ func TestTranslateEc2Instance(t *testing.T) {
 		"region":      "aws:us-east-1b",
 		"aws_account": "12345678",
 	}
-	if labels := EC2ResourceMap.Translate(target, nil); labels == nil {
+	if labels, _ := EC2ResourceMap.Translate(target, nil); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
@@ -101,7 +102,7 @@ func TestTranslateGceInstance(t *testing.T) {
 		"zone":        "us-central1-a",
 		"instance_id": "1234110975759588",
 	}
-	if labels := GCEResourceMap.Translate(target, nil); labels == nil {
+	if labels, _ := GCEResourceMap.Translate(target, nil); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
@@ -123,7 +124,7 @@ func TestBestEffortTranslate(t *testing.T) {
 		"pod_id":         "",
 		"container_name": "",
 	}
-	if labels := GKEResourceMap.BestEffortTranslate(target, nil); labels == nil {
+	if labels, _ := GKEResourceMap.BestEffortTranslate(target, nil); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
@@ -149,10 +150,18 @@ func TestTranslateDevapp(t *testing.T) {
 		"env":                "my-env",
 		"api_product_name":   "my-name",
 	}
-	if labels := DevappResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+	expectedFinalLabels := labels.Labels{
+		{"extra_label", "my-label"},
+	}
+	if labels, finalLabels := DevappResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
-	} else if !reflect.DeepEqual(labels, expectedLabels) {
-		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	} else {
+		if diff := cmp.Diff(expectedLabels, labels); len(diff) > 0 {
+			t.Error(diff)
+		}
+		if diff := cmp.Diff(expectedFinalLabels, finalLabels); len(diff) > 0 {
+			t.Error(diff)
+		}
 	}
 }
 
@@ -177,10 +186,18 @@ func TestTranslateProxy(t *testing.T) {
 		"proxy_name":         "my-name",
 		"revision":           "my-revision",
 	}
-	if labels := ProxyResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+	expectedFinalLabels := labels.Labels{
+		{"extra_label", "my-label"},
+	}
+	if labels, finalLabels := ProxyResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
-	} else if !reflect.DeepEqual(labels, expectedLabels) {
-		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	} else {
+		if diff := cmp.Diff(expectedLabels, labels); len(diff) > 0 {
+			t.Error(diff)
+		}
+		if diff := cmp.Diff(expectedFinalLabels, finalLabels); len(diff) > 0 {
+			t.Error(diff)
+		}
 	}
 }
 
@@ -215,7 +232,7 @@ func BenchmarkTranslate(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		if labels := r.Translate(discoveredLabels, finalLabels); labels == nil {
+		if labels, _ := r.Translate(discoveredLabels, finalLabels); labels == nil {
 			b.Fail()
 		}
 	}
