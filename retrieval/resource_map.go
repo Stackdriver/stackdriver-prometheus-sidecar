@@ -206,9 +206,6 @@ func (m *ResourceMap) tryTranslate(discovered, entryLabels labels.Labels) (map[s
 	// appear in both label sets, e.g. the "job" label for generic resources.
 	var finalLabels labels.Labels
 	for _, l := range entryLabels {
-		if l.Name == m.MatchLabel {
-			matched = true
-		}
 		if translator, ok := m.LabelMap[l.Name]; ok {
 			stackdriverLabels[translator.stackdriverLabelName] = translator.convert(l.Value)
 		} else {
