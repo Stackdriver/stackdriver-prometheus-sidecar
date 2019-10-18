@@ -474,8 +474,8 @@ func (c *seriesCache) getMetricType(prefix, name string) string {
 	return getMetricType(prefix, name)
 }
 
-// getResource returns the monitored resource, the modified `entryLabels`, and whether the operation succeeded.
-// `entryLabels` may be modified to remove metric labels that were used as resource labels.
+// getResource returns the monitored resource, the entry labels, and whether the operation succeeded.
+// The returned entry labels are a subset of `entryLabels` without the labels that were used as resource labels.
 func (c *seriesCache) getResource(discovered, entryLabels promlabels.Labels) (*monitoredres_pb.MonitoredResource, promlabels.Labels, bool) {
 	if c.useGkeResource {
 		if lset, finalLabels := GKEResourceMap.BestEffortTranslate(discovered, entryLabels); lset != nil {
