@@ -201,6 +201,75 @@ func TestTranslateProxy(t *testing.T) {
 	}
 }
 
+func (m *ResourceMapList) getByType(t string) (*ResourceMap, bool) {
+	for _, m := range *m {
+		if m.Type == t {
+			return &m, true
+		}
+	}
+	return nil, false
+}
+
+func (m *ResourceMapList) matchType(matchLabels labels.Labels) string {
+	for _, m := range *m {
+		if lset, _ := m.Translate(matchLabels, nil); lset != nil {
+			return m.Type
+		}
+	}
+	return ""
+}
+
+func TestResourceMappingsOrder(t *testing.T) {
+	// For each pair of resource types on the input, ensure that the first
+	// one is picked if there are labels that match both. This guarantees
+	// that more specific resource types are picked, e.g. k8s_container before
+	// k8s_pod, and k8s_node before gce_instance.
+	cases := []struct {
+		first  string // Higher priority.
+		second string // Lower priority.
+	}{
+		{"k8s_container", "k8s_pod"},
+		{"k8s_pod", "k8s_node"},
+		{"k8s_node", "gce_instance"},
+		{"k8s_node", "aws_ec2_instance"},
+		{"proxy", "k8s_container"},
+		{"devapp", "k8s_container"},
+	}
+	for _, c := range cases {
+		var (
+			first, second *ResourceMap
+			ok            bool
+		)
+		if first, ok = ResourceMappings.getByType(c.first); !ok {
+			t.Fatalf("invalid test case, missing %v", c.first)
+		}
+		if second, ok = ResourceMappings.getByType(c.second); !ok {
+			t.Fatalf("invalid test case, missing %v", c.second)
+		}
+		// The values are uninteresting for this test.
+		combinedKeys := make(map[string]string)
+		for k, _ := range first.LabelMap {
+			combinedKeys[k] = ""
+		}
+		if len(first.MatchLabel) > 0 {
+			combinedKeys[first.MatchLabel] = ""
+		}
+		for k, _ := range second.LabelMap {
+			combinedKeys[k] = ""
+		}
+		if len(second.MatchLabel) > 0 {
+			combinedKeys[second.MatchLabel] = ""
+		}
+		combinedLabels := labels.FromMap(combinedKeys)
+		if match := ResourceMappings.matchType(combinedLabels); match != c.first {
+			t.Errorf("expected to match %v, got %v", c.first, match)
+		}
+		if match := ResourceMappings.matchType(combinedLabels); match == c.second {
+			t.Errorf("unexpected match %v", match)
+		}
+	}
+}
+
 func BenchmarkTranslate(b *testing.B) {
 	r := ResourceMap{
 		Type: "gke_container",

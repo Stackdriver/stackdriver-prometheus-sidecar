@@ -115,8 +115,12 @@ var ProxyResourceMap = ResourceMap{
 	},
 }
 
-// TODO(jkohen): ensure these are sorted from more specific to less specific.
-var ResourceMappings = []ResourceMap{
+type ResourceMapList []ResourceMap
+
+// When you add new elements, you also probably want to update TestResourceMappingsOrder.
+var ResourceMappings = ResourceMapList{
+	ProxyResourceMap,
+	DevappResourceMap,
 	{
 		Type: "k8s_container",
 		LabelMap: map[string]labelTranslation{
@@ -149,8 +153,6 @@ var ResourceMappings = []ResourceMap{
 	},
 	EC2ResourceMap,
 	GCEResourceMap,
-	ProxyResourceMap,
-	DevappResourceMap,
 	{
 		Type: "generic_task",
 		LabelMap: map[string]labelTranslation{
