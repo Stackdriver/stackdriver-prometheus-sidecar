@@ -17,12 +17,14 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
 func TestTranslate(t *testing.T) {
 	r := ResourceMap{
-		Type: "my_type",
+		Type:       "my_type",
+		MatchLabel: "__match_type",
 		LabelMap: map[string]labelTranslation{
 			"__target1": constValue("sdt1"),
 			"__target2": constValue("sdt2"),
@@ -33,28 +35,39 @@ func TestTranslate(t *testing.T) {
 	noMatchTarget := labels.Labels{
 		{"ignored", "x"},
 		{"__target2", "y"},
+		{"__match_type", "true"},
 	}
-	if labels := r.Translate(noMatchTarget, nil); labels != nil {
+	if labels, _ := r.Translate(noMatchTarget, nil); labels != nil {
 		t.Errorf("Expected no match, matched %v", labels)
 	}
 	matchTargetDiscovered := labels.Labels{
 		{"ignored", "x"},
 		{"__target2", "y"},
 		{"__target1", "z"},
+		{"__match_type", "true"},
 	}
 	matchTargetFinal := labels.Labels{
 		{"__target1", "z2"},
 		{"__target3", "v"},
+		{"__match_type", "true"},
 	}
 	expectedLabels := map[string]string{
 		"sdt1": "z2",
 		"sdt2": "y",
 		"sdt3": "v",
 	}
-	if labels := r.Translate(matchTargetDiscovered, matchTargetFinal); labels == nil {
+	if labels, _ := r.Translate(matchTargetDiscovered, matchTargetFinal); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	}
+	missingType := labels.Labels{
+		{"__target1", "x"},
+		{"__target2", "y"},
+		{"__target3", "z"},
+	}
+	if labels, _ := r.Translate(missingType, nil); labels != nil {
+		t.Errorf("Expected no match, matched %v", labels)
 	}
 }
 
@@ -71,7 +84,7 @@ func TestTranslateEc2Instance(t *testing.T) {
 		"region":      "aws:us-east-1b",
 		"aws_account": "12345678",
 	}
-	if labels := EC2ResourceMap.Translate(target, nil); labels == nil {
+	if labels, _ := EC2ResourceMap.Translate(target, nil); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
@@ -89,7 +102,7 @@ func TestTranslateGceInstance(t *testing.T) {
 		"zone":        "us-central1-a",
 		"instance_id": "1234110975759588",
 	}
-	if labels := GCEResourceMap.Translate(target, nil); labels == nil {
+	if labels, _ := GCEResourceMap.Translate(target, nil); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
@@ -111,10 +124,149 @@ func TestBestEffortTranslate(t *testing.T) {
 		"pod_id":         "",
 		"container_name": "",
 	}
-	if labels := GKEResourceMap.BestEffortTranslate(target, nil); labels == nil {
+	if labels, _ := GKEResourceMap.BestEffortTranslate(target, nil); labels == nil {
 		t.Errorf("Expected %v, actual nil", expectedLabels)
 	} else if !reflect.DeepEqual(labels, expectedLabels) {
 		t.Errorf("Expected %v, actual %v", expectedLabels, labels)
+	}
+}
+
+func TestTranslateDevapp(t *testing.T) {
+	discoveredLabels := labels.Labels{
+		{"__meta_kubernetes_pod_label_type_devapp", "true"},
+		{ProjectIDLabel, "my-project"},
+		{KubernetesLocationLabel, "us-central1-a"},
+		{"__meta_kubernetes_pod_label_org", "my-org"},
+		{"__meta_kubernetes_pod_label_env", "my-env"},
+	}
+	metricLabels := labels.Labels{
+		{"api_product_name", "my-name"},
+		{"extra_label", "my-label"},
+	}
+	expectedLabels := map[string]string{
+		"resource_container": "my-project",
+		"location":           "us-central1-a",
+		"org":                "my-org",
+		"env":                "my-env",
+		"api_product_name":   "my-name",
+	}
+	expectedFinalLabels := labels.Labels{
+		{"extra_label", "my-label"},
+	}
+	if labels, finalLabels := DevappResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else {
+		if diff := cmp.Diff(expectedLabels, labels); len(diff) > 0 {
+			t.Error(diff)
+		}
+		if diff := cmp.Diff(expectedFinalLabels, finalLabels); len(diff) > 0 {
+			t.Error(diff)
+		}
+	}
+}
+
+func TestTranslateProxy(t *testing.T) {
+	discoveredLabels := labels.Labels{
+		{"__meta_kubernetes_pod_label_type_proxy", "true"},
+		{ProjectIDLabel, "my-project"},
+		{KubernetesLocationLabel, "us-central1-a"},
+		{"__meta_kubernetes_pod_label_org", "my-org"},
+		{"__meta_kubernetes_pod_label_env", "my-env"},
+	}
+	metricLabels := labels.Labels{
+		{"proxy_name", "my-name"},
+		{"revision", "my-revision"},
+		{"extra_label", "my-label"},
+	}
+	expectedLabels := map[string]string{
+		"resource_container": "my-project",
+		"location":           "us-central1-a",
+		"org":                "my-org",
+		"env":                "my-env",
+		"proxy_name":         "my-name",
+		"revision":           "my-revision",
+	}
+	expectedFinalLabels := labels.Labels{
+		{"extra_label", "my-label"},
+	}
+	if labels, finalLabels := ProxyResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else {
+		if diff := cmp.Diff(expectedLabels, labels); len(diff) > 0 {
+			t.Error(diff)
+		}
+		if diff := cmp.Diff(expectedFinalLabels, finalLabels); len(diff) > 0 {
+			t.Error(diff)
+		}
+	}
+}
+
+func (m *ResourceMapList) getByType(t string) (*ResourceMap, bool) {
+	for _, m := range *m {
+		if m.Type == t {
+			return &m, true
+		}
+	}
+	return nil, false
+}
+
+func (m *ResourceMapList) matchType(matchLabels labels.Labels) string {
+	for _, m := range *m {
+		if lset, _ := m.Translate(matchLabels, nil); lset != nil {
+			return m.Type
+		}
+	}
+	return ""
+}
+
+func TestResourceMappingsOrder(t *testing.T) {
+	// For each pair of resource types on the input, ensure that the first
+	// one is picked if there are labels that match both. This guarantees
+	// that more specific resource types are picked, e.g. k8s_container before
+	// k8s_pod, and k8s_node before gce_instance.
+	cases := []struct {
+		first  string // Higher priority.
+		second string // Lower priority.
+	}{
+		{"k8s_container", "k8s_pod"},
+		{"k8s_pod", "k8s_node"},
+		{"k8s_node", "gce_instance"},
+		{"k8s_node", "aws_ec2_instance"},
+		{"proxy", "k8s_container"},
+		{"devapp", "k8s_container"},
+	}
+	for _, c := range cases {
+		var (
+			first, second *ResourceMap
+			ok            bool
+		)
+		if first, ok = ResourceMappings.getByType(c.first); !ok {
+			t.Fatalf("invalid test case, missing %v", c.first)
+		}
+		if second, ok = ResourceMappings.getByType(c.second); !ok {
+			t.Fatalf("invalid test case, missing %v", c.second)
+		}
+		// The values are uninteresting for this test.
+		combinedKeys := make(map[string]string)
+		for k, _ := range first.LabelMap {
+			combinedKeys[k] = ""
+		}
+		if len(first.MatchLabel) > 0 {
+			combinedKeys[first.MatchLabel] = ""
+		}
+		for k, _ := range second.LabelMap {
+			combinedKeys[k] = ""
+		}
+		if len(second.MatchLabel) > 0 {
+			combinedKeys[second.MatchLabel] = ""
+		}
+		combinedLabels := labels.FromMap(combinedKeys)
+		if match := ResourceMappings.matchType(combinedLabels); match != c.first {
+			t.Errorf("expected to match %v, got %v", c.first, match)
+		}
+		if match := ResourceMappings.matchType(combinedLabels); match == c.second {
+			t.Errorf("unexpected match %v", match)
+		}
 	}
 }
 
@@ -149,7 +301,7 @@ func BenchmarkTranslate(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		if labels := r.Translate(discoveredLabels, finalLabels); labels == nil {
+		if labels, _ := r.Translate(discoveredLabels, finalLabels); labels == nil {
 			b.Fail()
 		}
 	}

@@ -338,12 +338,13 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	c.mtx.Unlock()
 
 	entry.lastRefresh = time.Now()
+	entryLabels := pkgLabels(entry.lset)
 
 	// Probe for the target, its applicable resource, and the series metadata.
 	// They will be used subsequently for all other Prometheus series that map to the same complex
 	// Stackdriver series.
 	// If either of those pieces of data is missing, the series will be skipped.
-	target, err := c.targets.Get(ctx, pkgLabels(entry.lset))
+	target, err := c.targets.Get(ctx, entryLabels)
 	if err != nil {
 		return errors.Wrap(err, "retrieving target failed")
 	}
@@ -353,11 +354,19 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		level.Debug(c.logger).Log("msg", "target not found", "labels", entry.lset)
 		return nil
 	}
+	resource, entryLabels, ok := c.getResource(target.DiscoveredLabels, entryLabels)
+	if !ok {
+		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "unknown_resource"))
+		stats.Record(ctx, droppedSeries.M(1))
+		level.Debug(c.logger).Log("msg", "unknown resource", "labels", target.Labels, "discovered_labels", target.DiscoveredLabels)
+		return nil
+	}
+
 	// Remove target labels and __name__ label.
 	// Stackdriver only accepts a limited amount of labels, so we choose to economize aggressively here. This should be OK
 	// because we expect that the target.Labels will be redundant with the Stackdriver MonitoredResource, which is derived
 	// from the target Labels and DiscoveredLabels.
-	finalLabels := targets.DropTargetLabels(pkgLabels(entry.lset), target.Labels)
+	finalLabels := targets.DropTargetLabels(entryLabels, target.Labels)
 	for i, l := range finalLabels {
 		if l.Name == "__name__" {
 			finalLabels = append(finalLabels[:i], finalLabels[i+1:]...)
@@ -372,13 +381,6 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		return nil
 	}
 
-	resource, ok := c.getResource(target.DiscoveredLabels, target.Labels)
-	if !ok {
-		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "unknown_resource"))
-		stats.Record(ctx, droppedSeries.M(1))
-		level.Debug(c.logger).Log("msg", "unknown resource", "labels", target.Labels, "discovered_labels", target.DiscoveredLabels)
-		return nil
-	}
 	var (
 		metricName     = entry.lset.Get("__name__")
 		baseMetricName string
@@ -472,24 +474,26 @@ func (c *seriesCache) getMetricType(prefix, name string) string {
 	return getMetricType(prefix, name)
 }
 
-func (c *seriesCache) getResource(discovered, final promlabels.Labels) (*monitoredres_pb.MonitoredResource, bool) {
+// getResource returns the monitored resource, the entry labels, and whether the operation succeeded.
+// The returned entry labels are a subset of `entryLabels` without the labels that were used as resource labels.
+func (c *seriesCache) getResource(discovered, entryLabels promlabels.Labels) (*monitoredres_pb.MonitoredResource, promlabels.Labels, bool) {
 	if c.useGkeResource {
-		if lset := GKEResourceMap.BestEffortTranslate(discovered, final); lset != nil {
+		if lset, finalLabels := GKEResourceMap.BestEffortTranslate(discovered, entryLabels); lset != nil {
 			return &monitoredres_pb.MonitoredResource{
 				Type:   GKEResourceMap.Type,
 				Labels: lset,
-			}, true
+			}, finalLabels, true
 		}
 	}
 	for _, m := range c.resourceMaps {
-		if lset := m.Translate(discovered, final); lset != nil {
+		if lset, finalLabels := m.Translate(discovered, entryLabels); lset != nil {
 			return &monitoredres_pb.MonitoredResource{
 				Type:   m.Type,
 				Labels: lset,
-			}, true
+			}, finalLabels, true
 		}
 	}
-	return nil, false
+	return nil, entryLabels, false
 }
 
 // matchFiltersets checks whether any of the supplied filtersets passes.

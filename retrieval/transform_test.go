@@ -16,12 +16,12 @@ package retrieval
 import (
 	"context"
 	"math"
-	"reflect"
 	"testing"
 
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/google/go-cmp/cmp"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/scrape"
@@ -65,6 +65,11 @@ func TestSampleBuilder(t *testing.T) {
 			LabelMap: map[string]labelTranslation{
 				"__resource_a": constValue("resource_a"),
 			},
+		}, {
+			Type: "resource3",
+			LabelMap: map[string]labelTranslation{
+				"metric_label": constValue("resource_a"),
+			},
 		},
 	}
 	cases := []struct {
@@ -86,18 +91,24 @@ func TestSampleBuilder(t *testing.T) {
 					"a", "1", "b", "2", "c", "3", "d", "4", "e", "5", "f", "6", "g", "7", "h", "8", "i", "9", "j", "10"),
 				4: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "labelnum_bad",
 					"a", "1", "b", "2", "c", "3", "d", "4", "e", "5", "f", "6", "g", "7", "h", "8", "i", "9", "j", "10", "k", "11"),
+				5: labels.FromStrings("job", "job2", "instance", "instance1", "__name__", "resource_from_metric", "metric_label", "resource3_a", "a", "1"),
 			},
 			targets: targetMap{
 				"job1/instance1": &targets.Target{
 					Labels:           promlabels.FromStrings("job", "job1", "instance", "instance1"),
 					DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
 				},
+				"job2/instance1": &targets.Target{
+					Labels:           promlabels.FromStrings("job", "job2", "instance", "instance1"),
+					DiscoveredLabels: promlabels.FromStrings("__unused", "xxx"),
+				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1":      &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
-				"job1/instance1/metric2":      &scrape.MetricMetadata{Type: textparse.MetricTypeCounter, Metric: "metric2"},
-				"job1/instance1/labelnum_ok":  &scrape.MetricMetadata{Type: textparse.MetricTypeUnknown, Metric: "labelnum_ok"},
-				"job1/instance1/labelnum_bad": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "labelnum_bad"},
+				"job1/instance1/metric1":              &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+				"job1/instance1/metric2":              &scrape.MetricMetadata{Type: textparse.MetricTypeCounter, Metric: "metric2"},
+				"job1/instance1/labelnum_ok":          &scrape.MetricMetadata{Type: textparse.MetricTypeUnknown, Metric: "labelnum_ok"},
+				"job1/instance1/labelnum_bad":         &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "labelnum_bad"},
+				"job2/instance1/resource_from_metric": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "resource_from_metric"},
 			},
 			input: []tsdb.RefSample{
 				{Ref: 2, T: 2000, V: 5.5},
@@ -107,6 +118,7 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 1, T: 1000, V: 200},
 				{Ref: 3, T: 3000, V: 1},
 				{Ref: 4, T: 4000, V: 2},
+				{Ref: 5, T: 1000, V: 200},
 			},
 			result: []*monitoring_pb.TimeSeries{
 				nil, // Skipped by reset timestamp handling.
@@ -216,6 +228,28 @@ func TestSampleBuilder(t *testing.T) {
 					}},
 				},
 				nil, // 6: Dropped sample with too many labels.
+				{ // 7
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource3",
+						Labels: map[string]string{"resource_a": "resource3_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type: "external.googleapis.com/prometheus/resource_from_metric",
+						Labels: map[string]string{
+							"a": "1",
+						},
+					},
+					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							EndTime: &timestamp_pb.Timestamp{Seconds: 1},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{200},
+						},
+					}},
+				},
 			},
 		},
 		// Various cases where we drop series due to absence of additional information.
@@ -865,26 +899,24 @@ func TestSampleBuilder(t *testing.T) {
 			hashes = append(hashes, h)
 		}
 		if err == nil && c.fail {
-			t.Fatal("expected error but got none")
+			t.Error("expected error but got none")
 		}
 		if err != nil && !c.fail {
-			t.Fatalf("unexpected error: %s", err)
+			t.Errorf("unexpected error: %s", err)
+		}
+		if diff := cmp.Diff(c.result, result); len(diff) > 0 {
+			t.Errorf("unexpected result:\n%v", diff)
 		}
 		if len(result) != len(c.result) {
-			t.Fatalf("mismatching count %d of received samples, want %d", len(result), len(c.result))
+			t.Errorf("mismatching count %d of received samples, want %d", len(result), len(c.result))
 		}
-		for k, res := range result {
-			if !reflect.DeepEqual(res, c.result[k]) {
-				t.Logf("gotres %v", result)
-				t.Logf("expres %v", c.result)
-				t.Fatalf("unexpected sample %d: got\n\t%v\nwant\n\t%v", k, res, c.result[k])
-			}
+		for k, hash := range hashes {
 			expectedHash := uint64(0)
 			if c.result[k] != nil {
 				expectedHash = hashSeries(c.result[k])
 			}
-			if hashes[k] != expectedHash {
-				t.Fatalf("unexpected hash %v; want %v", hashes[k], expectedHash)
+			if hash != expectedHash {
+				t.Errorf("unexpected hash %v; want %v", hash, expectedHash)
 			}
 		}
 	}
