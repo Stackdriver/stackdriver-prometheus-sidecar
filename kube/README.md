@@ -1,6 +1,6 @@
 # Kubernetes setup
 
-This directory contains patch scripts to configure the Stackdriver Prometheus integration to work with the Prometheus server. See the user documentation at https://cloud.google.com/monitoring/kubernetes-engine/prometheus for more details.
+This directory contains patch scripts to configure the Stackdriver Prometheus integration to work with the Prometheus server. See the [user documentation](https://cloud.google.com/monitoring/kubernetes-engine/prometheus) for more details.
 
 Required environment variables:
 * `KUBE_NAMESPACE`: namespace to run the script against
