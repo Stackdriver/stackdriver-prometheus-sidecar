@@ -1,7 +1,6 @@
 # Kubernetes setup
 
-This directory contains patch scripts to inject the Prometheus sidecar into
-existing Prometheus installations and to deploy a full example setup.
+This directory contains patch scripts to configure the Stackdriver Prometheus integration to work with the Prometheus server. See the user documentation at https://cloud.google.com/monitoring/kubernetes-engine/prometheus for more details.
 
 Required environment variables:
 * `KUBE_NAMESPACE`: namespace to run the script against
@@ -42,8 +41,7 @@ Injects sidecar into Prometheus deployments controlled by the [prometheus-operat
 
 ## `full/deploy.sh`
 
-Deploys a basic Prometheus deployment to monitor Kubernetes components and
-custom services that are annotated with the well-known `prometheus.io/*` annotations.
+Deploys a basic Prometheus deployment that generates a metric data useful for testing `stackdriver-prometheus-sidecar`. This setup may incur charges and isn't inteded for use in production.
 
 ```sh
 ./full/deploy.sh
