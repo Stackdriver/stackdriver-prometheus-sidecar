@@ -41,7 +41,7 @@ Injects sidecar into Prometheus deployments controlled by the [prometheus-operat
 
 ## `full/deploy.sh`
 
-Deploys a basic Prometheus deployment that generates a metric data useful for testing `stackdriver-prometheus-sidecar`. This setup may incur charges and isn't inteded for use in production.
+Deploys a basic Prometheus deployment that generates metric data useful for testing. This setup may incur charges and isn't inteded for use in production.
 
 ```sh
 ./full/deploy.sh
