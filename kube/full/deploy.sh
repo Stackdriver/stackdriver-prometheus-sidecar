@@ -1,4 +1,5 @@
 #!/bin/bash
+# Deploys a basic Prometheus deployment that generates metric data for testing.
 
 set -e
 set -u
@@ -9,7 +10,7 @@ pushd "$(dirname "$0")"
 export SIDECAR_IMAGE_TAG=${SIDECAR_IMAGE_TAG:-'master'}
 export KUBE_NAMESPACE=${KUBE_NAMESPACE:-'default'}
 
-echo "Deploy to namespace ${KUBE_NAMESPACE} for Stackdriver project ${GCP_PROJECT} (location=${GCP_REGION}, cluster=${KUBE_CLUSTER})"
+echo "Deploying test environment to namespace ${KUBE_NAMESPACE} for Stackdriver project ${GCP_PROJECT} (location=${GCP_REGION}, cluster=${KUBE_CLUSTER})"
 
 envsubst < prometheus.yaml > _prometheus.yaml.tmp
 envsubst < node-exporter.yaml > _node-exporter.yaml.tmp
