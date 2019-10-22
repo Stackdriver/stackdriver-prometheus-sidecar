@@ -94,6 +94,7 @@ func TestSampleBuilder(t *testing.T) {
 				5: labels.FromStrings("job", "job2", "instance", "instance1", "__name__", "resource_from_metric", "metric_label", "resource3_a", "a", "1"),
 				6: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric3"),
 				7: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric4"),
+				8: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric5"),
 			},
 			targets: targetMap{
 				"job1/instance1": &targets.Target{
@@ -110,6 +111,8 @@ func TestSampleBuilder(t *testing.T) {
 				"job1/instance1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
 				// Gauge as integer.
 				"job1/instance1/metric3": metadata.NewEntry("metric3", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_INT64, ""),
+				// Gauge as default value type (double).
+				"job1/instance1/metric5": metadata.NewEntry("metric5", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED, ""),
 				// Counter as double.
 				"job1/instance1/metric2": metadata.NewEntry("metric2", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_DOUBLE, ""),
 				// Counter as integer.
@@ -130,6 +133,7 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 6, T: 8000, V: 12.5},
 				{Ref: 7, T: 6000, V: 1},
 				{Ref: 7, T: 7000, V: 3.5},
+				{Ref: 8, T: 8000, V: 22.5},
 			},
 			result: []*monitoring_pb.TimeSeries{
 				nil, // Skipped by reset timestamp handling.
@@ -300,6 +304,26 @@ func TestSampleBuilder(t *testing.T) {
 						},
 						Value: &monitoring_pb.TypedValue{
 							Value: &monitoring_pb.TypedValue_Int64Value{3},
+						},
+					}},
+				},
+				{ // 10
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric5",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_GAUGE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							EndTime: &timestamp_pb.Timestamp{Seconds: 8},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{22.5},
 						},
 					}},
 				},
