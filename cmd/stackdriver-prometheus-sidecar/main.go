@@ -53,11 +53,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/prometheus/scrape"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -161,9 +161,10 @@ type fileConfig struct {
 	} `json:"metric_renames"`
 
 	StaticMetadata []struct {
-		Metric string `json:"metric"`
-		Type   string `json:"type"`
-		Help   string `json:"help"`
+		Metric    string `json:"metric"`
+		Type      string `json:"type"`
+		ValueType string `json:"value_type"`
+		Help      string `json:"help"`
 	} `json:"static_metadata"`
 
 	AggregatedCounters []struct {
@@ -192,7 +193,7 @@ type mainConfig struct {
 	Filtersets            []string
 	Aggregations          retrieval.CounterAggregatorConfig
 	MetricRenames         map[string]string
-	StaticMetadata        []scrape.MetricMetadata
+	StaticMetadata        []*metadata.Entry
 	UseRestrictedIPs      bool
 	manualResolver        *manual.Resolver
 	MonitoringBackends    []string
@@ -728,7 +729,7 @@ func fillMetadata(staticConfig *map[string]string) {
 	}
 }
 
-func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadata, retrieval.CounterAggregatorConfig, error) {
+func parseConfigFile(filename string) (map[string]string, []*metadata.Entry, retrieval.CounterAggregatorConfig, error) {
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "reading file")
@@ -741,7 +742,7 @@ func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadat
 	for _, r := range fc.MetricRenames {
 		renameMapping[r.From] = r.To
 	}
-	var staticMetadata []scrape.MetricMetadata
+	var staticMetadata []*metadata.Entry
 	for _, sm := range fc.StaticMetadata {
 		switch sm.Type {
 		case metadata.MetricTypeUntyped:
@@ -752,11 +753,17 @@ func parseConfigFile(filename string) (map[string]string, []scrape.MetricMetadat
 		default:
 			return nil, nil, nil, errors.Errorf("invalid metric type %q", sm.Type)
 		}
-		staticMetadata = append(staticMetadata, scrape.MetricMetadata{
-			Metric: sm.Metric,
-			Type:   textparse.MetricType(sm.Type),
-			Help:   sm.Help,
-		})
+		valueType := metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED
+		switch sm.ValueType {
+		case "double":
+			valueType = metric_pb.MetricDescriptor_DOUBLE
+		case "int64":
+			valueType = metric_pb.MetricDescriptor_INT64
+		default:
+			return nil, nil, nil, errors.Errorf("invalid value type %q", sm.ValueType)
+		}
+		staticMetadata = append(staticMetadata,
+			metadata.NewEntry(sm.Metric, textparse.MetricType(sm.Type), valueType, sm.Help))
 	}
 
 	aggregations := make(retrieval.CounterAggregatorConfig)

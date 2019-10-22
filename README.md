@@ -78,6 +78,7 @@ metric_renames:
 static_metadata:
   - metric: some_metric_name
     type: counter # or gauge/histogram
+    value_type: double # or int64
     help: an arbitrary help string
 # - ...
 ```

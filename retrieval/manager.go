@@ -22,12 +22,12 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/fileutil"
 	tsdblabels "github.com/prometheus/tsdb/labels"
@@ -64,7 +64,7 @@ func (tg *targetsWithDiscoveredLabels) Get(ctx context.Context, lset labels.Labe
 }
 
 type MetadataGetter interface {
-	Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error)
+	Get(ctx context.Context, job, instance, metric string) (*metadata.Entry, error)
 }
 
 // Appender appends a time series with exactly one data point. A hash for the series

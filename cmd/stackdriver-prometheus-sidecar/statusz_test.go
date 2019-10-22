@@ -22,12 +22,13 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
-	"github.com/prometheus/prometheus/scrape"
+	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
 func scrapeStatusz(handler *statuszHandler) ([]byte, error) {
@@ -88,9 +89,9 @@ func TestStatuszHandler(t *testing.T) {
 			ProjectIDResource:  "my-project",
 			PrometheusURL:      mustParseURL(t, "http://127.0.0.1:9090/"),
 			StackdriverAddress: mustParseURL(t, "https://monitoring.googleapis.com:443/"),
-			StaticMetadata: []scrape.MetricMetadata{
-				{"metric1", textparse.MetricType("type1"), "", "unit1"},
-				{"metric2", textparse.MetricType("type2"), "", "unit2"},
+			StaticMetadata: []*metadata.Entry{
+				metadata.NewEntry("metric1", textparse.MetricType("type1"), metric_pb.MetricDescriptor_INT64, ""),
+				metadata.NewEntry("metric2", textparse.MetricType("type2"), metric_pb.MetricDescriptor_DOUBLE, ""),
 			},
 			StoreInFilesDirectory: "/my/files/directory",
 			UseGKEResource:        true,
@@ -136,8 +137,8 @@ func TestStatuszHandler(t *testing.T) {
 		regexp.MustCompile(`<tr><td>from2</td><td>to2</td></tr>`),
 		// for static metadata
 		regexp.MustCompile(`<h2>Static metadata</h2>`),
-		regexp.MustCompile(`<tr><td>metric1</td><td>type1</td><td>unit1</td></tr>`),
-		regexp.MustCompile(`<tr><td>metric2</td><td>type2</td><td>unit2</td></tr>`),
+		regexp.MustCompile(`<tr><td>metric1</td><td>type1</td><td></td></tr>`),
+		regexp.MustCompile(`<tr><td>metric2</td><td>type2</td><td></td></tr>`),
 		// for aggregations
 		regexp.MustCompile(`<h2>Aggregations</h2>`),
 		regexp.MustCompile(`<tr><td>aggmetric1</td><td>\[\[k=.*v.*\]\]</td></tr>`),

@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/tsdb"
 	tsdbLabels "github.com/prometheus/tsdb/labels"
 	distribution_pb "google.golang.org/genproto/googleapis/api/distribution"
+	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
@@ -40,7 +41,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	sample := samples[0]
 	tailSamples := samples[1:]
 
-	if (math.IsNaN(sample.V)) {
+	if math.IsNaN(sample.V) {
 		return nil, 0, tailSamples, nil
 	}
 
@@ -72,7 +73,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 
 	var resetTimestamp int64
 
-	switch entry.metadata.Type {
+	switch entry.metadata.MetricType() {
 	case textparse.MetricTypeCounter:
 		var v float64
 		resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
@@ -80,10 +81,10 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 			return nil, 0, tailSamples, nil
 		}
 		point.Interval.StartTime = getTimestamp(resetTimestamp)
-		point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{v}}
+		point.Value = buildTypedValue(entry.metadata.ValueType, v)
 
 	case textparse.MetricTypeGauge, textparse.MetricTypeUnknown:
-		point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{sample.V}}
+		point.Value = buildTypedValue(entry.metadata.ValueType, sample.V)
 
 	case textparse.MetricTypeSummary:
 		switch entry.suffix {
@@ -113,7 +114,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		// We pass in the original lset for matching since Prometheus's target label must
 		// be the same as well.
 		var v *distribution_pb.Distribution
-		v, resetTimestamp, tailSamples, err = b.buildDistribution(ctx, entry.metadata.Metric, entry.lset, samples)
+		v, resetTimestamp, tailSamples, err = b.buildDistribution(ctx, entry.metadata.Metric(), entry.lset, samples)
 		if v == nil || err != nil {
 			return nil, 0, tailSamples, err
 		}
@@ -123,7 +124,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		}
 
 	default:
-		return nil, 0, samples[1:], errors.Errorf("unexpected metric type %s", entry.metadata.Type)
+		return nil, 0, samples[1:], errors.Errorf("unexpected metric type %s", entry.metadata.MetricType())
 	}
 
 	if !b.series.updateSampleInterval(entry.hash, resetTimestamp, sample.T) {
@@ -352,4 +353,11 @@ func histogramLabelsEqual(a, b tsdbLabels.Labels) bool {
 	}
 	// If one label set still has labels left, they are not equal.
 	return i == len(a) && j == len(b)
+}
+
+func buildTypedValue(valueType metric_pb.MetricDescriptor_ValueType, v float64) *monitoring_pb.TypedValue {
+	if valueType == metric_pb.MetricDescriptor_INT64 {
+		return &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_Int64Value{int64(math.Round(v))}}
+	}
+	return &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{v}}
 }

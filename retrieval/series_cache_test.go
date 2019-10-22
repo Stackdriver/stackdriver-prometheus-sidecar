@@ -25,14 +25,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
-	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
+	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
 // This test primarily verifies the garbage collection logic of the cache.
@@ -57,7 +58,7 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
 	c := newSeriesCache(logger, dir, nil, nil,
 		targetMap{"/": &targets.Target{}},
-		metadataMap{"//": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge}},
+		metadataMap{"//": metadata.NewEntry("", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, "")},
 		[]ResourceMap{
 			{Type: "resource1", LabelMap: map[string]labelTranslation{}},
 		},
@@ -238,7 +239,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
 		DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
 	}
-	metadataMap["job1/inst1/metric1"] = &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"}
+	metadataMap["job1/inst1/metric1"] = metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, "")
 
 	// Hack the timestamp of the last update to be sufficiently in the past that a refresh
 	// will be triggered.
@@ -275,7 +276,7 @@ func TestSeriesCache_RefreshTooManyLabels(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
 	}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
 	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
@@ -327,7 +328,7 @@ func TestSeriesCache_RefreshUnknownResource(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
 	}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
 	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
@@ -415,7 +416,7 @@ func TestSeriesCache_Filter(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
 	}
 	logBuffer := &bytes.Buffer{}
 	defer func() {
@@ -477,7 +478,7 @@ func TestSeriesCache_CounterAggregator(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
+		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
 	}
 	logger := log.NewNopLogger()
 	aggr, _ := NewCounterAggregator(logger, &CounterAggregatorConfig{
@@ -546,8 +547,8 @@ func TestSeriesCache_RenameMetric(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric1"},
-		"job1/inst1/metric2": &scrape.MetricMetadata{Type: textparse.MetricTypeGauge, Metric: "metric2"},
+		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+		"job1/inst1/metric2": metadata.NewEntry("metric2", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
 	}
 	logBuffer := &bytes.Buffer{}
 	defer func() {
