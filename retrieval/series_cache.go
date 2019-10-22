@@ -43,6 +43,18 @@ var (
 	keyReason, _ = tag.NewKey("reason")
 )
 
+type recoverableError struct {
+	e &error
+}
+
+func (r *recoverableError) Cause() error {
+	return r.e
+}
+
+func (r *recoverableError) Error() string {
+	return r.e.Error()
+}
+
 func init() {
 	if err := view.Register(&view.View{
 		Name:        "prometheus_sidecar/dropped_series",
@@ -346,7 +358,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	// If either of those pieces of data is missing, the series will be skipped.
 	target, err := c.targets.Get(ctx, entryLabels)
 	if err != nil {
-		return errors.Wrap(err, "retrieving target failed")
+		return recoverableError{e: errors.Wrap(err, "retrieving target failed")}
 	}
 	if target == nil {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "target_not_found"))
@@ -390,7 +402,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	)
 	metadata, err := c.metadata.Get(ctx, job, instance, metricName)
 	if err != nil {
-		return errors.Wrap(err, "get metadata")
+		return recoverableError{Error: errors.Wrap(err, "get metadata")}
 	}
 	if metadata == nil {
 		// The full name didn't turn anything up. Check again in case it's a summary,
@@ -399,7 +411,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		if baseMetricName, suffix, ok = stripComplexMetricSuffix(metricName); ok {
 			metadata, err = c.metadata.Get(ctx, job, instance, baseMetricName)
 			if err != nil {
-				return errors.Wrap(err, "get metadata")
+				return recoverableError{Error: errors.Wrap(err, "get metadata")}
 			}
 		}
 		if metadata == nil {

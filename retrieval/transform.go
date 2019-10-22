@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/textparse"
@@ -31,6 +33,7 @@ import (
 )
 
 type sampleBuilder struct {
+	logger log.Logger
 	series seriesGetter
 }
 
@@ -44,9 +47,9 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		return nil, 0, tailSamples, nil
 	}
 
-	entry, ok, err := b.series.get(ctx, sample.Ref)
+	entry, ok, err := b.getSeriesWithRetry(ctx, sample)
 	if err != nil {
-		return nil, 0, samples, errors.Wrap(err, "get series information")
+		return nil, 0, samples, err
 	}
 	if !ok {
 		return nil, 0, tailSamples, nil
@@ -132,6 +135,28 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	return &ts, entry.hash, tailSamples, nil
 }
 
+func (b *sampleBuilder) getSeriesWithRetry(ctx context.Context, sample tsdb.RefSample) (entry *seriesCacheEntry, ok bool, err error) {
+	backoff := time.Duration(0)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
+		default:
+		}
+		entry, ok, err = b.series.get(ctx, sample.Ref)
+		if err == nil {
+			break
+		}
+		if _, ok := err.(recoverableError); !ok {
+			return nil, false, err
+		}
+		level.Warn(b.logger).Log("msg", "failed to get seriesCacheEntry", "err", err)
+		backoff = exponential(backoff)
+		time.Sleep(backoff)
+	}
+	return entry, ok, nil
+}
+
 const (
 	metricSuffixBucket = "_bucket"
 	metricSuffixSum    = "_sum"
@@ -214,7 +239,7 @@ func (b *sampleBuilder) buildDistribution(
 	// until we hit a new metric.
 Loop:
 	for i, s := range samples {
-		e, ok, err := b.series.get(ctx, s.Ref)
+		e, ok, err := b.getSeriesWithRetry(ctx, s)
 		if err != nil {
 			return nil, 0, samples, err
 		}
@@ -352,4 +377,19 @@ func histogramLabelsEqual(a, b tsdbLabels.Labels) bool {
 	}
 	// If one label set still has labels left, they are not equal.
 	return i == len(a) && j == len(b)
+}
+
+func exponential(d time.Duration) time.Duration {
+	const (
+		min = 10 * time.Millisecond
+		max = 2 * time.Second
+	)
+	d *= 2
+	if d < min {
+		d = min
+	}
+	if d > max {
+		d = max
+	}
+	return d
 }
