@@ -95,6 +95,7 @@ func TestSampleBuilder(t *testing.T) {
 				6: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric3"),
 				7: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric4"),
 				8: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric5"),
+				9: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric6"),
 			},
 			targets: targetMap{
 				"job1/instance1": &targets.Target{
@@ -116,7 +117,9 @@ func TestSampleBuilder(t *testing.T) {
 				// Counter as double.
 				"job1/instance1/metric2": metadata.NewEntry("metric2", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_DOUBLE, ""),
 				// Counter as integer.
-				"job1/instance1/metric4":              metadata.NewEntry("metric4", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_INT64, ""),
+				"job1/instance1/metric4": metadata.NewEntry("metric4", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_INT64, ""),
+				// Counter as default value type (double).
+				"job1/instance1/metric6":              metadata.NewEntry("metric6", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED, ""),
 				"job1/instance1/labelnum_ok":          metadata.NewEntry("labelnum_ok", textparse.MetricTypeUnknown, metric_pb.MetricDescriptor_DOUBLE, ""),
 				"job1/instance1/labelnum_bad":         metadata.NewEntry("labelnum_bad", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
 				"job2/instance1/resource_from_metric": metadata.NewEntry("resource_from_metric", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
@@ -134,6 +137,8 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 7, T: 6000, V: 1},
 				{Ref: 7, T: 7000, V: 3.5},
 				{Ref: 8, T: 8000, V: 22.5},
+				{Ref: 9, T: 8000, V: 3},
+				{Ref: 9, T: 9000, V: 4},
 			},
 			result: []*monitoring_pb.TimeSeries{
 				nil, // Skipped by reset timestamp handling.
@@ -324,6 +329,28 @@ func TestSampleBuilder(t *testing.T) {
 						},
 						Value: &monitoring_pb.TypedValue{
 							Value: &monitoring_pb.TypedValue_DoubleValue{22.5},
+						},
+					}},
+				},
+				nil, // Skipped by reset timestamp handling.
+				{ // 10
+					Resource: &monitoredres_pb.MonitoredResource{
+						Type:   "resource2",
+						Labels: map[string]string{"resource_a": "resource2_a"},
+					},
+					Metric: &metric_pb.Metric{
+						Type:   "external.googleapis.com/prometheus/metric6",
+						Labels: map[string]string{},
+					},
+					MetricKind: metric_pb.MetricDescriptor_CUMULATIVE,
+					ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+					Points: []*monitoring_pb.Point{{
+						Interval: &monitoring_pb.TimeInterval{
+							StartTime: &timestamp_pb.Timestamp{Seconds: 8},
+							EndTime:   &timestamp_pb.Timestamp{Seconds: 9},
+						},
+						Value: &monitoring_pb.TypedValue{
+							Value: &monitoring_pb.TypedValue_DoubleValue{1},
 						},
 					}},
 				},

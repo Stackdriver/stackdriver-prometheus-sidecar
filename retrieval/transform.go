@@ -359,5 +359,6 @@ func buildTypedValue(valueType metric_pb.MetricDescriptor_ValueType, v float64) 
 	if valueType == metric_pb.MetricDescriptor_INT64 {
 		return &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_Int64Value{int64(math.Round(v))}}
 	}
+	// Default to double, which is the only type supported by Prometheus.
 	return &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{v}}
 }
