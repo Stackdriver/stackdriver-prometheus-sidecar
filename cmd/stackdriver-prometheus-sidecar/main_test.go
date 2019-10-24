@@ -15,6 +15,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -24,7 +25,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/go-kit/kit/log"
+	"github.com/google/go-cmp/cmp"
+	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/promql"
+	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
 var promPath string
@@ -167,6 +175,94 @@ func TestParseWhitelists(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if _, err := parseFiltersets(logger, tt.filtersets, tt.filters); err == nil {
 				t.Fatalf("expected error, but got none")
+			}
+		})
+	}
+}
+
+func TestProcessFileConfig(t *testing.T) {
+	mustParseMetricSelector := func(input string) []*labels.Matcher {
+		m, err := promql.ParseMetricSelector(input)
+		if err != nil {
+			t.Fatalf("bad test input %v: %v", input, err)
+		}
+		return m
+	}
+	for _, tt := range []struct {
+		name           string
+		config         fileConfig
+		renameMappings map[string]string
+		staticMetadata []*metadata.Entry
+		aggregations   retrieval.CounterAggregatorConfig
+		err            error
+	}{
+		{
+			"empty",
+			fileConfig{},
+			map[string]string{},
+			[]*metadata.Entry{},
+			retrieval.CounterAggregatorConfig{},
+			nil,
+		},
+		{
+			"smoke",
+			fileConfig{
+				MetricRenames: []metricRenamesConfig{
+					{From: "from", To: "to"},
+				},
+				StaticMetadata: []staticMetadataConfig{
+					{Metric: "int64_counter", Type: "counter", ValueType: "int64", Help: "help1"},
+					{Metric: "double_gauge", Type: "gauge", ValueType: "double", Help: "help2"},
+					{Metric: "default_gauge", Type: "gauge"},
+				},
+				AggregatedCounters: []aggregatedCountersConfig{
+					{
+						Metric:  "network_transmit_bytes",
+						Help:    "total number of bytes sent over eth0",
+						Filters: []string{"filter1", "filter2"},
+					},
+				},
+			},
+			map[string]string{"from": "to"},
+			[]*metadata.Entry{
+				&metadata.Entry{Metric: "int64_counter", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_INT64, Help: "help1"},
+				&metadata.Entry{Metric: "double_gauge", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE, Help: "help2"},
+				&metadata.Entry{Metric: "default_gauge", MetricType: textparse.MetricTypeGauge},
+			},
+			retrieval.CounterAggregatorConfig{
+				"network_transmit_bytes": &retrieval.CounterAggregatorMetricConfig{
+					Matchers: [][]*labels.Matcher{
+						mustParseMetricSelector("filter1"),
+						mustParseMetricSelector("filter2"),
+					},
+					Help: "total number of bytes sent over eth0",
+				},
+			},
+			nil,
+		},
+		{
+			"missing_metric_type",
+			fileConfig{
+				StaticMetadata: []staticMetadataConfig{{Metric: "int64_default", ValueType: "int64"}},
+			},
+			nil, nil, nil,
+			errors.New("invalid metric type \"\""),
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			renameMappings, staticMetadata, aggregations, err := processFileConfig(tt.config)
+			if diff := cmp.Diff(tt.renameMappings, renameMappings); diff != "" {
+				t.Errorf("renameMappings mismatch: %v", diff)
+			}
+			if diff := cmp.Diff(tt.staticMetadata, staticMetadata); diff != "" {
+				t.Errorf("staticMetadata mismatch: %v", diff)
+			}
+			if diff := cmp.Diff(tt.aggregations, aggregations); diff != "" {
+				t.Errorf("aggregations mismatch: %v", diff)
+			}
+			if (tt.err != nil && err != nil && tt.err.Error() != err.Error()) ||
+				(tt.err == nil && err != nil) || (tt.err != nil && err == nil) {
+				t.Errorf("error mismatch: got %v, expected %v", err, tt.err)
 			}
 		})
 	}

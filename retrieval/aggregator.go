@@ -16,6 +16,7 @@ package retrieval
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/go-kit/kit/log"
@@ -58,6 +59,11 @@ type CounterAggregatorConfig map[string]*CounterAggregatorMetricConfig
 type CounterAggregatorMetricConfig struct {
 	Matchers [][]*promlabels.Matcher
 	Help     string
+}
+
+func (a CounterAggregatorMetricConfig) Equal(b CounterAggregatorMetricConfig) bool {
+	return a.Help == b.Help &&
+		fmt.Sprintf("%v", a.Matchers) == fmt.Sprintf("%v", b.Matchers)
 }
 
 // counterTracker keeps track of a single time series that has at least one aggregated

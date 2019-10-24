@@ -27,7 +27,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/textparse"
-	"github.com/prometheus/prometheus/scrape"
+	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
 // Cache populates and maintains a cache of metric metadata it retrieves
@@ -37,9 +37,9 @@ type Cache struct {
 	promURL *url.URL
 	client  *http.Client
 
-	metadata       map[string]*metadataEntry
+	metadata       map[string]*cacheEntry
 	seenJobs       map[string]struct{}
-	staticMetadata map[string]scrape.MetricMetadata
+	staticMetadata map[string]*Entry
 }
 
 // DefaultEndpointPath is the default HTTP path on which Prometheus serves
@@ -50,18 +50,25 @@ const DefaultEndpointPath = "api/v1/targets/metadata"
 // Prometheus 2.4 and earlier.
 const MetricTypeUntyped = "untyped"
 
+type Entry struct {
+	Metric     string
+	MetricType textparse.MetricType
+	ValueType  metric_pb.MetricDescriptor_ValueType
+	Help       string
+}
+
 // NewCache returns a new cache that gets populated by the metadata endpoint
 // at the given URL.
 // It uses the default endpoint path if no specific path is provided.
-func NewCache(client *http.Client, promURL *url.URL, staticMetadata []scrape.MetricMetadata) *Cache {
+func NewCache(client *http.Client, promURL *url.URL, staticMetadata []*Entry) *Cache {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	c := &Cache{
 		promURL:        promURL,
 		client:         client,
-		staticMetadata: map[string]scrape.MetricMetadata{},
-		metadata:       map[string]*metadataEntry{},
+		staticMetadata: map[string]*Entry{},
+		metadata:       map[string]*cacheEntry{},
 		seenJobs:       map[string]struct{}{},
 	}
 	for _, m := range staticMetadata {
@@ -72,13 +79,13 @@ func NewCache(client *http.Client, promURL *url.URL, staticMetadata []scrape.Met
 
 const retryInterval = 30 * time.Second
 
-type metadataEntry struct {
-	scrape.MetricMetadata
+type cacheEntry struct {
+	*Entry
 	found     bool
 	lastFetch time.Time
 }
 
-func (e *metadataEntry) shouldRefetch() bool {
+func (e *cacheEntry) shouldRefetch() bool {
 	// TODO(fabxc): how often does this happen? Do we need an exponential backoff?
 	return !e.found && time.Since(e.lastFetch) > retryInterval
 }
@@ -87,9 +94,9 @@ func (e *metadataEntry) shouldRefetch() bool {
 // is not in the cache, it blocks until we have retrieved it from the Prometheus server.
 // If no metadata is found in the Prometheus server, a matching entry from the
 // static metadata or nil is returned.
-func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.MetricMetadata, error) {
+func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*Entry, error) {
 	if md, ok := c.staticMetadata[metric]; ok {
-		return &md, nil
+		return md, nil
 	}
 	md, ok := c.metadata[metric]
 	if !ok || md.shouldRefetch() {
@@ -119,16 +126,14 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*scrape.
 		md = c.metadata[metric]
 	}
 	if md != nil && md.found {
-		return &md.MetricMetadata, nil
+		return md.Entry, nil
 	}
 	// The metric might also be produced by a recording rule, which by convention
 	// contain at least one `:` character. In that case we can generally assume that
 	// it is a gauge. We leave the help text empty.
 	if strings.Contains(metric, ":") {
-		return &scrape.MetricMetadata{
-			Metric: metric,
-			Type:   textparse.MetricTypeGauge,
-		}, nil
+		entry := &Entry{Metric: metric, MetricType: textparse.MetricTypeGauge}
+		return entry, nil
 	}
 	return nil, nil
 }
@@ -160,7 +165,7 @@ const apiErrorNotFound = "not_found"
 
 // fetchMetric fetches metadata for the given job, instance, and metric combination.
 // It returns a not-found entry if the fetch is successful but returns no data.
-func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (*metadataEntry, error) {
+func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (*cacheEntry, error) {
 	job, instance = escapeLval(job), escapeLval(instance)
 
 	apiResp, err := c.fetch(ctx, "metric", url.Values{
@@ -176,7 +181,7 @@ func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (
 		return nil, errors.Wrap(errors.New(apiResp.Error), "lookup failed")
 	}
 	if len(apiResp.Data) == 0 {
-		return &metadataEntry{lastFetch: now}, nil
+		return &cacheEntry{lastFetch: now}, nil
 	}
 	d := apiResp.Data[0]
 
@@ -184,12 +189,8 @@ func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (
 	if d.Type == MetricTypeUntyped {
 		d.Type = textparse.MetricTypeUnknown
 	}
-	return &metadataEntry{
-		MetricMetadata: scrape.MetricMetadata{
-			Metric: metric,
-			Type:   d.Type,
-			Help:   d.Help,
-		},
+	return &cacheEntry{
+		Entry:     &Entry{Metric: metric, MetricType: d.Type, Help: d.Help},
 		lastFetch: now,
 		found:     true,
 	}, nil
@@ -199,7 +200,7 @@ func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (
 // We constrain it by instance to reduce the total payload size.
 // In a well-configured setup it is unlikely that instances for the same job have any notable
 // difference in their exposed metrics.
-func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[string]*metadataEntry, error) {
+func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[string]*cacheEntry, error) {
 	job, instance = escapeLval(job), escapeLval(instance)
 
 	apiResp, err := c.fetch(ctx, "batch", url.Values{
@@ -217,19 +218,15 @@ func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[strin
 		return nil, errors.Wrap(errors.New(apiResp.Error), "lookup failed")
 	}
 	// Pre-allocate for all received data plus internal metrics.
-	result := make(map[string]*metadataEntry, len(apiResp.Data)+len(internalMetrics))
+	result := make(map[string]*cacheEntry, len(apiResp.Data)+len(internalMetrics))
 
 	for _, md := range apiResp.Data {
 		// Convert legacy "untyped" type used before Prometheus 2.5.
 		if md.Type == MetricTypeUntyped {
 			md.Type = textparse.MetricTypeUnknown
 		}
-		result[md.Metric] = &metadataEntry{
-			MetricMetadata: scrape.MetricMetadata{
-				Metric: md.Metric,
-				Type:   md.Type,
-				Help:   md.Help,
-			},
+		result[md.Metric] = &cacheEntry{
+			Entry:     &Entry{Metric: md.Metric, MetricType: md.Type, Help: md.Help},
 			lastFetch: now,
 			found:     true,
 		}
@@ -237,32 +234,32 @@ func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[strin
 	// Prometheus's scraping layer writes a few internal metrics, which we won't get
 	// metadata for via the API. We populate hardcoded metadata for them.
 	for _, md := range internalMetrics {
-		result[md.Metric] = &metadataEntry{MetricMetadata: md, lastFetch: now, found: true}
+		result[md.Metric] = &cacheEntry{Entry: md, lastFetch: now, found: true}
 	}
 	return result, nil
 }
 
-var internalMetrics = map[string]scrape.MetricMetadata{
-	"up": {
-		Metric: "up",
-		Type:   textparse.MetricTypeGauge,
-		Help:   "Up indicates whether the last target scrape was successful",
-	},
-	"scrape_samples_scraped": {
-		Metric: "scrape_samples_scraped",
-		Type:   textparse.MetricTypeGauge,
-		Help:   "How many samples were scraped during the last successful scrape",
-	},
-	"scrape_duration_seconds": {
-		Metric: "scrape_duration_seconds",
-		Type:   textparse.MetricTypeGauge,
-		Help:   "Duration of the last scrape",
-	},
-	"scrape_samples_post_metric_relabeling": {
-		Metric: "scrape_samples_post_metric_relabeling",
-		Type:   textparse.MetricTypeGauge,
-		Help:   "How many samples were ingested after relabeling",
-	},
+var internalMetrics = map[string]*Entry{
+	"up": &Entry{
+		Metric:     "up",
+		MetricType: textparse.MetricTypeGauge,
+		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help:       "Up indicates whether the last target scrape was successful"},
+	"scrape_samples_scraped": &Entry{
+		Metric:     "scrape_samples_scraped",
+		MetricType: textparse.MetricTypeGauge,
+		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help:       "How many samples were scraped during the last successful scrape"},
+	"scrape_duration_seconds": &Entry{
+		Metric:     "scrape_duration_seconds",
+		MetricType: textparse.MetricTypeGauge,
+		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help:       "Duration of the last scrape"},
+	"scrape_samples_post_metric_relabeling": &Entry{
+		Metric:     "scrape_samples_post_metric_relabeling",
+		MetricType: textparse.MetricTypeGauge,
+		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help:       "How many samples were ingested after relabeling"},
 }
 
 type apiResponse struct {

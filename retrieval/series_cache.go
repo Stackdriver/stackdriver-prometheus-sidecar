@@ -18,13 +18,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
-	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
@@ -95,7 +95,7 @@ type seriesCache struct {
 
 type seriesCacheEntry struct {
 	proto    *monitoring_pb.TimeSeries
-	metadata *scrape.MetricMetadata
+	metadata *metadata.Entry
 	lset     labels.Labels
 	suffix   string
 	hash     uint64
@@ -411,7 +411,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	}
 	// Handle label modifications for histograms early so we don't build the label map twice.
 	// We have to remove the 'le' label which defines the bucket boundary.
-	if metadata.Type == textparse.MetricTypeHistogram {
+	if metadata.MetricType == textparse.MetricTypeHistogram {
 		for i, l := range finalLabels {
 			if l.Name == "le" {
 				finalLabels = append(finalLabels[:i], finalLabels[i+1:]...)
@@ -427,16 +427,22 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		Resource: resource,
 	}
 
-	switch metadata.Type {
+	switch metadata.MetricType {
 	case textparse.MetricTypeCounter:
 		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 		ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
+		if metadata.ValueType != metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED {
+			ts.ValueType = metadata.ValueType
+		}
 		if baseMetricName != "" && suffix == metricSuffixTotal {
 			ts.Metric.Type = c.getMetricType(c.metricsPrefix, baseMetricName)
 		}
 	case textparse.MetricTypeGauge, textparse.MetricTypeUnknown:
 		ts.MetricKind = metric_pb.MetricDescriptor_GAUGE
 		ts.ValueType = metric_pb.MetricDescriptor_DOUBLE
+		if metadata.ValueType != metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED {
+			ts.ValueType = metadata.ValueType
+		}
 	case textparse.MetricTypeSummary:
 		switch suffix {
 		case metricSuffixSum:
@@ -456,7 +462,7 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 		ts.MetricKind = metric_pb.MetricDescriptor_CUMULATIVE
 		ts.ValueType = metric_pb.MetricDescriptor_DISTRIBUTION
 	default:
-		return errors.Errorf("unexpected metric type %s", metadata.Type)
+		return errors.Errorf("unexpected metric type %s", metadata.MetricType)
 	}
 
 	entry.proto = ts
