@@ -154,24 +154,28 @@ type genericConfig struct {
 	Namespace string
 }
 
+type metricRenamesConfig struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+type staticMetadataConfig struct {
+	Metric    string `json:"metric"`
+	Type      string `json:"type"`
+	ValueType string `json:"value_type"`
+	Help      string `json:"help"`
+}
+
+type aggregatedCountersConfig struct {
+	Metric  string   `json:"metric"`
+	Filters []string `json:"filters"`
+	Help    string   `json:"help"`
+}
+
 type fileConfig struct {
-	MetricRenames []struct {
-		From string `json:"from"`
-		To   string `json:"to"`
-	} `json:"metric_renames"`
-
-	StaticMetadata []struct {
-		Metric    string `json:"metric"`
-		Type      string `json:"type"`
-		ValueType string `json:"value_type"`
-		Help      string `json:"help"`
-	} `json:"static_metadata"`
-
-	AggregatedCounters []struct {
-		Metric  string   `json:"metric"`
-		Filters []string `json:"filters"`
-		Help    string   `json:"help"`
-	} `json:"aggregated_counters"`
+	MetricRenames      []metricRenamesConfig      `json:"metric_renames"`
+	StaticMetadata     []staticMetadataConfig     `json:"static_metadata"`
+	AggregatedCounters []aggregatedCountersConfig `json:"aggregated_counters"`
 }
 
 // Note: When adding a new config field, consider adding it to
@@ -738,11 +742,15 @@ func parseConfigFile(filename string) (map[string]string, []*metadata.Entry, ret
 	if err := yaml.Unmarshal(b, &fc); err != nil {
 		return nil, nil, nil, errors.Wrap(err, "invalid YAML")
 	}
+	return processFileConfig(fc)
+}
+
+func processFileConfig(fc fileConfig) (map[string]string, []*metadata.Entry, retrieval.CounterAggregatorConfig, error) {
 	renameMapping := map[string]string{}
 	for _, r := range fc.MetricRenames {
 		renameMapping[r.From] = r.To
 	}
-	var staticMetadata []*metadata.Entry
+	staticMetadata := []*metadata.Entry{}
 	for _, sm := range fc.StaticMetadata {
 		switch sm.Type {
 		case metadata.MetricTypeUntyped:
@@ -753,12 +761,14 @@ func parseConfigFile(filename string) (map[string]string, []*metadata.Entry, ret
 		default:
 			return nil, nil, nil, errors.Errorf("invalid metric type %q", sm.Type)
 		}
-		valueType := metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED
+		var valueType metric_pb.MetricDescriptor_ValueType
 		switch sm.ValueType {
 		case "double":
 			valueType = metric_pb.MetricDescriptor_DOUBLE
 		case "int64":
 			valueType = metric_pb.MetricDescriptor_INT64
+		case "":
+			valueType = metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED
 		default:
 			return nil, nil, nil, errors.Errorf("invalid value type %q", sm.ValueType)
 		}

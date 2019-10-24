@@ -83,7 +83,7 @@ static_metadata:
 # - ...
 ```
 
-  * If `type` is specified, it will override the metric type chosen by the Prometheus client. The sidecar will reject metrics of unknown type.
+  * All `static_metadata` entries must have `type` specified. This specifies the Stackdriver metric type and overrides the metric type chosen by the Prometheus client.
   * If `value_type` is specified, it will override the default value type for counters and gauges. All Prometheus metrics have a default type of double.
 
 #### Counter Aggregator
