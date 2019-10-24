@@ -182,12 +182,11 @@ func TestParseWhitelists(t *testing.T) {
 
 func TestProcessFileConfig(t *testing.T) {
 	mustParseMetricSelector := func(input string) []*labels.Matcher {
-		if m, err := promql.ParseMetricSelector(input); err != nil {
+		m, err := promql.ParseMetricSelector(input)
+		if err != nil {
 			t.Fatalf("bad test input %v: %v", input, err)
-			return nil
-		} else {
-			return m
 		}
+		return m
 	}
 	for _, tt := range []struct {
 		name           string
