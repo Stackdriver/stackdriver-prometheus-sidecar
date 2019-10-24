@@ -27,7 +27,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/textparse"
-	"github.com/prometheus/prometheus/scrape"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
@@ -52,23 +51,19 @@ const DefaultEndpointPath = "api/v1/targets/metadata"
 const MetricTypeUntyped = "untyped"
 
 type Entry struct {
-	scrape.MetricMetadata
-	ValueType metric_pb.MetricDescriptor_ValueType
-}
-
-func (e *Entry) Metric() string {
-	return e.MetricMetadata.Metric
-}
-
-func (e *Entry) MetricType() textparse.MetricType {
-	return e.MetricMetadata.Type
+	Metric     string
+	MetricType textparse.MetricType
+	ValueType  metric_pb.MetricDescriptor_ValueType
+	Help       string
 }
 
 // NewEntry returns a new metadata entry.
 func NewEntry(metric string, metricType textparse.MetricType, valueType metric_pb.MetricDescriptor_ValueType, help string) *Entry {
 	return &Entry{
-		MetricMetadata: scrape.MetricMetadata{Metric: metric, Type: metricType, Help: help},
-		ValueType:      valueType,
+		Metric:     metric,
+		MetricType: metricType,
+		ValueType:  valueType,
+		Help:       help,
 	}
 }
 
@@ -87,7 +82,7 @@ func NewCache(client *http.Client, promURL *url.URL, staticMetadata []*Entry) *C
 		seenJobs:       map[string]struct{}{},
 	}
 	for _, m := range staticMetadata {
-		c.staticMetadata[m.MetricMetadata.Metric] = m
+		c.staticMetadata[m.Metric] = m
 	}
 	return c
 }
@@ -126,8 +121,8 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*Entry, 
 				// Only set if we haven't seen the metric before. Changes to metadata
 				// may need special handling in Stackdriver, which we do not provide
 				// yet anyway.
-				if _, ok := c.metadata[md.MetricMetadata.Metric]; !ok {
-					c.metadata[md.MetricMetadata.Metric] = md
+				if _, ok := c.metadata[md.Metric]; !ok {
+					c.metadata[md.Metric] = md
 				}
 			}
 			c.seenJobs[job] = struct{}{}
@@ -249,7 +244,7 @@ func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[strin
 	// Prometheus's scraping layer writes a few internal metrics, which we won't get
 	// metadata for via the API. We populate hardcoded metadata for them.
 	for _, md := range internalMetrics {
-		result[md.MetricMetadata.Metric] = &cacheEntry{Entry: md, lastFetch: now, found: true}
+		result[md.Metric] = &cacheEntry{Entry: md, lastFetch: now, found: true}
 	}
 	return result, nil
 }

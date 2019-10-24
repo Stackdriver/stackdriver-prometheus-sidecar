@@ -111,7 +111,7 @@
     <table>
       <tr><th>metric</th><th>type</th><th>unit</th></tr>
       {{range .StaticMetadata}}
-      <tr><td>{{.Metric}}</td><td>{{.Type}}</td><td>{{.Unit}}</td></tr>
+      <tr><td>{{.Metric}}</td><td>{{.MetricType}}</td><td>{{.ValueType}}</td></tr>
       {{end}}
     </table>
     {{else}}

@@ -73,7 +73,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 
 	var resetTimestamp int64
 
-	switch entry.metadata.MetricType() {
+	switch entry.metadata.MetricType {
 	case textparse.MetricTypeCounter:
 		var v float64
 		resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
@@ -114,7 +114,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		// We pass in the original lset for matching since Prometheus's target label must
 		// be the same as well.
 		var v *distribution_pb.Distribution
-		v, resetTimestamp, tailSamples, err = b.buildDistribution(ctx, entry.metadata.Metric(), entry.lset, samples)
+		v, resetTimestamp, tailSamples, err = b.buildDistribution(ctx, entry.metadata.Metric, entry.lset, samples)
 		if v == nil || err != nil {
 			return nil, 0, tailSamples, err
 		}
@@ -124,7 +124,7 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		}
 
 	default:
-		return nil, 0, samples[1:], errors.Errorf("unexpected metric type %s", entry.metadata.MetricType())
+		return nil, 0, samples[1:], errors.Errorf("unexpected metric type %s", entry.metadata.MetricType)
 	}
 
 	if !b.series.updateSampleInterval(entry.hash, resetTimestamp, sample.T) {

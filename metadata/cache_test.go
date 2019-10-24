@@ -26,7 +26,6 @@ import (
 	"testing"
 
 	"github.com/prometheus/prometheus/pkg/textparse"
-	"github.com/prometheus/prometheus/scrape"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
@@ -51,11 +50,11 @@ func TestCache_Get(t *testing.T) {
 			t.Fatal(err)
 		}
 	}))
-	expect := func(want apiMetadata, got *scrape.MetricMetadata) {
-		if !reflect.DeepEqual(got, &scrape.MetricMetadata{
-			Metric: want.Metric,
-			Type:   want.Type,
-			Help:   want.Help,
+	expect := func(want apiMetadata, got *Entry) {
+		if !reflect.DeepEqual(want, apiMetadata{
+			Metric: got.Metric,
+			Type:   got.MetricType,
+			Help:   got.Help,
 		}) {
 			t.Errorf("unexpected result %v, want %v", got, want)
 		}
@@ -89,7 +88,7 @@ func TestCache_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(metrics[1], &md.MetricMetadata)
+	expect(metrics[1], md)
 
 	// Query metric that should have been retrieved in the initial batch.
 	handler = func(qMetric, qMatch string) *apiResponse {
@@ -100,13 +99,13 @@ func TestCache_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(metrics[0], &md.MetricMetadata)
+	expect(metrics[0], md)
 	// Similarly, changing the instance should not trigger a fetch with a known metric and job.
 	md, err = c.Get(ctx, "prometheus", "localhost:8000", "metric3")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(metrics[2], &md.MetricMetadata)
+	expect(metrics[2], md)
 
 	// Query metric that was not in the batch, expect a single-metric query.
 	handler = func(qMetric, qMatch string) *apiResponse {
@@ -122,7 +121,7 @@ func TestCache_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(metrics[4], &md.MetricMetadata)
+	expect(metrics[4], md)
 	// It should be in our cache afterwards.
 	handler = func(qMetric, qMatch string) *apiResponse {
 		t.Fatal("unexpected request")
@@ -132,7 +131,7 @@ func TestCache_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(metrics[4], &md.MetricMetadata)
+	expect(metrics[4], md)
 
 	// Test "untyped" metric type from Prometheus 2.4.
 	handler = func(qMetric, qMatch string) *apiResponse {
@@ -148,7 +147,7 @@ func TestCache_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(apiMetadata{Metric: "metric6", Type: textparse.MetricTypeUnknown, Help: "help_metric6"}, &md.MetricMetadata)
+	expect(apiMetadata{Metric: "metric6", Type: textparse.MetricTypeUnknown, Help: "help_metric6"}, md)
 
 	// The scrape layer's metrics should not fire off requests.
 	md, err = c.Get(ctx, "prometheus", "localhost:9090", "up")
@@ -236,10 +235,9 @@ func TestCache_Get(t *testing.T) {
 		t.Fatal(err)
 	}
 	want = &Entry{
-		MetricMetadata: scrape.MetricMetadata{
-			Metric: "some:recording:rule",
-			Type:   textparse.MetricTypeGauge,
-		}}
+		Metric:     "some:recording:rule",
+		MetricType: textparse.MetricTypeGauge,
+	}
 	if !reflect.DeepEqual(md, want) {
 		t.Errorf("expected metadata %v but got %v", want, md)
 	}

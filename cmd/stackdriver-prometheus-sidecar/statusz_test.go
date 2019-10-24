@@ -137,8 +137,8 @@ func TestStatuszHandler(t *testing.T) {
 		regexp.MustCompile(`<tr><td>from2</td><td>to2</td></tr>`),
 		// for static metadata
 		regexp.MustCompile(`<h2>Static metadata</h2>`),
-		regexp.MustCompile(`<tr><td>metric1</td><td>type1</td><td></td></tr>`),
-		regexp.MustCompile(`<tr><td>metric2</td><td>type2</td><td></td></tr>`),
+		regexp.MustCompile(`<tr><td>metric1</td><td>type1</td><td>INT64</td></tr>`),
+		regexp.MustCompile(`<tr><td>metric2</td><td>type2</td><td>DOUBLE</td></tr>`),
 		// for aggregations
 		regexp.MustCompile(`<h2>Aggregations</h2>`),
 		regexp.MustCompile(`<tr><td>aggmetric1</td><td>\[\[k=.*v.*\]\]</td></tr>`),
