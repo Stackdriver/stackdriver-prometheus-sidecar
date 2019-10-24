@@ -225,9 +225,9 @@ func TestProcessFileConfig(t *testing.T) {
 			},
 			map[string]string{"from": "to"},
 			[]*metadata.Entry{
-				metadata.NewEntry("int64_counter", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_INT64, "help1"),
-				metadata.NewEntry("double_gauge", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, "help2"),
-				metadata.NewEntry("default_gauge", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED, ""),
+				&metadata.Entry{Metric: "int64_counter", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_INT64, Help: "help1"},
+				&metadata.Entry{Metric: "double_gauge", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE, Help: "help2"},
+				&metadata.Entry{Metric: "default_gauge", MetricType: textparse.MetricTypeGauge},
 			},
 			retrieval.CounterAggregatorConfig{
 				"network_transmit_bytes": &retrieval.CounterAggregatorMetricConfig{

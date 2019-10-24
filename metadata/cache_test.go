@@ -68,9 +68,9 @@ func TestCache_Get(t *testing.T) {
 	}
 	// Create cache with static metadata.
 	staticMetadata := []*Entry{
-		NewEntry("static_metric1", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_INT64, "help_static1"),
-		NewEntry("static_metric2", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_DOUBLE, "help_static2"),
-		NewEntry("metric_with_override", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_INT64, "help_metric_override"),
+		&Entry{Metric: "static_metric1", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_INT64, Help: "help_static1"},
+		&Entry{Metric: "static_metric2", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_DOUBLE, Help: "help_static2"},
+		&Entry{Metric: "metric_with_override", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_INT64, Help: "help_metric_override"},
 	}
 	c := NewCache(nil, u, staticMetadata)
 
@@ -244,16 +244,15 @@ func TestCache_Get(t *testing.T) {
 }
 
 func TestNewCache(t *testing.T) {
-	valueType := metric_pb.MetricDescriptor_INT64
 	static := []*Entry{
-		NewEntry("a", "", valueType, "a"),
-		NewEntry("b", "", valueType, "b"),
+		&Entry{Metric: "a", Help: "a"},
+		&Entry{Metric: "b", Help: "b"},
 	}
 	c := NewCache(nil, nil, static)
 
 	want := map[string]*Entry{
-		"a": NewEntry("a", "", valueType, "a"),
-		"b": NewEntry("b", "", valueType, "b"),
+		"a": &Entry{Metric: "a", Help: "a"},
+		"b": &Entry{Metric: "b", Help: "b"},
 	}
 	if !reflect.DeepEqual(c.staticMetadata, want) {
 		t.Errorf("expected metadata %v but got %v", want, c.staticMetadata)

@@ -90,8 +90,8 @@ func TestStatuszHandler(t *testing.T) {
 			PrometheusURL:      mustParseURL(t, "http://127.0.0.1:9090/"),
 			StackdriverAddress: mustParseURL(t, "https://monitoring.googleapis.com:443/"),
 			StaticMetadata: []*metadata.Entry{
-				metadata.NewEntry("metric1", textparse.MetricType("type1"), metric_pb.MetricDescriptor_INT64, ""),
-				metadata.NewEntry("metric2", textparse.MetricType("type2"), metric_pb.MetricDescriptor_DOUBLE, ""),
+				&metadata.Entry{Metric: "metric1", MetricType: textparse.MetricType("type1"), ValueType: metric_pb.MetricDescriptor_INT64},
+				&metadata.Entry{Metric: "metric2", MetricType: textparse.MetricType("type2"), ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			StoreInFilesDirectory: "/my/files/directory",
 			UseGKEResource:        true,

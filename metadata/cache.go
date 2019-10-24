@@ -57,16 +57,6 @@ type Entry struct {
 	Help       string
 }
 
-// NewEntry returns a new metadata entry.
-func NewEntry(metric string, metricType textparse.MetricType, valueType metric_pb.MetricDescriptor_ValueType, help string) *Entry {
-	return &Entry{
-		Metric:     metric,
-		MetricType: metricType,
-		ValueType:  valueType,
-		Help:       help,
-	}
-}
-
 // NewCache returns a new cache that gets populated by the metadata endpoint
 // at the given URL.
 // It uses the default endpoint path if no specific path is provided.
@@ -142,7 +132,7 @@ func (c *Cache) Get(ctx context.Context, job, instance, metric string) (*Entry, 
 	// contain at least one `:` character. In that case we can generally assume that
 	// it is a gauge. We leave the help text empty.
 	if strings.Contains(metric, ":") {
-		entry := NewEntry(metric, textparse.MetricTypeGauge, metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED, "")
+		entry := &Entry{Metric: metric, MetricType: textparse.MetricTypeGauge}
 		return entry, nil
 	}
 	return nil, nil
@@ -200,7 +190,7 @@ func (c *Cache) fetchMetric(ctx context.Context, job, instance, metric string) (
 		d.Type = textparse.MetricTypeUnknown
 	}
 	return &cacheEntry{
-		Entry:     NewEntry(metric, d.Type, metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED, d.Help),
+		Entry:     &Entry{Metric: metric, MetricType: d.Type, Help: d.Help},
 		lastFetch: now,
 		found:     true,
 	}, nil
@@ -236,7 +226,7 @@ func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[strin
 			md.Type = textparse.MetricTypeUnknown
 		}
 		result[md.Metric] = &cacheEntry{
-			Entry:     NewEntry(md.Metric, md.Type, metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED, md.Help),
+			Entry:     &Entry{Metric: md.Metric, MetricType: md.Type, Help: md.Help},
 			lastFetch: now,
 			found:     true,
 		}
@@ -250,26 +240,26 @@ func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[strin
 }
 
 var internalMetrics = map[string]*Entry{
-	"up": NewEntry(
-		"up",
-		textparse.MetricTypeGauge,
-		metric_pb.MetricDescriptor_DOUBLE,
-		"Up indicates whether the last target scrape was successful"),
-	"scrape_samples_scraped": NewEntry(
-		"scrape_samples_scraped",
-		textparse.MetricTypeGauge,
-		metric_pb.MetricDescriptor_DOUBLE,
-		"How many samples were scraped during the last successful scrape"),
-	"scrape_duration_seconds": NewEntry(
-		"scrape_duration_seconds",
-		textparse.MetricTypeGauge,
-		metric_pb.MetricDescriptor_DOUBLE,
-		"Duration of the last scrape"),
-	"scrape_samples_post_metric_relabeling": NewEntry(
-		"scrape_samples_post_metric_relabeling",
-		textparse.MetricTypeGauge,
-		metric_pb.MetricDescriptor_DOUBLE,
-		"How many samples were ingested after relabeling"),
+	"up": &Entry{
+		Metric:     "up",
+		MetricType: textparse.MetricTypeGauge,
+		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help:       "Up indicates whether the last target scrape was successful"},
+	"scrape_samples_scraped": &Entry{
+		Metric:     "scrape_samples_scraped",
+		MetricType: textparse.MetricTypeGauge,
+		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help:       "How many samples were scraped during the last successful scrape"},
+	"scrape_duration_seconds": &Entry{
+		Metric:     "scrape_duration_seconds",
+		MetricType: textparse.MetricTypeGauge,
+		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help:       "Duration of the last scrape"},
+	"scrape_samples_post_metric_relabeling": &Entry{
+		Metric:     "scrape_samples_post_metric_relabeling",
+		MetricType: textparse.MetricTypeGauge,
+		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help:       "How many samples were ingested after relabeling"},
 }
 
 type apiResponse struct {

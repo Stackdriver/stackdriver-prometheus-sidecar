@@ -82,7 +82,7 @@ func TestReader_Progress(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED, "help"),
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, Help: "help"},
 	}
 
 	aggr, _ := NewCounterAggregator(log.NewNopLogger(), new(CounterAggregatorConfig))

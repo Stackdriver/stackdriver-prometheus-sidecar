@@ -58,7 +58,7 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
 	c := newSeriesCache(logger, dir, nil, nil,
 		targetMap{"/": &targets.Target{}},
-		metadataMap{"//": metadata.NewEntry("", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, "")},
+		metadataMap{"//": &metadata.Entry{MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE}},
 		[]ResourceMap{
 			{Type: "resource1", LabelMap: map[string]labelTranslation{}},
 		},
@@ -239,7 +239,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
 		DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
 	}
-	metadataMap["job1/inst1/metric1"] = metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, "")
+	metadataMap["job1/inst1/metric1"] = &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE}
 
 	// Hack the timestamp of the last update to be sufficiently in the past that a refresh
 	// will be triggered.
@@ -276,7 +276,7 @@ func TestSeriesCache_RefreshTooManyLabels(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 	}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
 	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
@@ -328,7 +328,7 @@ func TestSeriesCache_RefreshUnknownResource(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 	}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
 	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
@@ -416,7 +416,7 @@ func TestSeriesCache_Filter(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 	}
 	logBuffer := &bytes.Buffer{}
 	defer func() {
@@ -478,7 +478,7 @@ func TestSeriesCache_CounterAggregator(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 	}
 	logger := log.NewNopLogger()
 	aggr, _ := NewCounterAggregator(logger, &CounterAggregatorConfig{
@@ -547,8 +547,8 @@ func TestSeriesCache_RenameMetric(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
-		"job1/inst1/metric2": metadata.NewEntry("metric2", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+		"job1/inst1/metric2": &metadata.Entry{Metric: "metric2", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 	}
 	logBuffer := &bytes.Buffer{}
 	defer func() {

@@ -109,20 +109,20 @@ func TestSampleBuilder(t *testing.T) {
 			},
 			metadata: metadataMap{
 				// Gauge as double.
-				"job1/instance1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 				// Gauge as integer.
-				"job1/instance1/metric3": metadata.NewEntry("metric3", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_INT64, ""),
+				"job1/instance1/metric3": &metadata.Entry{Metric: "metric3", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_INT64},
 				// Gauge as default value type (double).
-				"job1/instance1/metric5": metadata.NewEntry("metric5", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED, ""),
+				"job1/instance1/metric5": &metadata.Entry{Metric: "metric5", MetricType: textparse.MetricTypeGauge},
 				// Counter as double.
-				"job1/instance1/metric2": metadata.NewEntry("metric2", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric2": &metadata.Entry{Metric: "metric2", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 				// Counter as integer.
-				"job1/instance1/metric4": metadata.NewEntry("metric4", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_INT64, ""),
+				"job1/instance1/metric4": &metadata.Entry{Metric: "metric4", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_INT64},
 				// Counter as default value type (double).
-				"job1/instance1/metric6":              metadata.NewEntry("metric6", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED, ""),
-				"job1/instance1/labelnum_ok":          metadata.NewEntry("labelnum_ok", textparse.MetricTypeUnknown, metric_pb.MetricDescriptor_DOUBLE, ""),
-				"job1/instance1/labelnum_bad":         metadata.NewEntry("labelnum_bad", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
-				"job2/instance1/resource_from_metric": metadata.NewEntry("resource_from_metric", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric6":              &metadata.Entry{Metric: "metric6", MetricType: textparse.MetricTypeCounter},
+				"job1/instance1/labelnum_ok":          &metadata.Entry{Metric: "labelnum_ok", MetricType: textparse.MetricTypeUnknown, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+				"job1/instance1/labelnum_bad":         &metadata.Entry{Metric: "labelnum_bad", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+				"job2/instance1/resource_from_metric": &metadata.Entry{Metric: "resource_from_metric", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			input: []tsdb.RefSample{
 				{Ref: 2, T: 2000, V: 5.5},
@@ -368,7 +368,7 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			series: seriesMap{
 				1: labels.FromStrings("job", "job1", "instance", "instance_notfound", "__name__", "metric1"),
@@ -391,7 +391,7 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeSummary, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeSummary, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			series: seriesMap{
 				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_sum"),
@@ -503,8 +503,8 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1":         metadata.NewEntry("metric1", textparse.MetricTypeHistogram, metric_pb.MetricDescriptor_DOUBLE, ""),
-				"job1/instance1/metric1_a_count": metadata.NewEntry("metric1_a_count", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1":         &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeHistogram, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+				"job1/instance1/metric1_a_count": &metadata.Entry{Metric: "metric1_a_count", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			series: seriesMap{
 				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_sum"),
@@ -660,8 +660,8 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_DOUBLE, ""),
-				"job1/instance2/metric1": metadata.NewEntry("metric1", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+				"job1/instance2/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			input: []tsdb.RefSample{
 				// First sample for both series will define the reset timestamp.
@@ -736,7 +736,7 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{
@@ -778,7 +778,7 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1_total": metadata.NewEntry("metric1_total", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1_total": &metadata.Entry{Metric: "metric1_total", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{
@@ -824,7 +824,7 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeCounter, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{
@@ -870,7 +870,7 @@ func TestSampleBuilder(t *testing.T) {
 				},
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": metadata.NewEntry("metric1", textparse.MetricTypeGauge, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{
@@ -911,7 +911,7 @@ func TestSampleBuilder(t *testing.T) {
 				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_count"),
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": metadata.NewEntry("metric1_count", textparse.MetricTypeSummary, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1": &metadata.Entry{Metric: "metric1_count", MetricType: textparse.MetricTypeSummary, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{
@@ -937,7 +937,7 @@ func TestSampleBuilder(t *testing.T) {
 				1: labels.FromStrings("job", "job1", "instance", "instance1", "__name__", "metric1_count"),
 			},
 			metadata: metadataMap{
-				"job1/instance1/metric1": metadata.NewEntry("metric1_count", textparse.MetricTypeSummary, metric_pb.MetricDescriptor_DOUBLE, ""),
+				"job1/instance1/metric1": &metadata.Entry{Metric: "metric1_count", MetricType: textparse.MetricTypeSummary, ValueType: metric_pb.MetricDescriptor_DOUBLE},
 			},
 			metricPrefix: "test.googleapis.com",
 			input: []tsdb.RefSample{

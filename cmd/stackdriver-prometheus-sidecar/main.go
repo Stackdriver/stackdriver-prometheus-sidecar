@@ -773,7 +773,7 @@ func processFileConfig(fc fileConfig) (map[string]string, []*metadata.Entry, ret
 			return nil, nil, nil, errors.Errorf("invalid value type %q", sm.ValueType)
 		}
 		staticMetadata = append(staticMetadata,
-			metadata.NewEntry(sm.Metric, textparse.MetricType(sm.Type), valueType, sm.Help))
+			&metadata.Entry{Metric: sm.Metric, MetricType: textparse.MetricType(sm.Type), ValueType: valueType, Help: sm.Help})
 	}
 
 	aggregations := make(retrieval.CounterAggregatorConfig)
