@@ -79,7 +79,9 @@ cover: format
 
 format:
 	@echo ">> formatting code"
-	GO111MODULE=$(GO111MODULE) $(GO) fmt $(GOOPTS) $(pkgs)
+	# Replace gofmt call once we bump to a more recent Go that supports `-mod=vendor`, probably 1.14.
+	# GO111MODULE=$(GO111MODULE) $(GO) fmt $(GOOPTS) $(pkgs)
+	@! $(GOFMT) -l -w $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 vet:
 	@echo ">> vetting code"
