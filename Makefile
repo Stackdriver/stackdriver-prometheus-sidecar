@@ -79,7 +79,7 @@ cover:
 
 format:
 	@echo ">> formatting code"
-	GO111MODULE=$(GO111MODULE) $(GO) fmt $(pkgs)
+	GO111MODULE=$(GO111MODULE) $(GO) fmt -mod=vendor $(pkgs)
 
 vet:
 	@echo ">> vetting code"
