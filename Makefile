@@ -73,7 +73,7 @@ test:
 	@echo ">> running all tests"
 	GO111MODULE=$(GO111MODULE) $(GO) test $(GOOPTS) $(pkgs)
 
-cover:
+cover: format
 	@echo ">> running all tests with coverage"
 	GO111MODULE=$(GO111MODULE) $(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
 
