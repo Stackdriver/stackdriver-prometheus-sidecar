@@ -73,7 +73,7 @@ test:
 	@echo ">> running all tests"
 	GO111MODULE=$(GO111MODULE) $(GO) test $(GOOPTS) $(pkgs)
 
-cover: format
+cover:
 	@echo ">> running all tests with coverage"
 	GO111MODULE=$(GO111MODULE) $(GO) test -coverprofile=coverage.out $(GOOPTS) $(pkgs)
 
@@ -81,6 +81,7 @@ format:
 	@echo ">> formatting code"
 	# Replace gofmt call once we bump to a more recent Go that supports `-mod=vendor`, probably 1.14.
 	# GO111MODULE=$(GO111MODULE) $(GO) fmt $(GOOPTS) $(pkgs)
+	# Avoid formatting anything under vendor/.
 	$(GOFMT) -l -w $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 vet:
