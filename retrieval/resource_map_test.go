@@ -232,8 +232,8 @@ func TestResourceMappingsOrder(t *testing.T) {
 		{"k8s_pod", "k8s_node"},
 		{"k8s_node", "gce_instance"},
 		{"k8s_node", "aws_ec2_instance"},
-		{"proxy", "k8s_container"},
-		{"devapp", "k8s_container"},
+		{"apigee.googleapis.com/Proxy", "k8s_container"},
+		{"apigee.googleapis.com/Devapp", "k8s_container"},
 	}
 	for _, c := range cases {
 		var (
