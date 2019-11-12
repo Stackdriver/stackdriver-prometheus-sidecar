@@ -91,7 +91,7 @@ var GKEResourceMap = ResourceMap{
 }
 
 var DevappResourceMap = ResourceMap{
-	Type:       "devapp",
+	Type:       "apigee.googleapis.com/Devapp",
 	MatchLabel: "__meta_kubernetes_pod_label_type_devapp",
 	LabelMap: map[string]labelTranslation{
 		ProjectIDLabel:                    constValue("resource_container"),
@@ -103,7 +103,7 @@ var DevappResourceMap = ResourceMap{
 }
 
 var ProxyResourceMap = ResourceMap{
-	Type:       "proxy",
+	Type:       "apigee.googleapis.com/Proxy",
 	MatchLabel: "__meta_kubernetes_pod_label_type_proxy",
 	LabelMap: map[string]labelTranslation{
 		ProjectIDLabel:                    constValue("resource_container"),
