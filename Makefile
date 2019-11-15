@@ -134,9 +134,9 @@ promu:
 	rm -r $(PROMU_TMP)
 
 $(FIRST_GOPATH)/bin/staticcheck:
-	GOOS= GOARCH= $(GO) get -u honnef.co/go/tools/cmd/staticcheck
+	GOOS= GOARCH= $(GO) get honnef.co/go/tools/cmd/staticcheck
 
 $(FIRST_GOPATH)/bin/goveralls:
-	GOOS= GOARCH= $(GO) get -u github.com/mattn/goveralls
+	GOOS= GOARCH= $(GO) get github.com/mattn/goveralls
 
 .PHONY: all style deps format build test vet assets tarball docker promu staticcheck $(FIRST_GOPATH)/bin/staticcheck goveralls $(FIRST_GOPATH)/bin/goveralls
