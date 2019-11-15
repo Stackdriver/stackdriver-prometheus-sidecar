@@ -97,7 +97,7 @@ ifndef COVERALLS_TOKEN
 	$(error COVERALLS_TOKEN is undefined, follow https://docs.coveralls.io/go to create one and go to https://coveralls.io to retrieve existing ones)
 endif
 	@echo ">> running goveralls"
-	$(GOVERALLS) -coverprofile=coverage.out -service=travis-ci -repotoken "${COVERALLS_TOKEN}"
+	GO111MODULE=$(GO111MODULE) $(GOVERALLS) -coverprofile=coverage.out -service=travis-ci -repotoken "${COVERALLS_TOKEN}"
 
 build: promu
 	@echo ">> building binaries"
