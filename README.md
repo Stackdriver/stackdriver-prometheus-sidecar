@@ -117,13 +117,10 @@ When using Counter Aggregator you would usually want to configure a restrictive 
 
 The matrix below lists the versions of Prometheus Server and other dependencies that have been qualified to work with releases of `stackdriver-prometheus-sidecar`. If the matrix does not list whether they are compatible, please assume they are not verified yet. Feel free to contribute to the matrix if you have run the end-to-end test between a version of `stackdriver-prometheus-sidecar` and Prometheus server. 
 
-| sidecar version | **Prometheus 2.4.3** | **Prometheus 2.5.x** | **Prometheus 2.6.x** | **Prometheus 2.7.x ~ 2.10.x** | **Prometheus 2.11.x** | **Prometheus 2.12+** |
-|-----------------|----------------------|----------------------|----------------------|---------------------|---------------------|---------------------|
-| **0.2.x**       |          ✓           |          ✗           |          ✗           |          ?          |          ?          |          ?          |
-| **0.3.x**       |          ✓           |          ✗           |          ✓           |          ?          |          ?          |          ?          |
-| **0.4.x**       |          ?           |          ✗           |          ✓           |          ?          |          ?          |          ?          |
-| **0.5.x**       |          ?           |          ✗           |          ✓           |          ?          |          ✓          |          ?          |
-| **0.6.x**       |          ?           |          ✗           |          ?           |          ?          |          ✓          |          ?          |
+| sidecar version | **Prometheus 2.5.x** | **Prometheus 2.6.x** | **Prometheus 2.7.x ~ 2.10.x** | **Prometheus 2.11.x** | **Prometheus 2.12+** |
+|-----------------|----------------------|----------------------|---------------------|---------------------|---------------------|
+| **0.5.x**       |          ✗           |          ✓           |          ?          |          ✓          |          ?          |
+| **0.6.x**       |          ✗           |          ?           |          ?          |          ✓          |          ?          |
 
 - ✓: Verified as compatible.
 - ✗: Verified as incompatible.
