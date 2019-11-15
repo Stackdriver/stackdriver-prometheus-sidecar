@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 	}
 	promPath = filepath.Join(promPath, "prometheus")
 
-	build := exec.Command("go", "build", "-o", promPath)
+	build := exec.Command("go", "build", "-mod=vendor", "-o", promPath)
 	output, err := build.CombinedOutput()
 	if err != nil {
 		fmt.Printf("compilation error :%s \n", output)
