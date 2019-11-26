@@ -36,7 +36,7 @@ var promPath string
 
 func TestMain(m *testing.M) {
 	if os.Getenv("RUN_MAIN") == "" {
-		// Normal test mode.
+		// Run the test directly.
 		os.Exit(m.Run())
 	}
 
