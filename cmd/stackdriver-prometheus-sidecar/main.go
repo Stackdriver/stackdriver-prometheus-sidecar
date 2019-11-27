@@ -104,41 +104,7 @@ func init() {
 		panic(err)
 	}
 	if err := view.Register(
-		&view.View{
-			Measure:     ocgrpc.ClientSentBytesPerRPC,
-			Name:        "grpc.io/client/sent_bytes_per_rpc",
-			Description: "Distribution of bytes sent per RPC, by method.",
-			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
-			Aggregation: sizeDistribution,
-		},
-		&view.View{
-			Measure:     ocgrpc.ClientReceivedBytesPerRPC,
-			Name:        "grpc.io/client/received_bytes_per_rpc",
-			Description: "Distribution of bytes received per RPC, by method.",
-			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
-			Aggregation: sizeDistribution,
-		},
-		&view.View{
-			Measure:     ocgrpc.ClientRoundtripLatency,
-			Name:        "grpc.io/client/roundtrip_latency",
-			Description: "Distribution of round-trip latency, by method.",
-			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
-			Aggregation: latencyDistribution,
-		},
-		&view.View{
-			Measure:     ocgrpc.ClientRoundtripLatency,
-			Name:        "grpc.io/client/completed_rpcs",
-			Description: "Count of RPCs by method and status.",
-			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
-			Aggregation: view.Count(),
-		},
-		&view.View{
-			Measure:     ocgrpc.ClientServerLatency,
-			Name:        "grpc.io/client/server_latency",
-			Description: "Distribution of server latency as viewed by client, by method.",
-			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
-			Aggregation: latencyDistribution,
-		},
+		ocgrpc.DefaultClientViews...
 	); err != nil {
 		panic(err)
 	}
