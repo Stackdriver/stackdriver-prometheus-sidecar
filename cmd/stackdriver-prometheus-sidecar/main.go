@@ -55,6 +55,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
@@ -66,6 +67,12 @@ import (
 var (
 	sizeDistribution    = view.Distribution(0, 1024, 2048, 4096, 16384, 65536, 262144, 1048576, 4194304, 33554432)
 	latencyDistribution = view.Distribution(0, 1, 2, 5, 10, 15, 25, 50, 100, 200, 400, 800, 1500, 3000, 6000)
+
+	// VersionTag identifies the version of this binary.
+	VersionTag = tag.MustNewKey("version")
+	// UptimeMeasure is a metric.
+	UptimeMeasure = stats.Int64("agent.googleapis.com/agent/uptime", "uptime of the Stackdriver Prometheus collector",
+		stats.UnitSeconds)
 )
 
 func init() {
@@ -138,6 +145,15 @@ func init() {
 			Description: "Distribution of server latency as viewed by client, by method.",
 			TagKeys:     []tag.Key{ocgrpc.KeyClientMethod, ocgrpc.KeyClientStatus},
 			Aggregation: latencyDistribution,
+		},
+	); err != nil {
+		panic(err)
+	}
+	if err := view.Register(
+		&view.View{
+			Measure:     UptimeMeasure,
+			TagKeys:     []tag.Key{VersionTag},
+			Aggregation: view.LastValue(),
 		},
 	); err != nil {
 		panic(err)
