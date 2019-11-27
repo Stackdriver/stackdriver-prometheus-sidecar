@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"go.opencensus.io/plugin/ocgrpc"
+	"go.opencensus.io/stats"
+	"go.opencensus.io/tag"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/balancer/roundrobin"
@@ -41,6 +43,15 @@ import (
 const (
 	MaxTimeseriesesPerRequest = 200
 	MonitoringWriteScope      = "https://www.googleapis.com/auth/monitoring.write"
+)
+
+var (
+	// StatusTag is the google3 canonical status code: google3/google/rpc/code.proto
+	StatusTag = tag.MustNewKey("status")
+
+	// PointCount is a metric.
+	PointCount = stats.Int64("agent.googleapis.com/agent/monitoring/point_count",
+		"count of metric points written to Stackdriver", stats.UnitDimensionless)
 )
 
 // Client allows reading and writing from/to a remote gRPC endpoint. The
