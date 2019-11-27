@@ -16,12 +16,9 @@ package main
 import (
 	"bytes"
 	"errors"
-	"flag"
-	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -38,31 +35,12 @@ import (
 var promPath string
 
 func TestMain(m *testing.M) {
-	flag.Parse()
-	if testing.Short() {
+	if os.Getenv("RUN_MAIN") == "" {
+		// Run the test directly.
 		os.Exit(m.Run())
 	}
-	// On linux with a global proxy the tests will fail as the go client(http,grpc) tries to connect through the proxy.
-	os.Setenv("no_proxy", "localhost,127.0.0.1,0.0.0.0,:")
 
-	var err error
-	promPath, err = os.Getwd()
-	if err != nil {
-		fmt.Printf("can't get current dir :%s \n", err)
-		os.Exit(1)
-	}
-	promPath = filepath.Join(promPath, "prometheus")
-
-	build := exec.Command("go", "build", "-o", promPath)
-	output, err := build.CombinedOutput()
-	if err != nil {
-		fmt.Printf("compilation error :%s \n", output)
-		os.Exit(1)
-	}
-
-	exitCode := m.Run()
-	os.Remove(promPath)
-	os.Exit(exitCode)
+	main()
 }
 
 // As soon as prometheus starts responding to http request should be able to accept Interrupt signals for a gracefull shutdown.
@@ -71,7 +49,8 @@ func TestStartupInterrupt(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	prom := exec.Command(promPath, "--stackdriver.project-id=1234", "--prometheus.wal-directory=testdata/wal")
+	prom := exec.Command(os.Args[0], "--stackdriver.project-id=1234", "--prometheus.wal-directory=testdata/wal")
+	prom.Env = append(os.Environ(), "RUN_MAIN=1")
 	var bout, berr bytes.Buffer
 	prom.Stdout = &bout
 	prom.Stderr = &berr
