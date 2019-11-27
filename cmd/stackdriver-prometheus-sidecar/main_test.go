@@ -32,8 +32,6 @@ import (
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
-var promPath string
-
 func TestMain(m *testing.M) {
 	if os.Getenv("RUN_MAIN") == "" {
 		// Run the test directly.
@@ -49,12 +47,12 @@ func TestStartupInterrupt(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	prom := exec.Command(os.Args[0], "--stackdriver.project-id=1234", "--prometheus.wal-directory=testdata/wal")
-	prom.Env = append(os.Environ(), "RUN_MAIN=1")
+	cmd := exec.Command(os.Args[0], "--stackdriver.project-id=1234", "--prometheus.wal-directory=testdata/wal")
+	cmd.Env = append(os.Environ(), "RUN_MAIN=1")
 	var bout, berr bytes.Buffer
-	prom.Stdout = &bout
-	prom.Stderr = &berr
-	err := prom.Start()
+	cmd.Stdout = &bout
+	cmd.Stderr = &berr
+	err := cmd.Start()
 	if err != nil {
 		t.Errorf("execution error: %v", err)
 		return
@@ -62,7 +60,7 @@ func TestStartupInterrupt(t *testing.T) {
 
 	done := make(chan error)
 	go func() {
-		done <- prom.Wait()
+		done <- cmd.Wait()
 	}()
 
 	var startedOk bool
@@ -73,7 +71,7 @@ Loop:
 		// error=nil means the sidecar has started so can send the interrupt signal and wait for the grace shutdown.
 		if _, err := http.Get("http://localhost:9091/metrics"); err == nil {
 			startedOk = true
-			prom.Process.Signal(os.Interrupt)
+			cmd.Process.Signal(os.Interrupt)
 			select {
 			case stoppedErr = <-done:
 				break Loop
@@ -93,13 +91,13 @@ Loop:
 	t.Logf("stodut: %v\n", bout.String())
 	t.Logf("stderr: %v\n", berr.String())
 	if !startedOk {
-		t.Errorf("prometheus didn't start in the specified timeout")
+		t.Errorf("prometheus-stackdriver-sidecar didn't start in the specified timeout")
 		return
 	}
-	if err := prom.Process.Kill(); err == nil {
-		t.Errorf("prometheus didn't shutdown gracefully after sending the Interrupt signal")
+	if err := cmd.Process.Kill(); err == nil {
+		t.Errorf("prometheus-stackdriver-sidecar didn't shutdown gracefully after sending the Interrupt signal")
 	} else if stoppedErr != nil && stoppedErr.Error() != "signal: interrupt" { // TODO - find a better way to detect when the process didn't exit as expected!
-		t.Errorf("prometheus exited with an unexpected error:%v", stoppedErr)
+		t.Errorf("prometheus-stackdriver-sidecar exited with an unexpected error:%v", stoppedErr)
 	}
 }
 
