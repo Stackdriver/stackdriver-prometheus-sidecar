@@ -292,6 +292,14 @@ func main() {
 	level.Info(logger).Log("host_details", Uname())
 	level.Info(logger).Log("fd_limits", FdLimits())
 
+	// We instantiate a context here since the tailer is used by two other components.
+	// The context will be used in the lifecycle of prometheusReader further down.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	stats.RecordWithTags(ctx,
+		[]tag.Mutator{tag.Upsert(VersionTag, fmt.Sprintf("stackdriver-prometheus-sidecar/%d", version.))},
+		UptimeMeasure.M(time.Now().Unix()))
+
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
 	if *projectId == "" {
@@ -371,10 +379,6 @@ func main() {
 		panic(err)
 	}
 	metadataCache := metadata.NewCache(httpClient, metadataURL, cfg.StaticMetadata)
-
-	// We instantiate a context here since the tailer is used by two other components.
-	// The context will be used in the lifecycle of prometheusReader further down.
-	ctx, cancel := context.WithCancel(context.Background())
 
 	tailer, err := tail.Tail(ctx, cfg.WALDirectory)
 	if err != nil {
