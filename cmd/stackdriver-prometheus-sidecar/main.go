@@ -104,11 +104,7 @@ func init() {
 		panic(err)
 	}
 	if err := view.Register(
-		ocgrpc.ClientSentBytesPerRPCView,
-		ocgrpc.ClientReceivedBytesPerRPCView,
-		ocgrpc.ClientRoundtripLatencyView,
-		ocgrpc.ClientCompletedRPCsView,
-		ocgrpc.ClientServerLatencyView,
+		ocgrpc.DefaultClientViews...
 	); err != nil {
 		panic(err)
 	}
