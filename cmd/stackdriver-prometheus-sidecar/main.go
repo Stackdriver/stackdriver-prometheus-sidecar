@@ -104,7 +104,7 @@ func init() {
 		panic(err)
 	}
 	if err := view.Register(
-		ocgrpc.DefaultClientViews...
+		ocgrpc.DefaultClientViews...,
 	); err != nil {
 		panic(err)
 	}
