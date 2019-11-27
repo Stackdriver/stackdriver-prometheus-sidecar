@@ -297,7 +297,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	stats.RecordWithTags(ctx,
-		[]tag.Mutator{tag.Upsert(VersionTag, fmt.Sprintf("stackdriver-prometheus-sidecar/%d", version.))},
+		[]tag.Mutator{tag.Upsert(VersionTag, fmt.Sprintf("stackdriver-prometheus-sidecar/%s", version.Version))},
 		UptimeMeasure.M(time.Now().Unix()))
 
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
