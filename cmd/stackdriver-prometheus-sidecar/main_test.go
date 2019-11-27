@@ -33,12 +33,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if os.Getenv("RUN_MAIN") != "" {
-		main()
+	if os.Getenv("RUN_MAIN") == "" {
+		// Run the test directly.
+		os.Exit(m.Run())
 	}
 
-	// Run the test directly.
-	os.Exit(m.Run())
+	main()
 }
 
 // As soon as prometheus starts responding to http request should be able to accept Interrupt signals for a gracefull shutdown.
