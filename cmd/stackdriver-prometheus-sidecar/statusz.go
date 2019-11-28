@@ -27,7 +27,6 @@ import (
 
 var (
 	serverStart = time.Now()
-	statuszTmpl = template.Must(template.ParseFiles("statusz-tmpl.html"))
 )
 
 type statuszHandler struct {
@@ -79,7 +78,8 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	data.GKEInfo.ClusterName = h.cfg.KubernetesLabels.ClusterName
 
 	data.Config = h.cfg
-
+	
+        var statuszTmpl = template.Must(template.ParseFiles("statusz-tmpl.html"))
 	if err := statuszTmpl.Execute(w, data); err != nil {
 		level.Error(h.logger).Log("msg", "couldn't execute template", "err", err)
 	}
