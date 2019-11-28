@@ -25,6 +25,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/golang/lint v0.0.0-20180702182130-06c8688daad7 // indirect
 	github.com/golang/protobuf v1.3.2
+	github.com/google/btree v1.0.0 // indirect
 	github.com/google/go-cmp v0.3.1
 	github.com/googleapis/gnostic v0.3.0 // indirect
 	github.com/gophercloud/gophercloud v0.3.0 // indirect
