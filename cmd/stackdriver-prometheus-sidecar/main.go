@@ -327,6 +327,14 @@ func main() {
 				ReportingInterval: reportingInterval,
 				// Disable default `opencensus_task` label.
 				DefaultMonitoringLabels: &oc_stackdriver.Labels{},
+				GetMetricType: func(v *view.View) string {
+					// Curated metrics produced by this process.
+					if strings.Contains(v.Name, "agent.googleapis.com") {
+						return v.Name
+					}
+					// Default OpenCensus behavior.
+					return path.Join("custom.googleapis.com", "opencensus", v.Name)
+				},
 			})
 			if err != nil {
 				level.Error(logger).Log("msg", "Creating Stackdriver exporter failed", "err", err)
