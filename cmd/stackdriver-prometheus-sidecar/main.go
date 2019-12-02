@@ -319,18 +319,20 @@ func main() {
 			}
 			view.RegisterExporter(promExporter)
 		case "stackdriver":
+			const reportingInterval = 60 * time.Second
 			sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{
 				ProjectID: *projectId,
 				// If the OpenCensus resource environment variables aren't set, the monitored resource will likely fall back to `generic_task`.
 				ResourceDetector:  resource.FromEnv,
-				ReportingInterval: 60 * time.Second,
+				ReportingInterval: reportingInterval,
 			})
 			if err != nil {
 				level.Error(logger).Log("msg", "Creating Stackdriver exporter failed", "err", err)
 				os.Exit(1)
 			}
-			sd.StartMetricsExporter()
-			defer sd.StopMetricsExporter()
+			defer sd.Flush()
+			view.RegisterExporter(sd)
+			view.SetReportingPeriod(reportingInterval)
 		default:
 			level.Error(logger).Log("msg", "Unknown monitoring backend", "backend", backend)
 			os.Exit(1)
