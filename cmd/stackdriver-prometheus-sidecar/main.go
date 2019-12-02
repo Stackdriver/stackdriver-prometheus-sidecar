@@ -55,6 +55,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/resource"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -318,14 +319,18 @@ func main() {
 			}
 			view.RegisterExporter(promExporter)
 		case "stackdriver":
-			sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{ProjectID: *projectId})
+			sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{
+				ProjectID: *projectId,
+				// If the OpenCensus resource environment variables aren't set, the monitored resource will likely fall back to `generic_task`.
+				ResourceDetector:  resource.FromEnv,
+				ReportingInterval: 60 * time.Second,
+			})
 			if err != nil {
 				level.Error(logger).Log("msg", "Creating Stackdriver exporter failed", "err", err)
 				os.Exit(1)
 			}
-			defer sd.Flush()
-			view.RegisterExporter(sd)
-			view.SetReportingPeriod(60 * time.Second)
+			sd.StartMetricsExporter()
+			defer sd.StopMetricsExporter()
 		default:
 			level.Error(logger).Log("msg", "Unknown monitoring backend", "backend", backend)
 			os.Exit(1)
