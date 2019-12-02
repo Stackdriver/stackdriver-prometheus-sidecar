@@ -353,6 +353,9 @@ func NewExporter(o Options) (*Exporter, error) {
 	if o.MetricPrefix != "" && !strings.HasSuffix(o.MetricPrefix, "/") {
 		o.MetricPrefix = o.MetricPrefix + "/"
 	}
+	if o.MetricPrefix != "" && !strings.HasSuffix(o.MetricPrefix, "/") {
+		o.MetricPrefix = o.MetricPrefix + "/"
+	}
 
 	se, err := newStatsExporter(o)
 	if err != nil {
