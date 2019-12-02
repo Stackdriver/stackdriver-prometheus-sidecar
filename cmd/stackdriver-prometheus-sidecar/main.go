@@ -325,6 +325,8 @@ func main() {
 				// If the OpenCensus resource environment variables aren't set, the monitored resource will likely fall back to `generic_task`.
 				ResourceDetector:  resource.FromEnv,
 				ReportingInterval: reportingInterval,
+				// Disable default `opencensus_task` label.
+				DefaultMonitoringLabels: &oc_stackdriver.Labels{},
 			})
 			if err != nil {
 				level.Error(logger).Log("msg", "Creating Stackdriver exporter failed", "err", err)
