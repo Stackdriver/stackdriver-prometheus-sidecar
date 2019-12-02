@@ -6,7 +6,7 @@ cloud.google.com/go/container/apiv1
 cloud.google.com/go/internal/version
 # contrib.go.opencensus.io/exporter/prometheus v0.1.0
 contrib.go.opencensus.io/exporter/prometheus
-# contrib.go.opencensus.io/exporter/stackdriver v0.12.4
+# contrib.go.opencensus.io/exporter/stackdriver v0.12.8
 contrib.go.opencensus.io/exporter/stackdriver
 contrib.go.opencensus.io/exporter/stackdriver/monitoredresource
 # github.com/Azure/azure-sdk-for-go v36.2.0+incompatible
@@ -35,7 +35,7 @@ github.com/alecthomas/template/parse
 github.com/alecthomas/units
 # github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878
 github.com/armon/go-metrics
-# github.com/aws/aws-sdk-go v1.21.10
+# github.com/aws/aws-sdk-go v1.25.44
 github.com/aws/aws-sdk-go/aws/ec2metadata
 github.com/aws/aws-sdk-go/aws/session
 github.com/aws/aws-sdk-go/aws
@@ -46,6 +46,8 @@ github.com/aws/aws-sdk-go/aws/corehandlers
 github.com/aws/aws-sdk-go/aws/request
 github.com/aws/aws-sdk-go/internal/sdkuri
 github.com/aws/aws-sdk-go/aws/credentials
+github.com/aws/aws-sdk-go/aws/request
+github.com/aws/aws-sdk-go/internal/sdkuri
 github.com/aws/aws-sdk-go/aws/credentials/processcreds
 github.com/aws/aws-sdk-go/aws/credentials/stscreds
 github.com/aws/aws-sdk-go/aws/csm
@@ -67,6 +69,7 @@ github.com/aws/aws-sdk-go/private/protocol/ec2query
 github.com/aws/aws-sdk-go/private/protocol/query
 github.com/aws/aws-sdk-go/private/protocol/json/jsonutil
 github.com/aws/aws-sdk-go/private/protocol/rest
+github.com/aws/aws-sdk-go/internal/sdkmath
 github.com/aws/aws-sdk-go/private/protocol/query/queryutil
 github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil
 # github.com/beorn7/perks v1.0.1
@@ -243,9 +246,9 @@ github.com/samuel/go-zookeeper/zk
 # go.opencensus.io v0.22.2
 go.opencensus.io/plugin/ocgrpc
 go.opencensus.io/plugin/ochttp
-go.opencensus.io/stats
 go.opencensus.io/stats/view
 go.opencensus.io/tag
+go.opencensus.io/stats
 go.opencensus.io/metric/metricdata
 go.opencensus.io/metric/metricexport
 go.opencensus.io
@@ -254,13 +257,13 @@ go.opencensus.io/resource/resourcekeys
 go.opencensus.io/trace
 go.opencensus.io/trace/propagation
 go.opencensus.io/plugin/ochttp/propagation/b3
-go.opencensus.io/stats/internal
 go.opencensus.io/internal/tagencoding
 go.opencensus.io/metric/metricproducer
+go.opencensus.io/stats/internal
 go.opencensus.io/internal
 go.opencensus.io/trace/internal
 go.opencensus.io/trace/tracestate
-# golang.org/x/crypto v0.0.0-20191122220453-ac88ee75c92c
+# golang.org/x/crypto v0.0.0-20191128160524-b544559bb6d1
 golang.org/x/crypto/ed25519
 golang.org/x/crypto/ed25519/internal/edwards25519
 golang.org/x/crypto/ssh/terminal
@@ -287,7 +290,7 @@ golang.org/x/oauth2/jws
 # golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20191127021746-63cb32ae39b2
+# golang.org/x/sys v0.0.0-20191128015809-6d18c012aee9
 golang.org/x/sys/windows
 golang.org/x/sys/unix
 # golang.org/x/text v0.3.2
