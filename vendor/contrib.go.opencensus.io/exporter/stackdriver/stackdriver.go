@@ -345,13 +345,8 @@ func NewExporter(o Options) (*Exporter, error) {
 		res.Labels[stackdriverGenericTaskNamespace] = "default"
 		res.Labels[stackdriverGenericTaskJob] = path.Base(os.Args[0])
 		res.Labels[stackdriverGenericTaskID] = getTaskValue()
-		log.Printf("detected resource: %v", res)
 
 		o.Resource = o.MapResource(res)
-		log.Printf("using monitored resource: %v", o.Resource)
-	}
-	if o.MetricPrefix != "" && !strings.HasSuffix(o.MetricPrefix, "/") {
-		o.MetricPrefix = o.MetricPrefix + "/"
 	}
 	if o.MetricPrefix != "" && !strings.HasSuffix(o.MetricPrefix, "/") {
 		o.MetricPrefix = o.MetricPrefix + "/"
