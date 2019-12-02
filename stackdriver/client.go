@@ -193,7 +193,12 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 				TimeSeries: req.TimeSeries[begin:end],
 			}
 			_, err := service.CreateTimeSeries(ctx, req_copy)
-			if err != nil {
+			if err == nil {
+				// The response is empty if all points were successfully written.
+				stats.RecordWithTags(ctx,
+					[]tag.Mutator{tag.Upsert(StatusTag, "0")},
+					PointCount.M(int64(end-begin)))
+			} else {
 				level.Debug(c.logger).Log(
 					"msg", "Partial failure calling CreateTimeSeries",
 					"err", err)
@@ -202,6 +207,19 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 					level.Warn(c.logger).Log("msg", "Unexpected error message type from Monitoring API", "err", err)
 					errors <- err
 					return
+				}
+				for _, details := range status.Details() {
+					if summary, ok := details.(*monitoring.CreateTimeSeriesSummary); ok {
+						level.Debug(c.logger).Log("summary", summary)
+						stats.RecordWithTags(ctx,
+							[]tag.Mutator{tag.Upsert(StatusTag, "0")},
+							PointCount.M(int64(summary.SuccessPointCount)))
+						for _, e := range summary.Errors {
+							stats.RecordWithTags(ctx,
+								[]tag.Mutator{tag.Upsert(StatusTag, fmt.Sprint(uint32(e.Status.Code)))},
+								PointCount.M(int64(e.PointCount)))
+						}
+					}
 				}
 				switch status.Code() {
 				// codes.DeadlineExceeded:

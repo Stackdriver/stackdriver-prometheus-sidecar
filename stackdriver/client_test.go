@@ -22,7 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Stackdriver/stackdriver-prometheus-sidecar/opencensus"
 	"github.com/go-kit/kit/log"
+	"github.com/golang/protobuf/proto"
+	"go.opencensus.io/metric/metricexport"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -72,13 +75,31 @@ func TestStoreErrorHandlingOnTimeout(t *testing.T) {
 func TestStoreErrorHandling(t *testing.T) {
 	tests := []struct {
 		status      *status.Status
+		pointCount  map[codes.Code]int64
 		recoverable bool
 	}{
 		{
 			status: nil,
+			// The successful point count comes from the number of time series in the request when the RPC completely succeeds.
+			pointCount: map[codes.Code]int64{codes.OK: 1},
 		},
 		{
-			status:      status.New(codes.NotFound, longErrMessage),
+			status: mustStatusWithDetails(status.New(codes.InvalidArgument, longErrMessage),
+				&monitoring.CreateTimeSeriesSummary{
+					TotalPointCount:   5,
+					SuccessPointCount: 2,
+					Errors: []*monitoring.CreateTimeSeriesSummary_Error{
+						&monitoring.CreateTimeSeriesSummary_Error{
+							Status:     status.New(codes.InvalidArgument, "bad points").Proto(),
+							PointCount: 2,
+						},
+						&monitoring.CreateTimeSeriesSummary_Error{
+							Status:     status.New(codes.NotFound, "unknown metric").Proto(),
+							PointCount: 1,
+						},
+					},
+				}),
+			pointCount:  map[codes.Code]int64{codes.OK: 2, codes.InvalidArgument: 2, codes.NotFound: 1},
 			recoverable: false,
 		},
 		{
@@ -93,6 +114,14 @@ func TestStoreErrorHandling(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			metricReader := metricexport.NewReader()
+			metrics := opencensus.NewTestExporter(metricReader)
+			metrics.ReadAndExport()
+			pointCountBase := make(map[codes.Code]int64)
+			for code := range test.pointCount {
+				pointCountBase[code] = getCounter(t, metrics, PointCount.Name(), newPointCountMetricKey(code))
+			}
+
 			listener := newLocalListener()
 			grpcServer := grpc.NewServer()
 			monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{test.status})
@@ -104,9 +133,11 @@ func TestStoreErrorHandling(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			logBuffer := &bytes.Buffer{}
 			c := NewClient(&ClientConfig{
 				URL:     serverURL,
 				Timeout: time.Second,
+				Logger:  log.NewLogfmtLogger(logBuffer),
 			})
 
 			err = c.Store(&monitoring.CreateTimeSeriesRequest{
@@ -130,6 +161,19 @@ func TestStoreErrorHandling(t *testing.T) {
 				if status.Code() != test.status.Code() || status.Message() != test.status.Message() {
 					t.Errorf("expected status '%v', got '%v'", test.status.Err(), status.Err())
 				}
+			}
+
+			// TODO(jkohen): there is a race of sorts here. the test doesn't pass without the sleep.
+			time.Sleep(time.Second)
+			metrics.ReadAndExport()
+			for code, expectedCount := range test.pointCount {
+				pointCount := getCounter(t, metrics, PointCount.Name(), newPointCountMetricKey(code)) - pointCountBase[code]
+				if expectedCount != pointCount {
+					t.Errorf("pointCount has unexpected value: got %v, expected %v", pointCount, expectedCount)
+				}
+			}
+			if logBuffer.Len() > 0 {
+				t.Log("logging output:\n", logBuffer.String())
 			}
 		})
 	}
@@ -212,5 +256,34 @@ func TestResolver(t *testing.T) {
 			t.Errorf("ERROR: got target as %s, want %s",
 				requestedTarget, expectedTarget)
 		}
+	}
+}
+
+func newPointCountMetricKey(c codes.Code) map[string]string {
+	return map[string]string{
+		StatusTag.Name(): fmt.Sprint(uint32(c)),
+	}
+}
+
+func getCounter(t *testing.T, metrics *opencensus.TestExporter, metricName string, metricKey map[string]string) int64 {
+	p, ok := metrics.GetPoint(metricName, metricKey)
+	if !ok {
+		// This is OK before the metric has been first recorded.
+		return 0
+	}
+	switch v := p.Value.(type) {
+	case int64:
+		return v
+	default:
+		t.Fatalf("expected a counter for metric %v, got %v", metricName, p)
+	}
+	return -1
+}
+
+func mustStatusWithDetails(s *status.Status, details ...proto.Message) *status.Status {
+	if s, err := s.WithDetails(details...); err != nil {
+		panic(err)
+	} else {
+		return s
 	}
 }
