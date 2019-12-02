@@ -71,8 +71,10 @@ var (
 
 	// VersionTag identifies the version of this binary.
 	VersionTag = tag.MustNewKey("version")
-	// UptimeMeasure is a metric.
-	UptimeMeasure = stats.Int64("agent.googleapis.com/agent/uptime", "uptime of the Stackdriver Prometheus collector",
+	// UptimeMeasure is a cumulative metric.
+	UptimeMeasure = stats.Int64(
+		"agent.googleapis.com/agent/uptime",
+		"uptime of the Stackdriver Prometheus collector",
 		stats.UnitSeconds)
 )
 
@@ -120,7 +122,7 @@ func init() {
 		&view.View{
 			Measure:     UptimeMeasure,
 			TagKeys:     []tag.Key{VersionTag},
-			Aggregation: view.LastValue(),
+			Aggregation: view.Sum(),
 		},
 	); err != nil {
 		panic(err)
@@ -297,9 +299,16 @@ func main() {
 	// The context will be used in the lifecycle of prometheusReader further down.
 	ctx, cancel := context.WithCancel(context.Background())
 
-	stats.RecordWithTags(ctx,
-		[]tag.Mutator{tag.Upsert(VersionTag, fmt.Sprintf("stackdriver-prometheus-sidecar/%s", version.Version))},
-		UptimeMeasure.M(time.Now().Unix()))
+	go func() {
+		uptimeUpdateTime := time.Now()
+		c := time.Tick(60 * time.Second)
+		for now := range c {
+			stats.RecordWithTags(ctx,
+				[]tag.Mutator{tag.Upsert(VersionTag, fmt.Sprintf("stackdriver-prometheus-sidecar/%s", version.Version))},
+				UptimeMeasure.M(int64(now.Sub(uptimeUpdateTime).Seconds())))
+			uptimeUpdateTime = now
+		}
+	}()
 
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
