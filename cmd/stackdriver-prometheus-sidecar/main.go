@@ -301,11 +301,13 @@ func main() {
 
 	go func() {
 		uptimeUpdateTime := time.Now()
+		level.Info(logger).Log("uptime_update_time", uptimeUpdateTime)
 		c := time.Tick(60 * time.Second)
 		for now := range c {
 			stats.RecordWithTags(ctx,
 				[]tag.Mutator{tag.Upsert(VersionTag, fmt.Sprintf("stackdriver-prometheus-sidecar/%s", version.Version))},
 				UptimeMeasure.M(int64(now.Sub(uptimeUpdateTime).Seconds())))
+			level.Info(logger).Log("ticker_now", now, "measurement", int64(now.Sub(uptimeUpdateTime).Seconds()))
 			uptimeUpdateTime = now
 		}
 	}()
