@@ -25,6 +25,7 @@ import (
 
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
@@ -53,6 +54,18 @@ var (
 	PointCount = stats.Int64("agent.googleapis.com/agent/monitoring/point_count",
 		"count of metric points written to Stackdriver", stats.UnitDimensionless)
 )
+
+func init() {
+	if err := view.Register(
+		&view.View{
+			Measure:     PointCount,
+			TagKeys:     []tag.Key{StatusTag},
+			Aggregation: view.Sum(),
+		},
+	); err != nil {
+		panic(err)
+	}
+}
 
 // Client allows reading and writing from/to a remote gRPC endpoint. The
 // implementation may hit a single backend, so the application should create a
