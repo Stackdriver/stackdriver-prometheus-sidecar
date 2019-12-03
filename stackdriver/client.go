@@ -24,6 +24,9 @@ import (
 	"time"
 
 	"go.opencensus.io/plugin/ocgrpc"
+	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/balancer/roundrobin"
@@ -42,6 +45,27 @@ const (
 	MaxTimeseriesesPerRequest = 200
 	MonitoringWriteScope      = "https://www.googleapis.com/auth/monitoring.write"
 )
+
+var (
+	// StatusTag is the google3 canonical status code: google3/google/rpc/code.proto
+	StatusTag = tag.MustNewKey("status")
+
+	// PointCount is a metric.
+	PointCount = stats.Int64("agent.googleapis.com/agent/monitoring/point_count",
+		"count of metric points written to Stackdriver", stats.UnitDimensionless)
+)
+
+func init() {
+	if err := view.Register(
+		&view.View{
+			Measure:     PointCount,
+			TagKeys:     []tag.Key{StatusTag},
+			Aggregation: view.Sum(),
+		},
+	); err != nil {
+		panic(err)
+	}
+}
 
 // Client allows reading and writing from/to a remote gRPC endpoint. The
 // implementation may hit a single backend, so the application should create a
@@ -169,7 +193,12 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 				TimeSeries: req.TimeSeries[begin:end],
 			}
 			_, err := service.CreateTimeSeries(ctx, req_copy)
-			if err != nil {
+			if err == nil {
+				// The response is empty if all points were successfully written.
+				stats.RecordWithTags(ctx,
+					[]tag.Mutator{tag.Upsert(StatusTag, "0")},
+					PointCount.M(int64(end-begin)))
+			} else {
 				level.Debug(c.logger).Log(
 					"msg", "Partial failure calling CreateTimeSeries",
 					"err", err)
@@ -178,6 +207,19 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 					level.Warn(c.logger).Log("msg", "Unexpected error message type from Monitoring API", "err", err)
 					errors <- err
 					return
+				}
+				for _, details := range status.Details() {
+					if summary, ok := details.(*monitoring.CreateTimeSeriesSummary); ok {
+						level.Debug(c.logger).Log("summary", summary)
+						stats.RecordWithTags(ctx,
+							[]tag.Mutator{tag.Upsert(StatusTag, "0")},
+							PointCount.M(int64(summary.SuccessPointCount)))
+						for _, e := range summary.Errors {
+							stats.RecordWithTags(ctx,
+								[]tag.Mutator{tag.Upsert(StatusTag, fmt.Sprint(uint32(e.Status.Code)))},
+								PointCount.M(int64(e.PointCount)))
+						}
+					}
 				}
 				switch status.Code() {
 				// codes.DeadlineExceeded:
