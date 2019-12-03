@@ -26,7 +26,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/golang/protobuf/proto"
 	"go.opencensus.io/metric/metricexport"
-	"go.opencensus.io/stats/view"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -164,11 +163,6 @@ func TestStoreErrorHandling(t *testing.T) {
 				}
 			}
 
-			// The next line forces the view worker to process all stats.Record* calls that
-			// happened within Store() before the call to ReadAndExport below. This abuses the
-			// worker implementation to work around lack of synchronization.
-			// TODO(jkohen,rghetia): figure out a clean way to make this deterministic.
-			view.SetReportingPeriod(time.Minute)
 			metrics.ReadAndExport()
 			for code, expectedCount := range test.pointCount {
 				pointCount := getCounter(t, metrics, PointCount.Name(), newPointCountMetricKey(code)) - pointCountBase[code]

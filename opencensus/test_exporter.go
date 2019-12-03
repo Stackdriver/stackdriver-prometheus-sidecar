@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"go.opencensus.io/metric/metricdata"
 	"go.opencensus.io/metric/metricexport"
+	"go.opencensus.io/stats/view"
 )
 
 // TestExporter keeps exported metric data in memory to aid in testing the instrumentation.
@@ -44,6 +46,11 @@ func (e *TestExporter) GetPoint(metricName string, labels map[string]string) (me
 
 // ReadAndExport reads the current values for all metrics and makes them available to this exporter.
 func (e *TestExporter) ReadAndExport() {
+	// The next line forces the view worker to process all stats.Record* calls that
+	// happened within Store() before the call to ReadAndExport below. This abuses the
+	// worker implementation to work around lack of synchronization.
+	// TODO(jkohen,rghetia): figure out a clean way to make this deterministic.
+	view.SetReportingPeriod(time.Minute)
 	e.metricReader.ReadAndExport(e)
 }
 
