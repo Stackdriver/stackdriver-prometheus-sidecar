@@ -145,7 +145,7 @@ type fileConfig struct {
 }
 
 // Note: When adding a new config field, consider adding it to
-// statusz-tmpl.html
+// const statusHtml in statusz.go
 type mainConfig struct {
 	ConfigFilename        string
 	ProjectIDResource     string
