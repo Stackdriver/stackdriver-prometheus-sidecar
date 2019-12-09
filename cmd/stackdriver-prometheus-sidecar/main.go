@@ -205,7 +205,7 @@ func main() {
 
 	a.Flag("config-file", "A configuration file.").StringVar(&cfg.ConfigFilename)
 
-	projectId := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
+	projectID := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
 		Required().
 		String()
 
@@ -312,8 +312,8 @@ func main() {
 
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
-	if *projectId == "" {
-		*projectId = getGCEProjectID()
+	if *projectID == "" {
+		*projectID = getGCEProjectID()
 	}
 
 	for _, backend := range cfg.MonitoringBackends {
@@ -330,7 +330,7 @@ func main() {
 		case "stackdriver":
 			const reportingInterval = 60 * time.Second
 			sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{
-				ProjectID: *projectId,
+				ProjectID: *projectID,
 				// If the OpenCensus resource environment variables aren't set, the monitored resource will likely fall back to `generic_task`.
 				ResourceDetector:  resource.FromEnv,
 				ReportingInterval: reportingInterval,
@@ -359,7 +359,7 @@ func main() {
 	}
 
 	var staticLabels = map[string]string{
-		retrieval.ProjectIDLabel:             *projectId,
+		retrieval.ProjectIDLabel:             *projectID,
 		retrieval.KubernetesLocationLabel:    cfg.KubernetesLabels.Location,
 		retrieval.KubernetesClusterNameLabel: cfg.KubernetesLabels.ClusterName,
 		retrieval.GenericLocationLabel:       cfg.GenericLabels.Location,
@@ -378,7 +378,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	cfg.ProjectIDResource = fmt.Sprintf("projects/%v", *projectId)
+	cfg.ProjectIDResource = fmt.Sprintf("projects/%v", *projectID)
 	if cfg.UseRestrictedIPs {
 		// manual.GenerateAndRegisterManualResolver generates a Resolver and a random scheme.
 		// It also registers the resolver. rb.InitialAddrs adds the addresses we are using
@@ -440,7 +440,7 @@ func main() {
 	} else {
 		scf = &stackdriverClientFactory{
 			logger:            log.With(logger, "component", "storage"),
-			projectIdResource: cfg.ProjectIDResource,
+			projectIDResource: cfg.ProjectIDResource,
 			url:               cfg.StackdriverAddress,
 			timeout:           10 * time.Second,
 			manualResolver:    cfg.manualResolver,
@@ -500,7 +500,7 @@ func main() {
 	if cfg.EnableStatusz {
 		http.Handle("/statusz", &statuszHandler{
 			logger:    logger,
-			projectId: *projectId,
+			projectID: *projectID,
 			cfg:       &cfg,
 		})
 	}
@@ -619,7 +619,7 @@ func main() {
 
 type stackdriverClientFactory struct {
 	logger            log.Logger
-	projectIdResource string
+	projectIDResource string
 	url               *url.URL
 	timeout           time.Duration
 	manualResolver    *manual.Resolver
@@ -628,7 +628,7 @@ type stackdriverClientFactory struct {
 func (s *stackdriverClientFactory) New() stackdriver.StorageClient {
 	return stackdriver.NewClient(&stackdriver.ClientConfig{
 		Logger:    s.logger,
-		ProjectId: s.projectIdResource,
+		ProjectId: s.projectIDResource,
 		URL:       s.url,
 		Timeout:   s.timeout,
 		Resolver:  s.manualResolver,
@@ -659,7 +659,7 @@ func (fcf *fileClientFactory) New() stackdriver.StorageClient {
 	return stackdriver.NewCreateTimeSeriesRequestWriterCloser(f, fcf.logger)
 }
 
-func (f *fileClientFactory) Name() string {
+func (fcf *fileClientFactory) Name() string {
 	return "fileClientFactory"
 }
 
