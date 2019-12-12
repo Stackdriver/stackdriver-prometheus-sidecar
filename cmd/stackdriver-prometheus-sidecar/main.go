@@ -628,7 +628,7 @@ type stackdriverClientFactory struct {
 func (s *stackdriverClientFactory) New() stackdriver.StorageClient {
 	return stackdriver.NewClient(&stackdriver.ClientConfig{
 		Logger:    s.logger,
-		ProjectId: s.projectIDResource,
+		ProjectID: s.projectIDResource,
 		URL:       s.url,
 		Timeout:   s.timeout,
 		Resolver:  s.manualResolver,
