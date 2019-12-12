@@ -209,8 +209,8 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	defer cancel()
 
 	// Query unset reference.
-	const refId = 1
-	entry, ok, err := c.get(ctx, refId)
+	const refID = 1
+	entry, ok, err := c.get(ctx, refID)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -219,14 +219,14 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	}
 
 	// Set a series but the metadata and target getters won't have sufficient information for it.
-	if err := c.set(ctx, refId, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
+	if err := c.set(ctx, refID, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	if !strings.Contains(logBuffer.String(), "target not found") {
 		t.Errorf("expected error \"target not found\", got: %v", logBuffer)
 	}
 	// We should still not receive anything.
-	entry, ok, err = c.get(ctx, refId)
+	entry, ok, err = c.get(ctx, refID)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -243,10 +243,10 @@ func TestSeriesCache_Refresh(t *testing.T) {
 
 	// Hack the timestamp of the last update to be sufficiently in the past that a refresh
 	// will be triggered.
-	c.entries[refId].lastRefresh = time.Now().Add(-2 * refreshInterval)
+	c.entries[refID].lastRefresh = time.Now().Add(-2 * refreshInterval)
 
 	// Now another get should trigger a refresh, which now finds data.
-	entry, ok, err = c.get(ctx, refId)
+	entry, ok, err = c.get(ctx, refID)
 	if entry == nil || !ok || err != nil {
 		t.Errorf("expected metadata but got none, error: %s", err)
 	}
@@ -284,13 +284,13 @@ func TestSeriesCache_RefreshTooManyLabels(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	const refId = 1
+	const refID = 1
 	lset := labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1")
 	for i := 0; i <= maxLabelCount; i++ {
 		lset = append(lset, labels.Label{fmt.Sprintf("label%d", i), "x"})
 	}
 	// Set will trigger a refresh.
-	if err := c.set(ctx, refId, lset, 5); err != nil {
+	if err := c.set(ctx, refID, lset, 5); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	if !strings.Contains(logBuffer.String(), "too many labels") {
@@ -298,7 +298,7 @@ func TestSeriesCache_RefreshTooManyLabels(t *testing.T) {
 	}
 
 	// Get shouldn't find data because of the previous error.
-	entry, ok, err := c.get(ctx, refId)
+	entry, ok, err := c.get(ctx, refID)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -336,9 +336,9 @@ func TestSeriesCache_RefreshUnknownResource(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	const refId = 1
+	const refID = 1
 	// Set will trigger a refresh.
-	if err := c.set(ctx, refId, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
+	if err := c.set(ctx, refID, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	if !strings.Contains(logBuffer.String(), "unknown resource") {
@@ -346,7 +346,7 @@ func TestSeriesCache_RefreshUnknownResource(t *testing.T) {
 	}
 
 	// Get shouldn't find data because of the previous error.
-	entry, ok, err := c.get(ctx, refId)
+	entry, ok, err := c.get(ctx, refID)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -382,9 +382,9 @@ func TestSeriesCache_RefreshMetadataNotFound(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	const refId = 1
+	const refID = 1
 	// Set will trigger a refresh.
-	if err := c.set(ctx, refId, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
+	if err := c.set(ctx, refID, labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1"), 5); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	if !strings.Contains(logBuffer.String(), "metadata not found") {
@@ -392,7 +392,7 @@ func TestSeriesCache_RefreshMetadataNotFound(t *testing.T) {
 	}
 
 	// Get shouldn't find data because of the previous error.
-	entry, ok, err := c.get(ctx, refId)
+	entry, ok, err := c.get(ctx, refID)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

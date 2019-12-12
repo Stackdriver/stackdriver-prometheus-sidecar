@@ -64,7 +64,7 @@ func TestStatuszHandler(t *testing.T) {
 
 	handler := &statuszHandler{
 		logger:    log.NewLogfmtLogger(os.Stdout),
-		projectId: "my-project",
+		projectID: "my-project",
 		cfg: &mainConfig{
 			Aggregations: retrieval.CounterAggregatorConfig{
 				"aggmetric1": {Matchers: [][]*labels.Matcher{{matcher}}},

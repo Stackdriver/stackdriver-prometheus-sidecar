@@ -72,7 +72,7 @@ func init() {
 // number of these clients.
 type Client struct {
 	logger    log.Logger
-	projectId string
+	projectID string
 	url       *url.URL
 	timeout   time.Duration
 	resolver  *manual.Resolver
@@ -83,7 +83,7 @@ type Client struct {
 // ClientConfig configures a Client.
 type ClientConfig struct {
 	Logger    log.Logger
-	ProjectId string // The Stackdriver project id in "projects/name-or-number" format.
+	ProjectID string // The Stackdriver project ID in "projects/name-or-number" format.
 	URL       *url.URL
 	Timeout   time.Duration
 	Resolver  *manual.Resolver
@@ -97,7 +97,7 @@ func NewClient(conf *ClientConfig) *Client {
 	}
 	return &Client{
 		logger:    logger,
-		projectId: conf.ProjectId,
+		projectID: conf.ProjectID,
 		url:       conf.URL,
 		timeout:   conf.Timeout,
 		resolver:  conf.Resolver,
@@ -189,7 +189,7 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 		go func(begin int, end int) {
 			defer wg.Done()
 			req_copy := &monitoring.CreateTimeSeriesRequest{
-				Name:       c.projectId,
+				Name:       c.projectID,
 				TimeSeries: req.TimeSeries[begin:end],
 			}
 			_, err := service.CreateTimeSeries(ctx, req_copy)
