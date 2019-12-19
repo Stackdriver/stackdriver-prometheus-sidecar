@@ -138,6 +138,7 @@ func TestTranslateDevapp(t *testing.T) {
 		{KubernetesLocationLabel, "us-central1-a"},
 		{"__meta_kubernetes_pod_label_org", "my-org"},
 		{"__meta_kubernetes_pod_label_env", "my-env"},
+		{"__meta_kubernetes_pod_name", "my-pod"},
 	}
 	metricLabels := labels.Labels{
 		{"api_product_name", "my-name"},
@@ -149,6 +150,7 @@ func TestTranslateDevapp(t *testing.T) {
 		"org":                "my-org",
 		"env":                "my-env",
 		"api_product_name":   "my-name",
+		"host":               "my-pod",
 	}
 	expectedFinalLabels := labels.Labels{
 		{"extra_label", "my-label"},
@@ -172,6 +174,7 @@ func TestTranslateProxy(t *testing.T) {
 		{KubernetesLocationLabel, "us-central1-a"},
 		{"__meta_kubernetes_pod_label_org", "my-org"},
 		{"__meta_kubernetes_pod_label_env", "my-env"},
+		{"__meta_kubernetes_pod_name", "my-pod"},
 	}
 	metricLabels := labels.Labels{
 		{"proxy_name", "my-name"},
@@ -185,6 +188,7 @@ func TestTranslateProxy(t *testing.T) {
 		"env":                "my-env",
 		"proxy_name":         "my-name",
 		"revision":           "my-revision",
+		"host":               "my-pod",
 	}
 	expectedFinalLabels := labels.Labels{
 		{"extra_label", "my-label"},
