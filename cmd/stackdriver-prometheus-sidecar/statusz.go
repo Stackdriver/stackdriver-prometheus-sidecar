@@ -32,7 +32,7 @@ import (
 
 var (
 	serverStart = time.Now()
-	statuszTmpl = template.New("statusz-tmpl.html")
+	statuszTmpl   *template.Template
 )
 
 type statuszHandler struct {
@@ -54,6 +54,7 @@ func init() {
 	if err != nil {
 	       panic(err)
 	}
+	statuszTmpl = template.New("statusz-tmpl.html")
 	statuszTmpl, err = statuszTmpl.Parse(string(contents))
 	if err != nil {
 		panic(err)
