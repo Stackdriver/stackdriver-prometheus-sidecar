@@ -238,6 +238,8 @@ github.com/prometheus/tsdb/goversion
 github.com/prometheus/tsdb/index
 github.com/prometheus/tsdb/labels
 github.com/prometheus/tsdb/wal
+# github.com/rakyll/statik v0.1.6
+github.com/rakyll/statik/fs
 # github.com/samuel/go-zookeeper v0.0.0-20190801204459-3c104360edc8
 github.com/samuel/go-zookeeper/zk
 # go.opencensus.io v0.22.2
