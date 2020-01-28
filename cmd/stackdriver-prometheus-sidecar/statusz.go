@@ -32,7 +32,7 @@ import (
 
 var (
 	serverStart = time.Now()
-	statuszTmpl   *template.Template
+	statuszTmpl *template.Template
 )
 
 type statuszHandler struct {
@@ -48,14 +48,13 @@ func init() {
 	}
 	statuszFile, err := statikFS.Open("/statusz-tmpl.html")
 	if err != nil {
-	        panic(err)
+		panic(err)
 	}
 	contents, err := ioutil.ReadAll(statuszFile)
 	if err != nil {
-	       panic(err)
+		panic(err)
 	}
-	statuszTmpl = template.New("statusz-tmpl.html")
-	statuszTmpl, err = statuszTmpl.Parse(string(contents))
+	statuszTmpl, err = template.New("statusz-tmpl.html").Parse(string(contents))
 	if err != nil {
 		panic(err)
 	}
