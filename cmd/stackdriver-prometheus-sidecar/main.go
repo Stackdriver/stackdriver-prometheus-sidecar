@@ -55,6 +55,8 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/resource"
+	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
@@ -66,6 +68,14 @@ import (
 var (
 	sizeDistribution    = view.Distribution(0, 1024, 2048, 4096, 16384, 65536, 262144, 1048576, 4194304, 33554432)
 	latencyDistribution = view.Distribution(0, 1, 2, 5, 10, 15, 25, 50, 100, 200, 400, 800, 1500, 3000, 6000)
+
+	// VersionTag identifies the version of this binary.
+	VersionTag = tag.MustNewKey("version")
+	// UptimeMeasure is a cumulative metric.
+	UptimeMeasure = stats.Int64(
+		"agent.googleapis.com/agent/uptime",
+		"uptime of the Stackdriver Prometheus collector",
+		stats.UnitSeconds)
 )
 
 func init() {
@@ -105,6 +115,15 @@ func init() {
 	}
 	if err := view.Register(
 		ocgrpc.DefaultClientViews...,
+	); err != nil {
+		panic(err)
+	}
+	if err := view.Register(
+		&view.View{
+			Measure:     UptimeMeasure,
+			TagKeys:     []tag.Key{VersionTag},
+			Aggregation: view.Sum(),
+		},
 	); err != nil {
 		panic(err)
 	}
@@ -186,7 +205,7 @@ func main() {
 
 	a.Flag("config-file", "A configuration file.").StringVar(&cfg.ConfigFilename)
 
-	projectId := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
+	projectID := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
 		Required().
 		String()
 
@@ -276,10 +295,25 @@ func main() {
 	level.Info(logger).Log("host_details", Uname())
 	level.Info(logger).Log("fd_limits", FdLimits())
 
+	// We instantiate a context here since the tailer is used by two other components.
+	// The context will be used in the lifecycle of prometheusReader further down.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		uptimeUpdateTime := time.Now()
+		c := time.Tick(60 * time.Second)
+		for now := range c {
+			stats.RecordWithTags(ctx,
+				[]tag.Mutator{tag.Upsert(VersionTag, fmt.Sprintf("stackdriver-prometheus-sidecar/%s", version.Version))},
+				UptimeMeasure.M(int64(now.Sub(uptimeUpdateTime).Seconds())))
+			uptimeUpdateTime = now
+		}
+	}()
+
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
-	if *projectId == "" {
-		*projectId = getGCEProjectID()
+	if *projectID == "" {
+		*projectID = getGCEProjectID()
 	}
 
 	for _, backend := range cfg.MonitoringBackends {
@@ -294,14 +328,30 @@ func main() {
 			}
 			view.RegisterExporter(promExporter)
 		case "stackdriver":
-			sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{ProjectID: *projectId})
+			const reportingInterval = 60 * time.Second
+			sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{
+				ProjectID: *projectID,
+				// If the OpenCensus resource environment variables aren't set, the monitored resource will likely fall back to `generic_task`.
+				ResourceDetector:  resource.FromEnv,
+				ReportingInterval: reportingInterval,
+				// Disable default `opencensus_task` label.
+				DefaultMonitoringLabels: &oc_stackdriver.Labels{},
+				GetMetricType: func(v *view.View) string {
+					// Curated metrics produced by this process.
+					if strings.Contains(v.Name, "agent.googleapis.com") {
+						return v.Name
+					}
+					// Default OpenCensus behavior.
+					return path.Join("custom.googleapis.com", "opencensus", v.Name)
+				},
+			})
 			if err != nil {
 				level.Error(logger).Log("msg", "Creating Stackdriver exporter failed", "err", err)
 				os.Exit(1)
 			}
 			defer sd.Flush()
 			view.RegisterExporter(sd)
-			view.SetReportingPeriod(60 * time.Second)
+			view.SetReportingPeriod(reportingInterval)
 		default:
 			level.Error(logger).Log("msg", "Unknown monitoring backend", "backend", backend)
 			os.Exit(1)
@@ -309,7 +359,7 @@ func main() {
 	}
 
 	var staticLabels = map[string]string{
-		retrieval.ProjectIDLabel:             *projectId,
+		retrieval.ProjectIDLabel:             *projectID,
 		retrieval.KubernetesLocationLabel:    cfg.KubernetesLabels.Location,
 		retrieval.KubernetesClusterNameLabel: cfg.KubernetesLabels.ClusterName,
 		retrieval.GenericLocationLabel:       cfg.GenericLabels.Location,
@@ -328,7 +378,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	cfg.ProjectIDResource = fmt.Sprintf("projects/%v", *projectId)
+	cfg.ProjectIDResource = fmt.Sprintf("projects/%v", *projectID)
 	if cfg.UseRestrictedIPs {
 		// manual.GenerateAndRegisterManualResolver generates a Resolver and a random scheme.
 		// It also registers the resolver. rb.InitialAddrs adds the addresses we are using
@@ -355,10 +405,6 @@ func main() {
 		panic(err)
 	}
 	metadataCache := metadata.NewCache(httpClient, metadataURL, cfg.StaticMetadata)
-
-	// We instantiate a context here since the tailer is used by two other components.
-	// The context will be used in the lifecycle of prometheusReader further down.
-	ctx, cancel := context.WithCancel(context.Background())
 
 	tailer, err := tail.Tail(ctx, cfg.WALDirectory)
 	if err != nil {
@@ -394,7 +440,7 @@ func main() {
 	} else {
 		scf = &stackdriverClientFactory{
 			logger:            log.With(logger, "component", "storage"),
-			projectIdResource: cfg.ProjectIDResource,
+			projectIDResource: cfg.ProjectIDResource,
 			url:               cfg.StackdriverAddress,
 			timeout:           10 * time.Second,
 			manualResolver:    cfg.manualResolver,
@@ -454,7 +500,7 @@ func main() {
 	if cfg.EnableStatusz {
 		http.Handle("/statusz", &statuszHandler{
 			logger:    logger,
-			projectId: *projectId,
+			projectID: *projectID,
 			cfg:       &cfg,
 		})
 	}
@@ -573,7 +619,7 @@ func main() {
 
 type stackdriverClientFactory struct {
 	logger            log.Logger
-	projectIdResource string
+	projectIDResource string
 	url               *url.URL
 	timeout           time.Duration
 	manualResolver    *manual.Resolver
@@ -582,7 +628,7 @@ type stackdriverClientFactory struct {
 func (s *stackdriverClientFactory) New() stackdriver.StorageClient {
 	return stackdriver.NewClient(&stackdriver.ClientConfig{
 		Logger:    s.logger,
-		ProjectId: s.projectIdResource,
+		ProjectID: s.projectIDResource,
 		URL:       s.url,
 		Timeout:   s.timeout,
 		Resolver:  s.manualResolver,
@@ -613,7 +659,7 @@ func (fcf *fileClientFactory) New() stackdriver.StorageClient {
 	return stackdriver.NewCreateTimeSeriesRequestWriterCloser(f, fcf.logger)
 }
 
-func (f *fileClientFactory) Name() string {
+func (fcf *fileClientFactory) Name() string {
 	return "fileClientFactory"
 }
 

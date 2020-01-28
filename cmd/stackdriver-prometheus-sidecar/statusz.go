@@ -37,7 +37,7 @@ var (
 
 type statuszHandler struct {
 	logger    log.Logger
-	projectId string
+	projectID string
 	cfg       *mainConfig
 }
 
@@ -73,7 +73,7 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		NodeName      string
 		NamespaceName string
 		GKEInfo       struct {
-			ProjectId       string
+			ProjectID       string
 			ClusterLocation string
 			ClusterName     string
 		}
@@ -98,7 +98,7 @@ func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	data.NodeName = os.Getenv("NODE_NAME")
 	data.NamespaceName = os.Getenv("NAMESPACE_NAME")
 
-	data.GKEInfo.ProjectId = h.projectId
+	data.GKEInfo.ProjectID = h.projectID
 	data.GKEInfo.ClusterLocation = h.cfg.KubernetesLabels.Location
 	data.GKEInfo.ClusterName = h.cfg.KubernetesLabels.ClusterName
 
