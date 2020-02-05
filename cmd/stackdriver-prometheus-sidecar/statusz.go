@@ -11,29 +11,53 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+//go:generate statik -f -src=./  -include=*.html
 package main
 
 import (
 	"html/template"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
+	_ "github.com/Stackdriver/stackdriver-prometheus-sidecar/cmd/stackdriver-prometheus-sidecar/statik"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/common/version"
+	"github.com/rakyll/statik/fs"
 )
 
 var (
 	serverStart = time.Now()
-	statuszTmpl = template.Must(template.ParseFiles("statusz-tmpl.html"))
+	statuszTmpl *template.Template
 )
 
 type statuszHandler struct {
 	logger    log.Logger
 	projectID string
 	cfg       *mainConfig
+}
+
+func init() {
+	statikFS, err := fs.New()
+	if err != nil {
+		panic(err)
+	}
+	statuszFile, err := statikFS.Open("/statusz-tmpl.html")
+	if err != nil {
+		panic(err)
+	}
+	contents, err := ioutil.ReadAll(statuszFile)
+	if err != nil {
+		panic(err)
+	}
+	statuszTmpl, err = template.New("statusz-tmpl.html").Parse(string(contents))
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (h *statuszHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
