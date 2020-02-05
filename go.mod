@@ -60,6 +60,7 @@ require (
 	github.com/prometheus/procfs v0.0.3 // indirect
 	github.com/prometheus/prometheus v0.0.0-20190710134608-e5b22494857d
 	github.com/prometheus/tsdb v0.10.0
+	github.com/rakyll/statik v0.1.6
 	github.com/rogpeppe/go-internal v1.5.0 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20190801204459-3c104360edc8 // indirect
 	github.com/shopspring/decimal v0.0.0-20191125035519-b054a8dfd10d // indirect
