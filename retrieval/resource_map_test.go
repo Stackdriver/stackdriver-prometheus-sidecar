@@ -205,6 +205,44 @@ func TestTranslateProxy(t *testing.T) {
 	}
 }
 
+func TestTranslateAggregateProxy(t *testing.T) {
+	discoveredLabels := labels.Labels{
+		{"__meta_kubernetes_pod_label_type_aggregate_proxy", "true"},
+		{ProjectIDLabel, "my-project"},
+		{KubernetesLocationLabel, "us-central1-a"},
+	}
+	metricLabels := labels.Labels{
+		{"proxy_name", "my-name"},
+		{"org", "my-org"},
+		{"env", "my-env"},
+		{"runtime_version", "my-revision"},
+		{"instance_id", "my-instance"},
+		{"extra_label", "my-label"},
+	}
+	expectedLabels := map[string]string{
+		"resource_container": "my-project",
+		"location":           "us-central1-a",
+		"org":                "my-org",
+		"env":                "my-env",
+		"proxy_name":         "my-name",
+		"runtime_version":    "my-revision",
+		"instance_id":        "my-instance",
+	}
+	expectedFinalLabels := labels.Labels{
+		{"extra_label", "my-label"},
+	}
+	if labels, finalLabels := AggregatedProxyResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else {
+		if diff := cmp.Diff(expectedLabels, labels); len(diff) > 0 {
+			t.Error(diff)
+		}
+		if diff := cmp.Diff(expectedFinalLabels, finalLabels); len(diff) > 0 {
+			t.Error(diff)
+		}
+	}
+}
+
 func (m *ResourceMapList) getByType(t string) (*ResourceMap, bool) {
 	for _, m := range *m {
 		if m.Type == t {
