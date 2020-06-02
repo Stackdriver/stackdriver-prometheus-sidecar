@@ -205,6 +205,44 @@ func TestTranslateProxy(t *testing.T) {
 	}
 }
 
+func TestTranslateProxyV2(t *testing.T) {
+	discoveredLabels := labels.Labels{
+		{"__meta_kubernetes_pod_label_type_proxy_v2", "true"},
+		{ProjectIDLabel, "my-project"},
+		{KubernetesLocationLabel, "us-central1-a"},
+	}
+	metricLabels := labels.Labels{
+		{"proxy_name", "my-name"},
+		{"org", "my-org"},
+		{"env", "my-env"},
+		{"runtime_version", "my-revision"},
+		{"instance_id", "my-instance"},
+		{"extra_label", "my-label"},
+	}
+	expectedLabels := map[string]string{
+		"resource_container": "my-project",
+		"location":           "us-central1-a",
+		"org":                "my-org",
+		"env":                "my-env",
+		"proxy_name":         "my-name",
+		"runtime_version":    "my-revision",
+		"instance_id":        "my-instance",
+	}
+	expectedFinalLabels := labels.Labels{
+		{"extra_label", "my-label"},
+	}
+	if labels, finalLabels := ProxyV2ResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else {
+		if diff := cmp.Diff(expectedLabels, labels); len(diff) > 0 {
+			t.Error(diff)
+		}
+		if diff := cmp.Diff(expectedFinalLabels, finalLabels); len(diff) > 0 {
+			t.Error(diff)
+		}
+	}
+}
+
 func (m *ResourceMapList) getByType(t string) (*ResourceMap, bool) {
 	for _, m := range *m {
 		if m.Type == t {
@@ -236,6 +274,7 @@ func TestResourceMappingsOrder(t *testing.T) {
 		{"k8s_pod", "k8s_node"},
 		{"k8s_node", "gce_instance"},
 		{"k8s_node", "aws_ec2_instance"},
+		{"apigee.googleapis.com/ProxyV2", "k8s_container"},
 		{"apigee.googleapis.com/Proxy", "k8s_container"},
 		{"apigee.googleapis.com/Devapp", "k8s_container"},
 	}
