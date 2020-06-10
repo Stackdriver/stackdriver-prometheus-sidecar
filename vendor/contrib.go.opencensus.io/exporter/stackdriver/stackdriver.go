@@ -340,6 +340,9 @@ func NewExporter(o Options) (*Exporter, error) {
 		}
 		// Populate internal resource labels for defaulting project_id, location, and
 		// generic resource labels of applicable monitored resources.
+		if res.Labels == nil {
+			res.Labels = make(map[string]string)
+		}
 		res.Labels[stackdriverProjectID] = o.ProjectID
 		res.Labels[stackdriverLocation] = o.Location
 		res.Labels[stackdriverGenericTaskNamespace] = "default"
