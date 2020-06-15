@@ -338,6 +338,9 @@ func NewExporter(o Options) (*Exporter, error) {
 		if err != nil {
 			return nil, fmt.Errorf("stackdriver: detect resource: %s", err)
 		}
+		if res.Labels == nil {
+			res.Labels = make(map[string]string)
+		}
 		// Populate internal resource labels for defaulting project_id, location, and
 		// generic resource labels of applicable monitored resources.
 		res.Labels[stackdriverProjectID] = o.ProjectID
