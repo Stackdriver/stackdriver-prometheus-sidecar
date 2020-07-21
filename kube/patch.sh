@@ -37,3 +37,5 @@ spec:
         - name: ${DATA_VOLUME}
           mountPath: ${DATA_DIR}
 "
+# Delete the replica sets from the old deployment.
+kubectl -n "${KUBE_NAMESPACE}" get rs | grep "$2-" | awk '{print $1}' | xargs kubectl delete -n "${KUBE_NAMESPACE}" rs
