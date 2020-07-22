@@ -243,6 +243,45 @@ func TestTranslateProxyV2(t *testing.T) {
 	}
 }
 
+func TestTranslateAnthosL4LB(t *testing.T) {
+	discoveredLabels := labels.Labels {
+		{ProjectIDLabel, "my-project"},
+		{KubernetesLocationLabel, "my-location"},
+		{"__meta_kubernetes_service_annotation_anthos_l4lb_kind", "my-kind"},
+		{"__meta_kubernetes_service_annotation_anthos_l4lb_group_name", "my-group-name"},
+		{"__meta_kubernetes_service_annotation_anthos_l4lb_hostname", "my-hostname"},
+		{"__meta_kubernetes_namespace", "my-namespace"},
+		{"__meta_kubernetes_node_name", "my-instance"},
+		{"__meta_kubernetes_pod_name", "my-pod"},
+		{"__meta_kubernetes_pod_container_name", "my-container"},
+	}
+	metricsLabels := labels.Labels {
+		{"label_name1", "label1"},
+		{"label_name2", "label2"},
+	}
+	expectedLabels := map[string]string {
+		"project_id": "my-project",
+		"location": "my-location",
+		"kind": "my-kind",
+		"group_name": "my-group-name",
+		"hostname": "my-hostname",
+	}
+	expectedFinalLabels := labels.Labels {
+		{"label_name1", "label1"},
+		{"label_name2", "label2"},
+	}
+	if labels, finalLabels := AnthosL4LBMap.Translate(discoveredLabels, metricsLabels); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else {
+		if diff := cmp.Diff(expectedLabels, labels); len(diff) > 0 {
+			t.Error(diff)
+		}
+		if diff := cmp.Diff(expectedFinalLabels, finalLabels); len(diff) > 0 {
+			t.Error(diff)
+		}
+	}
+}
+
 func (m *ResourceMapList) getByType(t string) (*ResourceMap, bool) {
 	for _, m := range *m {
 		if m.Type == t {
@@ -274,6 +313,7 @@ func TestResourceMappingsOrder(t *testing.T) {
 		{"k8s_pod", "k8s_node"},
 		{"k8s_node", "gce_instance"},
 		{"k8s_node", "aws_ec2_instance"},
+		{"anthos_l4lb", "k8s_container"},
 		{"apigee.googleapis.com/ProxyV2", "k8s_container"},
 		{"apigee.googleapis.com/Proxy", "k8s_container"},
 		{"apigee.googleapis.com/Devapp", "k8s_container"},
