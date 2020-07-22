@@ -5,7 +5,7 @@ set -u
 
 CLEAN_UP_ORPHANED_REPLICA_SETS='--clean-up-orphaned-replica-sets'
 usage() {
-  echo -e "Usage: $0 <deployment|statefulset> <name> <${CLEAN_UP_ORPHANED_REPLICA_SETS}>\n"
+  echo -e "Usage: $0 <deployment|statefulset> <name> [${CLEAN_UP_ORPHANED_REPLICA_SETS}]\n"
 }
 
 if [  $# -le 1 ]; then
