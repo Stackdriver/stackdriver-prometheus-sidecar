@@ -247,9 +247,10 @@ func TestTranslateAnthosL4LB(t *testing.T) {
 	discoveredLabels := labels.Labels{
 		{ProjectIDLabel, "my-project"},
 		{KubernetesLocationLabel, "my-location"},
-		{"__meta_kubernetes_service_annotation_anthos_l4lb_kind", "my-kind"},
-		{"__meta_kubernetes_service_annotation_anthos_l4lb_group_name", "my-group-name"},
-		{"__meta_kubernetes_service_annotation_anthos_l4lb_hostname", "my-hostname"},
+		{"__meta_kubernetes_service_annotation_gke_googleapis_com_anthos_l4lb_type", "true"},
+		{"__meta_kubernetes_service_annotation_gke_googleapis_com_anthos_l4lb_kind", "my-kind"},
+		{"__meta_kubernetes_service_annotation_gke_googleapis_com_anthos_l4lb_group_name", "my-group-name"},
+		{"__meta_kubernetes_service_annotation_gke_googleapis_com_anthos_l4lb_hostname", "my-hostname"},
 		{"__meta_kubernetes_namespace", "my-namespace"},
 		{"__meta_kubernetes_node_name", "my-instance"},
 		{"__meta_kubernetes_pod_name", "my-pod"},
