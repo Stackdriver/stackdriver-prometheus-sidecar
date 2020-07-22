@@ -115,16 +115,13 @@ When using Counter Aggregator you would usually want to configure a restrictive 
 
 ## Compatibility
 
-The matrix below lists the versions of Prometheus Server and other dependencies that have been qualified to work with releases of `stackdriver-prometheus-sidecar`. If the matrix does not list whether they are compatible, please assume they are not verified yet. Feel free to contribute to the matrix if you have run the end-to-end test between a version of `stackdriver-prometheus-sidecar` and Prometheus server. 
+The matrix below lists the versions of Prometheus Server and other dependencies that have been qualified to work with releases of `stackdriver-prometheus-sidecar`. If the matrix does not list whether they are compatible, please assume they are not verified yet but can be compatible. Feel free to contribute to the matrix if you have run the end-to-end test between a version of `stackdriver-prometheus-sidecar` and Prometheus server.
 
-| sidecar version | **Prometheus 2.5.x** | **Prometheus 2.6.x** | **Prometheus 2.7.x ~ 2.10.x** | **Prometheus 2.11.x** | **Prometheus 2.12+** |
-|-----------------|----------------------|----------------------|---------------------|---------------------|---------------------|
-| **0.5.x**       |          ✗           |          ✓           |          ?          |          ✓          |          ?          |
-| **0.6.x**       |          ✗           |          ?           |          ?          |          ✓          |          ?          |
-
-- ✓: Verified as compatible.
-- ✗: Verified as incompatible.
-- ?: Not verified yet.
+| Sidecar Version | Compatible Prometheus Server Version(s)   | Incompatible Prometheus Server Version(s) |
+|-----------------|-------------------------------------------|-------------------------------------------|
+| **0.5.x**       | 2.6, 2.11                                 | 2.5                                       |
+| **0.6.x**       | 2.11                                      | 2.5                                       |
+| **0.7.x**       | 2.10, 2.11, 2.13, 2.15, 2.16, 2.18, 2.19  | 2.5                                       |
 
 ## Alternatives
 
