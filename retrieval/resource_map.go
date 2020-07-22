@@ -77,6 +77,17 @@ var GCEResourceMap = ResourceMap{
 	},
 }
 
+var AnthosL4LBMap = ResourceMap{
+	Type: "anthos_l4lb",
+	LabelMap: map[string]labelTranslation{
+		ProjectIDLabel:                         constValue("project_id"),
+		KubernetesLocationLabel:                constValue("location"),
+		"__meta_kubernetes_service_annotation_anthos_l4lb_kind":          constValue("kind"),
+		"__meta_kubernetes_service_annotation_anthos_l4lb_group_name":          constValue("group_name"),
+		"__meta_kubernetes_service_annotation_anthos_l4lb_hostname":           constValue("hostname"),
+	},
+}
+
 var GKEResourceMap = ResourceMap{
 	Type: "gke_container",
 	LabelMap: map[string]labelTranslation{
@@ -135,6 +146,7 @@ type ResourceMapList []ResourceMap
 
 // When you add new elements, you also probably want to update TestResourceMappingsOrder.
 var ResourceMappings = ResourceMapList{
+	AnthosL4LBMap,
 	ProxyV2ResourceMap,
 	ProxyResourceMap,
 	DevappResourceMap,
