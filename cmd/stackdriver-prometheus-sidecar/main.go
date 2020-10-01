@@ -206,7 +206,6 @@ func main() {
 	a.Flag("config-file", "A configuration file.").StringVar(&cfg.ConfigFilename)
 
 	projectID := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
-		Required().
 		String()
 
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
@@ -313,7 +312,13 @@ func main() {
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
 	if *projectID == "" {
-		*projectID = getGCEProjectID()
+		level.Warn(logger).Log("msg", "projectID not set, using values from GCE environment...")
+		var err error
+		*projectID, err = getGCEProjectID()
+		if err != nil {
+			level.Error(logger).Log("msg", "Reading GCE projectID failed", "err", err)
+			os.Exit(1)
+		}
 	}
 
 	for _, backend := range cfg.MonitoringBackends {
@@ -711,14 +716,13 @@ func parseFiltersets(logger log.Logger, filtersets, filters []string) ([][]*labe
 	return matchers, nil
 }
 
-func getGCEProjectID() string {
+func getGCEProjectID() (string, error) {
 	if !md.OnGCE() {
-		return ""
+		return "", errors.New("GCE environemnt not detected")
 	}
-	if id, err := md.ProjectID(); err == nil {
-		return strings.TrimSpace(id)
-	}
-	return ""
+
+	id, err := md.ProjectID()
+	return strings.TrimSpace(id), err
 }
 
 func fillMetadata(staticConfig *map[string]string) {
