@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/storage v1.4.0 // indirect
 	contrib.go.opencensus.io/exporter/ocagent v0.6.0 // indirect
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
-	contrib.go.opencensus.io/exporter/stackdriver v0.12.8
+	contrib.go.opencensus.io/exporter/stackdriver v0.13.4
 	dmitri.shuralyov.com/gpu/mtl v0.0.0-20191126053124-fec1b7b612ab // indirect
 	git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999 // indirect
 	github.com/Azure/azure-sdk-for-go v36.2.0+incompatible // indirect
@@ -68,7 +68,7 @@ require (
 	github.com/spf13/cobra v0.0.5 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.2.0 // indirect
-	go.opencensus.io v0.22.2
+	go.opencensus.io v0.22.4
 	golang.org/x/crypto v0.0.0-20191128160524-b544559bb6d1 // indirect
 	golang.org/x/exp v0.0.0-20191129062945-2f5052295587 // indirect
 	golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 // indirect

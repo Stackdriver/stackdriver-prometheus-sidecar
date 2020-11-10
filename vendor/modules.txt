@@ -6,7 +6,7 @@ cloud.google.com/go/container/apiv1
 cloud.google.com/go/internal/version
 # contrib.go.opencensus.io/exporter/prometheus v0.1.0
 contrib.go.opencensus.io/exporter/prometheus
-# contrib.go.opencensus.io/exporter/stackdriver v0.12.8
+# contrib.go.opencensus.io/exporter/stackdriver v0.13.4
 contrib.go.opencensus.io/exporter/stackdriver
 contrib.go.opencensus.io/exporter/stackdriver/monitoredresource
 # github.com/Azure/azure-sdk-for-go v36.2.0+incompatible
