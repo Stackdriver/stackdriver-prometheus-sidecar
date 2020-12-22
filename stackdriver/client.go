@@ -232,7 +232,7 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 				// codes.Unavailable:
 				//   The condition is most likely transient. The request can
 				//   be retried with backoff.
-				case codes.DeadlineExceeded, codes.Unavailable:
+				case codes.DeadlineExceeded, codes.Unavailable, codes.ResourceExhausted:
 					errors <- recoverableError{err}
 				default:
 					errors <- err
