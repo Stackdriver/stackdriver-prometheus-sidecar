@@ -100,6 +100,10 @@ type seriesCacheEntry struct {
 	suffix   string
 	hash     uint64
 
+	// Value of the most recent point seen for the time series. If a new value is
+	// less than the previous, then the series has reset.
+	previousValue float64
+
 	hasReset       bool
 	resetValue     float64
 	resetTimestamp int64
@@ -295,12 +299,14 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 	if !hasReset {
 		e.resetTimestamp = t
 		e.resetValue = v
+		e.previousValue = v
 		// If we just initialized the reset timestamp, this sample should be skipped.
 		// We don't know the window over which the current cumulative value was built up over.
 		// The next sample for will be considered from this point onwards.
 		return 0, 0, false
 	}
-	if v < e.resetValue {
+	if v < e.previousValue {
+		// If the value has dropped, there's been a reset.
 		// If the series was reset, set the reset timestamp to be one millisecond
 		// before the timestamp of the current sample.
 		// We don't know the true reset time but this ensures the range is non-zero
@@ -308,6 +314,7 @@ func (c *seriesCache) getResetAdjusted(ref uint64, t int64, v float64) (int64, f
 		e.resetValue = 0
 		e.resetTimestamp = t - 1
 	}
+	e.previousValue = v
 	return e.resetTimestamp, v - e.resetValue, true
 }
 

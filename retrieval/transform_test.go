@@ -128,7 +128,7 @@ func TestSampleBuilder(t *testing.T) {
 				{Ref: 2, T: 2000, V: 5.5},
 				{Ref: 2, T: 3000, V: 8},
 				{Ref: 2, T: 4000, V: 9},
-				{Ref: 2, T: 5000, V: 3},
+				{Ref: 2, T: 5000, V: 7},
 				{Ref: 1, T: 1000, V: 200},
 				{Ref: 3, T: 3000, V: 1},
 				{Ref: 4, T: 4000, V: 2},
@@ -184,7 +184,7 @@ func TestSampleBuilder(t *testing.T) {
 						},
 					}},
 				},
-				{ // 3
+				{ // 3: Reset series since sample's value is less than previous value.
 					Resource: &monitoredres_pb.MonitoredResource{
 						Type:   "resource2",
 						Labels: map[string]string{"resource_a": "resource2_a"},
@@ -201,7 +201,7 @@ func TestSampleBuilder(t *testing.T) {
 							EndTime:   &timestamp_pb.Timestamp{Seconds: 5},
 						},
 						Value: &monitoring_pb.TypedValue{
-							Value: &monitoring_pb.TypedValue_DoubleValue{3},
+							Value: &monitoring_pb.TypedValue_DoubleValue{7},
 						},
 					}},
 				},
