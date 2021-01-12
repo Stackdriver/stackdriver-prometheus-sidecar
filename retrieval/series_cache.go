@@ -100,13 +100,21 @@ type seriesCacheEntry struct {
 	suffix   string
 	hash     uint64
 
+	// Whether the series has been reset/initialized yet. This is false only for
+	// the first sample of a new series in the cache, which causes the initial
+	// "reset". After that, it is always true.
+	hasReset bool
+
+	// The value and timestamp of the latest reset. The timestamp is when it
+	// occurred and the value is what it was reset to. resetValue will initially
+	// be the value of the first sample, and then 0 for every subsequent reset.
+	resetValue     float64
+	resetTimestamp int64
+
 	// Value of the most recent point seen for the time series. If a new value is
 	// less than the previous, then the series has reset.
 	previousValue float64
 
-	hasReset       bool
-	resetValue     float64
-	resetTimestamp int64
 	// maxSegment indicates the maximum WAL segment index in which
 	// the series was first logged.
 	// By providing it as an upper bound, we can safely delete a series entry
