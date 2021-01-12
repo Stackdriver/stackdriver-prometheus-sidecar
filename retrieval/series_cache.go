@@ -106,7 +106,7 @@ type seriesCacheEntry struct {
 	hasReset bool
 
 	// The value and timestamp of the latest reset. The timestamp is when it
-	// occurred and the value is what it was reset to. resetValue will initially
+	// occurred, and the value is what it was reset to. resetValue will initially
 	// be the value of the first sample, and then 0 for every subsequent reset.
 	resetValue     float64
 	resetTimestamp int64
