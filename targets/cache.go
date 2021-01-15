@@ -179,7 +179,7 @@ func targetMatch(targets []*Target, lset labels.Labels) (*Target, bool) {
 Outer:
 	for _, t := range targets {
 		for _, tl := range t.Labels {
-			if lset.Get(tl.Name) != tl.Value {
+			if v := lset.Get(tl.Name); v != "" && v != tl.Value {
 				continue Outer
 			}
 		}

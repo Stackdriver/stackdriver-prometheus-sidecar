@@ -43,6 +43,7 @@ PROMU_URL     := https://github.com/prometheus/promu/releases/download/v$(PROMU_
 PREFIX                  ?= $(shell pwd)
 BIN_DIR                 ?= $(shell pwd)
 # Private repo.
+DOCKER_IMAGE_BASE       ?= gcr.io/distroless/static:latest
 DOCKER_IMAGE_NAME       ?= gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar
 DOCKER_IMAGE_TAG        ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))
 
@@ -110,7 +111,7 @@ tarball: promu
 
 docker: build-linux-amd64
 	@echo ">> building docker image"
-	docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
+	docker build --build-arg "DOCKER_IMAGE_BASE=$(DOCKER_IMAGE_BASE)" -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
 
 push: test docker
 	@echo ">> pushing docker image"
