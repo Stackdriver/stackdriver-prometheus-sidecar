@@ -6,9 +6,11 @@ cloud.google.com/go/monitoring/apiv3
 cloud.google.com/go/trace/apiv2
 # contrib.go.opencensus.io/exporter/prometheus v0.1.0
 contrib.go.opencensus.io/exporter/prometheus
-# contrib.go.opencensus.io/exporter/stackdriver v0.12.8
+# contrib.go.opencensus.io/exporter/stackdriver v0.13.4
 contrib.go.opencensus.io/exporter/stackdriver
 contrib.go.opencensus.io/exporter/stackdriver/monitoredresource
+contrib.go.opencensus.io/exporter/stackdriver/monitoredresource/aws
+contrib.go.opencensus.io/exporter/stackdriver/monitoredresource/gcp
 # github.com/Azure/azure-sdk-for-go v36.2.0+incompatible
 github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2018-10-01/compute
 github.com/Azure/azure-sdk-for-go/services/network/mgmt/2018-10-01/network
@@ -108,7 +110,6 @@ github.com/golang/protobuf/ptypes/wrappers
 github.com/golang/snappy
 # github.com/google/go-cmp v0.3.1
 github.com/google/go-cmp/cmp
-github.com/google/go-cmp/cmp/cmpopts
 github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
@@ -243,7 +244,7 @@ github.com/prometheus/tsdb/wal
 github.com/rakyll/statik/fs
 # github.com/samuel/go-zookeeper v0.0.0-20190801204459-3c104360edc8
 github.com/samuel/go-zookeeper/zk
-# go.opencensus.io v0.22.2
+# go.opencensus.io v0.22.4
 go.opencensus.io
 go.opencensus.io/internal
 go.opencensus.io/internal/tagencoding

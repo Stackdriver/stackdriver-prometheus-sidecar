@@ -60,7 +60,9 @@ import (
 	metadataapi "cloud.google.com/go/compute/metadata"
 	traceapi "cloud.google.com/go/trace/apiv2"
 	"contrib.go.opencensus.io/exporter/stackdriver/monitoredresource"
+	opencensus "go.opencensus.io"
 	"go.opencensus.io/resource"
+	"go.opencensus.io/resource/resourcekeys"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/trace"
 	"golang.org/x/oauth2/google"
@@ -182,15 +184,13 @@ type Options struct {
 
 	// MapResource converts a OpenCensus resource to a Stackdriver monitored resource.
 	//
-	// If this field is unset, defaultMapResource will be used which encodes a set of default
+	// If this field is unset, DefaultMapResource will be used which encodes a set of default
 	// conversions from auto-detected resources to well-known Stackdriver monitored resources.
 	MapResource func(*resource.Resource) *monitoredrespb.MonitoredResource
 
-	// MetricPrefix overrides the prefix of a Stackdriver metric display names.
-	// Optional. If unset defaults to "OpenCensus/".
-	// Deprecated: Provide GetMetricDisplayName to change the display name of
-	// the metric.
-	// If GetMetricDisplayName is non-nil, this option is ignored.
+	// MetricPrefix overrides the prefix of a Stackdriver metric names.
+	// Optional. If unset defaults to "custom.googleapis.com/opencensus/".
+	// If GetMetricPrefix is non-nil, this option is ignored.
 	MetricPrefix string
 
 	// GetMetricDisplayName allows customizing the display name for the metric
@@ -203,7 +203,15 @@ type Options struct {
 	//   "custom.googleapis.com/opencensus/" + view.Name
 	//
 	// See: https://cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.metricDescriptors#MetricDescriptor
+	// Depreacted. Use GetMetricPrefix instead.
 	GetMetricType func(view *view.View) string
+
+	// GetMetricPrefix allows customizing the metric prefix for the given metric name.
+	// If it is not set, MetricPrefix is used. If MetricPrefix is not set, it defaults to:
+	//   "custom.googleapis.com/opencensus/"
+	//
+	// See: https://cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.metricDescriptors#MetricDescriptor
+	GetMetricPrefix func(name string) string
 
 	// DefaultTraceAttributes will be appended to every span that is exported to
 	// Stackdriver Trace.
@@ -252,8 +260,7 @@ type Options struct {
 	ReportingInterval time.Duration
 
 	// NumberOfWorkers sets the number of go rountines that send requests
-	// to Stackdriver Monitoring. This is only used for Proto metrics export
-	// for now. The minimum number of workers is 1.
+	// to Stackdriver Monitoring and Trace. The minimum number of workers is 1.
 	NumberOfWorkers int
 
 	// ResourceByDescriptor may be provided to supply monitored resource dynamically
@@ -273,11 +280,17 @@ type Options struct {
 	// time-series then it will result into an error for the entire CreateTimeSeries request
 	// which may contain more than one time-series.
 	ResourceByDescriptor func(*metricdata.Descriptor, map[string]string) (map[string]string, monitoredresource.Interface)
+
+	// Override the user agent value supplied to Monitoring APIs and included as an
+	// attribute in trace data.
+	UserAgent string
 }
 
 const defaultTimeout = 5 * time.Second
 
 var defaultDomain = path.Join("custom.googleapis.com", "opencensus")
+
+var defaultUserAgent = fmt.Sprintf("opencensus-go %s; stackdriver-exporter %s", opencensus.Version(), version)
 
 // Exporter is a stats and trace exporter that uploads data to Stackdriver.
 //
@@ -327,7 +340,7 @@ func NewExporter(o Options) (*Exporter, error) {
 		o.Resource = convertMonitoredResourceToPB(o.MonitoredResource)
 	}
 	if o.MapResource == nil {
-		o.MapResource = defaultMapResource
+		o.MapResource = DefaultMapResource
 	}
 	if o.ResourceDetector != nil {
 		// For backwards-compatibility we still respect the deprecated resource field.
@@ -340,16 +353,24 @@ func NewExporter(o Options) (*Exporter, error) {
 		}
 		// Populate internal resource labels for defaulting project_id, location, and
 		// generic resource labels of applicable monitored resources.
+		if res.Labels == nil {
+			res.Labels = make(map[string]string)
+		}
 		res.Labels[stackdriverProjectID] = o.ProjectID
-		res.Labels[stackdriverLocation] = o.Location
+		res.Labels[resourcekeys.CloudKeyZone] = o.Location
 		res.Labels[stackdriverGenericTaskNamespace] = "default"
 		res.Labels[stackdriverGenericTaskJob] = path.Base(os.Args[0])
 		res.Labels[stackdriverGenericTaskID] = getTaskValue()
+		log.Printf("OpenCensus detected resource: %v", res)
 
 		o.Resource = o.MapResource(res)
+		log.Printf("OpenCensus using monitored resource: %v", o.Resource)
 	}
 	if o.MetricPrefix != "" && !strings.HasSuffix(o.MetricPrefix, "/") {
 		o.MetricPrefix = o.MetricPrefix + "/"
+	}
+	if o.UserAgent == "" {
+		o.UserAgent = defaultUserAgent
 	}
 
 	se, err := newStatsExporter(o)
@@ -419,6 +440,12 @@ func (e *Exporter) ExportSpan(sd *trace.SpanData) {
 		sd = e.sdWithDefaultTraceAttributes(sd)
 	}
 	e.traceExporter.ExportSpan(sd)
+}
+
+// PushTraceSpans exports a bundle of OpenCensus Spans.
+// Returns number of dropped spans.
+func (e *Exporter) PushTraceSpans(ctx context.Context, node *commonpb.Node, rsc *resourcepb.Resource, spans []*trace.SpanData) (int, error) {
+	return e.traceExporter.pushTraceSpans(ctx, node, rsc, spans)
 }
 
 func (e *Exporter) sdWithDefaultTraceAttributes(sd *trace.SpanData) *trace.SpanData {
