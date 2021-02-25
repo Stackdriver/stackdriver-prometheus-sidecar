@@ -213,7 +213,7 @@ func TestTranslateTargetV2(t *testing.T) {
 	}
 	metricLabels := labels.Labels{
 		{"proxy_name", "my-name"},
-		{"target_name", "my-target"},
+		{"target_type", "my-target"},
 		{"target_endpoint", "my-endpoint"},
 		{"org", "my-org"},
 		{"env", "my-env"},
@@ -227,7 +227,7 @@ func TestTranslateTargetV2(t *testing.T) {
 		"org":                "my-org",
 		"env":                "my-env",
 		"proxy_name":         "my-name",
-		"target_name":        "my-target",
+		"target_type":        "my-target",
 		"target_endpoint":    "my-endpoint",
 		"runtime_version":    "my-revision",
 		"instance_id":        "my-instance",
