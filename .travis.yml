@@ -8,9 +8,11 @@ go_import_path: github.com/Stackdriver/stackdriver-prometheus-sidecar
 # Skip dependency fetch. We store all dependencies under vendor/.
 install: true
 
-# make goveralls runs all tests as well.
 script:
-- make goveralls
+# Can't run goveralls for external pull requests, so only run the tests.
+- 'if [[ "${TRAVIS_PULL_REQUEST_SLUG:-Stackdriver/stackdriver-prometheus-sidecar}" != "Stackdriver/stackdriver-prometheus-sidecar" ]]; then make test; fi'
+# For internal pull requests and push builds, make goveralls will run all tests as well.
+- 'if [[ "${TRAVIS_PULL_REQUEST_SLUG:-Stackdriver/stackdriver-prometheus-sidecar}" == "Stackdriver/stackdriver-prometheus-sidecar" ]]; then make goveralls; fi'
 # TODO(jkohen): `make goveralls` is causing a diff in go.mod. Prevent that and uncomment the line below.
 #- git diff --exit-code
 
