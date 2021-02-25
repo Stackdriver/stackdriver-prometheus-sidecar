@@ -131,6 +131,22 @@ var ProxyV2ResourceMap = ResourceMap{
 	},
 }
 
+var TargetV2ResourceMap = ResourceMap{
+	Type:       "apigee.googleapis.com/TargetV2",
+	MatchLabel: "__meta_kubernetes_pod_label_type_target_v2",
+	LabelMap: map[string]labelTranslation{
+		ProjectIDLabel:          constValue("resource_container"),
+		KubernetesLocationLabel: constValue("location"),
+		"org":                   constValue("org"),
+		"env":                   constValue("env"),
+		"proxy_name":            constValue("proxy_name"),
+		"target_type":           constValue("target_type"),
+		"target_endpoint":       constValue("target_endpoint"),
+		"runtime_version":       constValue("runtime_version"),
+		"instance_id":           constValue("instance_id"),
+	},
+}
+
 var AnthosL4LBMap = ResourceMap{
 	Type:       "anthos_l4lb",
 	MatchLabel: "__meta_kubernetes_service_annotation_gke_googleapis_com_anthos_l4lb_type",
@@ -148,6 +164,7 @@ type ResourceMapList []ResourceMap
 // When you add new elements, you also probably want to update TestResourceMappingsOrder.
 var ResourceMappings = ResourceMapList{
 	AnthosL4LBMap,
+	TargetV2ResourceMap,
 	ProxyV2ResourceMap,
 	ProxyResourceMap,
 	DevappResourceMap,

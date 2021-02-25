@@ -205,6 +205,48 @@ func TestTranslateProxy(t *testing.T) {
 	}
 }
 
+func TestTranslateTargetV2(t *testing.T) {
+	discoveredLabels := labels.Labels{
+		{"__meta_kubernetes_pod_label_type_target_v2", "true"},
+		{ProjectIDLabel, "my-project"},
+		{KubernetesLocationLabel, "us-central1-a"},
+	}
+	metricLabels := labels.Labels{
+		{"proxy_name", "my-name"},
+		{"target_type", "my-target"},
+		{"target_endpoint", "my-endpoint"},
+		{"org", "my-org"},
+		{"env", "my-env"},
+		{"runtime_version", "my-revision"},
+		{"instance_id", "my-instance"},
+		{"extra_label", "my-label"},
+	}
+	expectedLabels := map[string]string{
+		"resource_container": "my-project",
+		"location":           "us-central1-a",
+		"org":                "my-org",
+		"env":                "my-env",
+		"proxy_name":         "my-name",
+		"target_type":        "my-target",
+		"target_endpoint":    "my-endpoint",
+		"runtime_version":    "my-revision",
+		"instance_id":        "my-instance",
+	}
+	expectedFinalLabels := labels.Labels{
+		{"extra_label", "my-label"},
+	}
+	if labels, finalLabels := TargetV2ResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+		t.Errorf("Expected %v, actual nil", expectedLabels)
+	} else {
+		if diff := cmp.Diff(expectedLabels, labels); len(diff) > 0 {
+			t.Error(diff)
+		}
+		if diff := cmp.Diff(expectedFinalLabels, finalLabels); len(diff) > 0 {
+			t.Error(diff)
+		}
+	}
+}
+
 func TestTranslateProxyV2(t *testing.T) {
 	discoveredLabels := labels.Labels{
 		{"__meta_kubernetes_pod_label_type_proxy_v2", "true"},
@@ -315,6 +357,7 @@ func TestResourceMappingsOrder(t *testing.T) {
 		{"k8s_node", "gce_instance"},
 		{"k8s_node", "aws_ec2_instance"},
 		{"anthos_l4lb", "k8s_container"},
+		{"apigee.googleapis.com/TargetV2", "k8s_container"},
 		{"apigee.googleapis.com/ProxyV2", "k8s_container"},
 		{"apigee.googleapis.com/Proxy", "k8s_container"},
 		{"apigee.googleapis.com/Devapp", "k8s_container"},
