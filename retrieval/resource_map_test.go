@@ -227,8 +227,8 @@ func TestTranslateTargetV2(t *testing.T) {
 		"org":                "my-org",
 		"env":                "my-env",
 		"proxy_name":         "my-name",
-		"target_type":        "my-target",
-		"target_endpoint":    "my-endpoint",
+		"type":               "my-type",
+		"endpoint":           "my-endpoint",
 		"runtime_version":    "my-revision",
 		"instance_id":        "my-instance",
 	}
