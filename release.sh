@@ -30,9 +30,6 @@ git checkout -b "${versioned_release_branch}"
 git add VERSION
 git commit -m "Update version to ${version}."
 
-# 4. Run `DOCKER_IMAGE_NAME={public_docker_image} make push`.
-DOCKER_IMAGE_NAME="gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar" make push
-
 ################################
 # Push branch and tag to GitHub
 ################################
