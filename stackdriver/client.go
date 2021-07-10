@@ -136,7 +136,7 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	if useAuth {
 		rpcCreds, err := oauth.NewApplicationDefault(context.Background(), MonitoringWriteScope)
 		if err != nil {
-			return nil, err
+			return nil, recoverableError{err}
 		}
 		tlsCreds := credentials.NewTLS(&tls.Config{})
 		dopts = append(dopts,
