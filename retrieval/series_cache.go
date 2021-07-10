@@ -15,6 +15,7 @@ package retrieval
 
 import (
 	"context"
+	"regexp"
 	"sync"
 	"time"
 
@@ -82,6 +83,7 @@ type seriesCache struct {
 	metricsPrefix     string
 	useGkeResource    bool
 	renames           map[string]string
+	labelFilters      []LabelFilter
 
 	// lastCheckpoint holds the index of the last checkpoint we garbage collected for.
 	// We don't have to redo garbage collection until a higher checkpoint appears.
@@ -137,6 +139,11 @@ type seriesCacheEntry struct {
 	tracker *counterTracker
 }
 
+type LabelFilter struct {
+	Metric *regexp.Regexp
+	Allow  map[string]bool
+}
+
 const refreshInterval = 3 * time.Minute
 
 func (e *seriesCacheEntry) populated() bool {
@@ -152,6 +159,7 @@ func newSeriesCache(
 	dir string,
 	filtersets [][]*promlabels.Matcher,
 	renames map[string]string,
+	labelFilters []LabelFilter,
 	targets TargetGetter,
 	metadata MetadataGetter,
 	resourceMaps []ResourceMap,
@@ -174,6 +182,7 @@ func newSeriesCache(
 		metricsPrefix:     metricsPrefix,
 		useGkeResource:    useGkeResource,
 		renames:           renames,
+		labelFilters:      labelFilters,
 		counterAggregator: counterAggregator,
 	}
 }
@@ -388,6 +397,19 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 			break
 		}
 	}
+	// Apply label filters
+	metricName := entry.lset.Get("__name__")
+	for _, lf := range c.labelFilters {
+		if lf.Metric.MatchString(metricName) {
+			filteredLabels := finalLabels[:0]
+			for _, l := range finalLabels {
+				if lf.Allow[l.Name] {
+					filteredLabels = append(filteredLabels, l)
+				}
+			}
+			finalLabels = filteredLabels
+		}
+	}
 	// Drop series with too many labels.
 	if len(finalLabels) > maxLabelCount {
 		ctx, _ = tag.New(ctx, tag.Insert(keyReason, "too_many_labels"))
@@ -397,7 +419,6 @@ func (c *seriesCache) refresh(ctx context.Context, ref uint64) error {
 	}
 
 	var (
-		metricName     = entry.lset.Get("__name__")
 		baseMetricName string
 		suffix         string
 		job            = entry.lset.Get("job")

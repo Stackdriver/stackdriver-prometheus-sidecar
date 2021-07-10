@@ -86,7 +86,7 @@ func TestReader_Progress(t *testing.T) {
 	}
 
 	aggr, _ := NewCounterAggregator(log.NewNopLogger(), new(CounterAggregatorConfig))
-	r := NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, &nopAppender{}, "", false, aggr)
+	r := NewPrometheusReader(nil, dir, tailer, nil, nil, nil, targetMap, metadataMap, &nopAppender{}, "", false, aggr)
 	r.progressSaveInterval = 200 * time.Millisecond
 
 	// Populate sample data
@@ -143,7 +143,7 @@ func TestReader_Progress(t *testing.T) {
 	}
 
 	recorder := &nopAppender{}
-	r = NewPrometheusReader(nil, dir, tailer, nil, nil, targetMap, metadataMap, recorder, "", false, aggr)
+	r = NewPrometheusReader(nil, dir, tailer, nil, nil, nil, targetMap, metadataMap, recorder, "", false, aggr)
 	go r.Run(ctx, progressOffset)
 
 	// Wait for reader to process until the end.

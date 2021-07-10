@@ -82,6 +82,7 @@ func NewPrometheusReader(
 	tailer *tail.Tailer,
 	filtersets [][]*labels.Matcher,
 	metricRenames map[string]string,
+	labelFilters []LabelFilter,
 	targetGetter TargetGetter,
 	metadataGetter MetadataGetter,
 	appender Appender,
@@ -102,6 +103,7 @@ func NewPrometheusReader(
 		metadataGetter:       metadataGetter,
 		progressSaveInterval: time.Minute,
 		metricRenames:        metricRenames,
+		labelFilters:         labelFilters,
 		metricsPrefix:        metricsPrefix,
 		useGkeResource:       useGkeResource,
 		counterAggregator:    counterAggregator,
@@ -114,6 +116,7 @@ type PrometheusReader struct {
 	tailer               *tail.Tailer
 	filtersets           [][]*labels.Matcher
 	metricRenames        map[string]string
+	labelFilters         []LabelFilter
 	targetGetter         TargetGetter
 	metadataGetter       MetadataGetter
 	appender             Appender
@@ -157,6 +160,7 @@ func (r *PrometheusReader) Run(ctx context.Context, startOffset int) error {
 		r.walDirectory,
 		r.filtersets,
 		r.metricRenames,
+		r.labelFilters,
 		r.targetGetter,
 		r.metadataGetter,
 		ResourceMappings,

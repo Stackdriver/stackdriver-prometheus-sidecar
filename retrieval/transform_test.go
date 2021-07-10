@@ -1145,7 +1145,7 @@ func TestSampleBuilder(t *testing.T) {
 		var hashes []uint64
 
 		aggr, _ := NewCounterAggregator(log.NewNopLogger(), new(CounterAggregatorConfig))
-		series := newSeriesCache(nil, "", nil, nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false, aggr)
+		series := newSeriesCache(nil, "", nil, nil, nil, c.targets, c.metadata, resourceMaps, c.metricPrefix, false, aggr)
 		for ref, s := range c.series {
 			series.set(ctx, ref, s, 0)
 		}

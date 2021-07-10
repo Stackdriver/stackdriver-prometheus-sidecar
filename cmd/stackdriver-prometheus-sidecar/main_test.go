@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"testing"
 	"time"
 
@@ -165,10 +166,14 @@ func TestProcessFileConfig(t *testing.T) {
 		}
 		return m
 	}
+	regexpComparer := cmp.Comparer(func(x, y regexp.Regexp) bool {
+		return x.String() == y.String()
+	})
 	for _, tt := range []struct {
 		name           string
 		config         fileConfig
 		renameMappings map[string]string
+		labelFilters   []retrieval.LabelFilter
 		staticMetadata []*metadata.Entry
 		aggregations   retrieval.CounterAggregatorConfig
 		err            error
@@ -177,6 +182,7 @@ func TestProcessFileConfig(t *testing.T) {
 			"empty",
 			fileConfig{},
 			map[string]string{},
+			[]retrieval.LabelFilter{},
 			[]*metadata.Entry{},
 			retrieval.CounterAggregatorConfig{},
 			nil,
@@ -186,6 +192,9 @@ func TestProcessFileConfig(t *testing.T) {
 			fileConfig{
 				MetricRenames: []metricRenamesConfig{
 					{From: "from", To: "to"},
+				},
+				MetricLabelFilters: []metricLabelFiltersConfig{
+					{Metric: "^too_many_labels.*", Allow: []string{"important_label", "other_important_label"}},
 				},
 				StaticMetadata: []staticMetadataConfig{
 					{Metric: "int64_counter", Type: "counter", ValueType: "int64", Help: "help1"},
@@ -201,6 +210,12 @@ func TestProcessFileConfig(t *testing.T) {
 				},
 			},
 			map[string]string{"from": "to"},
+			[]retrieval.LabelFilter{
+				retrieval.LabelFilter{
+					regexp.MustCompile("^too_many_labels.*"),
+					map[string]bool{"important_label": true, "other_important_label": true},
+				},
+			},
 			[]*metadata.Entry{
 				&metadata.Entry{Metric: "int64_counter", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_INT64, Help: "help1"},
 				&metadata.Entry{Metric: "double_gauge", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE, Help: "help2"},
@@ -222,14 +237,17 @@ func TestProcessFileConfig(t *testing.T) {
 			fileConfig{
 				StaticMetadata: []staticMetadataConfig{{Metric: "int64_default", ValueType: "int64"}},
 			},
-			nil, nil, nil,
+			nil, nil, nil, nil,
 			errors.New("invalid metric type \"\""),
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			renameMappings, staticMetadata, aggregations, err := processFileConfig(tt.config)
+			renameMappings, labelFilters, staticMetadata, aggregations, err := processFileConfig(tt.config)
 			if diff := cmp.Diff(tt.renameMappings, renameMappings); diff != "" {
 				t.Errorf("renameMappings mismatch: %v", diff)
+			}
+			if diff := cmp.Diff(tt.labelFilters, labelFilters, regexpComparer); diff != "" {
+				t.Errorf("labelFilters mismatch: %v", diff)
 			}
 			if diff := cmp.Diff(tt.staticMetadata, staticMetadata); diff != "" {
 				t.Errorf("staticMetadata mismatch: %v", diff)
