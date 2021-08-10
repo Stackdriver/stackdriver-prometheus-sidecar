@@ -17,14 +17,43 @@ package tail
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"path"
 	"testing"
 	"time"
 
 	"github.com/prometheus/tsdb/wal"
+	"github.com/stretchr/testify/require"
 )
+
+func TestOpenSegment(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test_open_segment")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	require.NoError(t, ioutil.WriteFile(path.Join(dir, "000000000000000000000nonsense"), []byte("bad"), 0777))
+
+	for i := 0; i < 10; i++ {
+		require.NoError(t, ioutil.WriteFile(path.Join(dir, fmt.Sprint("000000000000000000000", i)), []byte(fmt.Sprint(i)), 0777))
+	}
+	for i := 19; i >= 10; i-- {
+		require.NoError(t, ioutil.WriteFile(path.Join(dir, fmt.Sprint("000000000000000000000", i)), []byte(fmt.Sprint(i)), 0777))
+	}
+
+	for i := 0; i < 20; i++ {
+		rc, err := openSegment(dir, i)
+		require.NoError(t, err)
+		body, err := ioutil.ReadAll(rc)
+		require.NoError(t, err)
+		require.Equal(t, fmt.Sprint(i), string(body))
+		require.NoError(t, rc.Close())
+	}
+}
 
 func TestTailFuzz(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test_tail")
