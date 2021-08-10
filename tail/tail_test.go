@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/prometheus/tsdb/wal"
-	"github.com/stretchr/testify/require"
 )
 
 func TestOpenSegment(t *testing.T) {
@@ -36,22 +35,36 @@ func TestOpenSegment(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	require.NoError(t, ioutil.WriteFile(path.Join(dir, "000000000000000000000nonsense"), []byte("bad"), 0777))
+	if err := ioutil.WriteFile(path.Join(dir, "000000000000000000000nonsense"), []byte("bad"), 0777); err != nil {
+		t.Fatal(err)
+	}
 
 	for i := 0; i < 10; i++ {
-		require.NoError(t, ioutil.WriteFile(path.Join(dir, fmt.Sprint("000000000000000000000", i)), []byte(fmt.Sprint(i)), 0777))
+		if err := ioutil.WriteFile(path.Join(dir, fmt.Sprint("000000000000000000000", i)), []byte(fmt.Sprint(i)), 0777); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for i := 19; i >= 10; i-- {
-		require.NoError(t, ioutil.WriteFile(path.Join(dir, fmt.Sprint("000000000000000000000", i)), []byte(fmt.Sprint(i)), 0777))
+		if err := ioutil.WriteFile(path.Join(dir, fmt.Sprint("000000000000000000000", i)), []byte(fmt.Sprint(i)), 0777); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	for i := 0; i < 20; i++ {
 		rc, err := openSegment(dir, i)
-		require.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		body, err := ioutil.ReadAll(rc)
-		require.NoError(t, err)
-		require.Equal(t, fmt.Sprint(i), string(body))
-		require.NoError(t, rc.Close())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want, have := fmt.Sprint(i), string(body); want != have {
+			t.Fatalf("invalid bdy read want=%q have=%q", want, have)
+		}
+		if err := rc.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
