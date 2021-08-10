@@ -60,7 +60,7 @@ func TestOpenSegment(t *testing.T) {
 			t.Fatal(err)
 		}
 		if want, have := fmt.Sprint(i), string(body); want != have {
-			t.Fatalf("invalid bdy read want=%q have=%q", want, have)
+			t.Fatalf("invalid body read want=%q have=%q", want, have)
 		}
 		if err := rc.Close(); err != nil {
 			t.Fatal(err)
