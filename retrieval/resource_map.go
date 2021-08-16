@@ -147,6 +147,16 @@ var TargetV2ResourceMap = ResourceMap{
 	},
 }
 
+var ConnectionResourceMap = ResourceMap{
+       Type:       "connectors.googleapis.com/Connection",
+       MatchLabel: "__meta_kubernetes_pod_label_type_connection",
+       LabelMap: map[string]labelTranslation{
+               ProjectIDLabel:          constValue("resource_container"),
+               KubernetesLocationLabel: constValue("location"),
+               "connection":            constValue("connection"),
+       },
+}
+
 var AnthosL4LBMap = ResourceMap{
 	Type:       "anthos_l4lb",
 	MatchLabel: "__meta_kubernetes_service_annotation_gke_googleapis_com_anthos_l4lb_type",
@@ -164,6 +174,7 @@ type ResourceMapList []ResourceMap
 // When you add new elements, you also probably want to update TestResourceMappingsOrder.
 var ResourceMappings = ResourceMapList{
 	AnthosL4LBMap,
+	ConnectionResourceMap,
 	TargetV2ResourceMap,
 	ProxyV2ResourceMap,
 	ProxyResourceMap,
