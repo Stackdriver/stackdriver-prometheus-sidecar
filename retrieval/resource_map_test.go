@@ -285,6 +285,36 @@ func TestTranslateProxyV2(t *testing.T) {
 	}
 }
 
+func TestTranslateConnection(t *testing.T) {
+       discoveredLabels := labels.Labels{
+               {"__meta_kubernetes_pod_label_type_connection", "true"},
+               {ProjectIDLabel, "my-project"},
+               {KubernetesLocationLabel, "us-central1-a"},
+       }
+       metricLabels := labels.Labels{
+               {"connection", "my-connection-name"},
+               {"extra_label", "my-label"},
+       }
+       expectedLabels := map[string]string{
+               "resource_container": "my-project",
+               "location":           "us-central1-a",
+               "connection":         "my-connection-name",
+       }
+       expectedFinalLabels := labels.Labels{
+               {"extra_label", "my-label"},
+       }
+       if labels, finalLabels := ConnectionResourceMap.Translate(discoveredLabels, metricLabels); labels == nil {
+               t.Errorf("Expected %v, actual nil", expectedLabels)
+       } else {
+               if diff := cmp.Diff(expectedLabels, labels); len(diff) > 0 {
+                       t.Error(diff)
+               }
+               if diff := cmp.Diff(expectedFinalLabels, finalLabels); len(diff) > 0 {
+                       t.Error(diff)
+               }
+       }
+}
+
 func TestTranslateAnthosL4LB(t *testing.T) {
 	discoveredLabels := labels.Labels{
 		{ProjectIDLabel, "my-project"},
@@ -357,6 +387,7 @@ func TestResourceMappingsOrder(t *testing.T) {
 		{"k8s_node", "gce_instance"},
 		{"k8s_node", "aws_ec2_instance"},
 		{"anthos_l4lb", "k8s_container"},
+		{"connectors.googleapis.com/Connection", "k8s_container"},
 		{"apigee.googleapis.com/TargetV2", "k8s_container"},
 		{"apigee.googleapis.com/ProxyV2", "k8s_container"},
 		{"apigee.googleapis.com/Proxy", "k8s_container"},
