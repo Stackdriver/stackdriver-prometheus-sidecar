@@ -93,11 +93,8 @@ staticcheck: $(STATICCHECK)
 	$(STATICCHECK) $(pkgs)
 
 goveralls: cover $(GOVERALLS)
-ifndef COVERALLS_TOKEN
-	$(error COVERALLS_TOKEN is undefined, follow https://docs.coveralls.io/go to create one and go to https://coveralls.io to retrieve existing ones)
-endif
 	@echo ">> running goveralls"
-	$(GOVERALLS) -coverprofile=coverage.out -service=travis-ci -repotoken "${COVERALLS_TOKEN}"
+	$(GOVERALLS) -coverprofile=coverage.out -service=travis-ci
 
 build: promu
 	@echo ">> building binaries"
