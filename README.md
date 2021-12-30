@@ -113,6 +113,13 @@ Please note that by default metrics that match one of aggregated counter filters
 
 When using Counter Aggregator you would usually want to configure a restrictive inclusion filter to avoid raw metrics from being exported to Stackdriver.
 
+### Batching
+
+The sidecar batches up to
+[200 timeseries per request](https://github.com/Stackdriver/stackdriver-prometheus-sidecar/blob/11096997d11e605190d04fd9f62e323efbfca1c0/stackdriver/client.go#L45)
+(200 is the limit imposed by the
+[Google Cloud Monitoring API](https://cloud.google.com/monitoring/quotas)).
+
 ## Compatibility
 
 The matrix below lists the versions of Prometheus Server and other dependencies that have been qualified to work with releases of `stackdriver-prometheus-sidecar`. If the matrix does not list whether they are compatible, please assume they are not verified yet but can be compatible. Feel free to contribute to the matrix if you have run the end-to-end test between a version of `stackdriver-prometheus-sidecar` and Prometheus server.
