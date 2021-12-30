@@ -5,6 +5,10 @@ metrics to Stackdriver. This is based on [this design](docs/design.md).
 
 Custom metrics are a chargeable feature of Stackdriver Monitoring and there could be costs for your custom metrics. For more information on pricing, see [Stackdriver Pricing](https://cloud.google.com/stackdriver/pricing).
 
+The sidecar batches up to
+[200 timeseries per request](https://github.com/Stackdriver/stackdriver-prometheus-sidecar/blob/11096997d11e605190d04fd9f62e323efbfca1c0/stackdriver/client.go#L45)
+(200 is the [limit imposed by the Google Cloud Monitoring API](https://cloud.google.com/monitoring/quotas)).
+
 [![Build Status](https://travis-ci.com/Stackdriver/stackdriver-prometheus-sidecar.svg?branch=master)](https://travis-ci.com/Stackdriver/stackdriver-prometheus-sidecar)
 [![Coverage Status](https://coveralls.io/repos/github/Stackdriver/stackdriver-prometheus-sidecar/badge.svg?branch=master)](https://coveralls.io/github/Stackdriver/stackdriver-prometheus-sidecar?branch=master)
 
@@ -112,13 +116,6 @@ A list of [Prometheus instant vector selectors](https://prometheus.io/docs/prome
 Please note that by default metrics that match one of aggregated counter filters will still be exported to Stackdriver unless you have inclusion filters configured that prevent those metrics from being exported (see `--include`). Using `--include` to prevent a metric from being exported to Stackdriver does not prevent the metric from being covered by aggregated counters.
 
 When using Counter Aggregator you would usually want to configure a restrictive inclusion filter to avoid raw metrics from being exported to Stackdriver.
-
-### Batching
-
-The sidecar batches up to
-[200 timeseries per request](https://github.com/Stackdriver/stackdriver-prometheus-sidecar/blob/11096997d11e605190d04fd9f62e323efbfca1c0/stackdriver/client.go#L45)
-(200 is the limit imposed by the
-[Google Cloud Monitoring API](https://cloud.google.com/monitoring/quotas)).
 
 ## Compatibility
 
