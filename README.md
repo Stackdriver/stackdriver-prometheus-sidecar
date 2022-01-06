@@ -1,5 +1,10 @@
 # Stackdriver Prometheus sidecar
 
+__IMPORTANT__: The Stackdriver Prometheus sidecar is in maintenance mode and
+will not receive any new feature updates.  Please review the recommendations
+in the [Google Cloud documentation](https://cloud.google.com/stackdriver/docs/solutions/gke/prometheus)
+before proceeding with any new deployments.
+
 This repository contains a sidecar for the Prometheus server that can send
 metrics to Stackdriver. This is based on [this design](docs/design.md).
 
