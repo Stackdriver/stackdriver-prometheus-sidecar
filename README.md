@@ -70,7 +70,7 @@ stackdriver-prometheus-sidecar --include='{__name__!~"cadvisor_.+",job="k8s"}' .
 
 This drops all series which do not have a `job` label `k8s` and all metrics that have a name starting with `cadvisor_`.
 
-For equality filter on metric name you can use the simpler notation, e.g. `--include='metric_name{label="foo"}'`.
+For equality filter on metric name you can use the simpler notation, e.g., `--include='metric_name{label="foo"}'`.
 
 The flag may be repeated to provide several sets of filters, in which case the metric will be forwarded if it matches at least one of them. Please note that inclusion filters only apply to Prometheus metrics proxied directly, and do not apply to [aggregated counters](#counter-aggregator).
 
@@ -97,7 +97,7 @@ static_metadata:
 
 #### Dealing with recording rules
 
-The default Prometheus naming format for [recording rules](https://prometheus.io/docs/practices/rules/) is `level:metric:operations`, e.g. `instance:requests_total:sum`, but colons are not allowed in Stackdriver metric descriptor names.  To forward a recorded Prometheus metric to Stackdriver, you must use the `metric_renames` feature to replace the colon characters:
+The default Prometheus naming format for [recording rules](https://prometheus.io/docs/practices/rules/) is `level:metric:operations`, e.g., `instance:requests_total:sum`, but colons are not allowed in Stackdriver metric descriptor names.  To forward a recorded Prometheus metric to Stackdriver, you must use the `metric_renames` feature to replace the colon characters:
 
 ```yaml
 metric_renames:
@@ -105,7 +105,7 @@ metric_renames:
     to: recorded_instance_requests_total_sum
 ```
 
-Additionally, the sidecar assumes that any recorded metrics are gauges.  If this is not the case (e.g. for a Prometheus counter metric) you will need to specify that in `static_metadata`:
+Additionally, the sidecar assumes that any recorded metrics are gauges.  If this is not the case (e.g., for a Prometheus counter metric) you will need to specify that in `static_metadata`:
 
 ```yaml
 static_metadata:
