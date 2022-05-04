@@ -76,12 +76,20 @@ The flag may be repeated to provide several sets of filters, in which case the m
 
 #### File
 
-The sidecar can also be provided with a configuration file. It allows to define static metric renames and to overwrite metric metadata which is usually provided by Prometheus. A configuration file should not be required for the majority of users.
+The sidecar can also be provided with a configuration file. It allows to define static metric renames, filter metric labels and to overwrite metric metadata which is usually provided by Prometheus. A configuration file should not be required for the majority of users.
 
 ```yaml
 metric_renames:
   - from: original_metric_name
     to: new_metric_name
+# - ...
+
+metric_label_filters:
+  - metric: "^too_many_labels.*"
+    allow:
+      - important_label
+      - other_important_label
+      - ...
 # - ...
 
 static_metadata:
@@ -92,6 +100,7 @@ static_metadata:
 # - ...
 ```
 
+  * The `metric_label_filters` accept regular expressions for `metric` names and a list of label names to `allow` for matching metrics.
   * All `static_metadata` entries must have `type` specified. This specifies the Stackdriver metric type and overrides the metric type chosen by the Prometheus client.
   * If `value_type` is specified, it will override the default value type for counters and gauges. All Prometheus metrics have a default type of double.
 
