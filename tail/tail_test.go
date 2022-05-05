@@ -17,14 +17,56 @@ package tail
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"path"
 	"testing"
 	"time"
 
 	"github.com/prometheus/tsdb/wal"
 )
+
+func TestOpenSegment(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test_open_segment")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	if err := ioutil.WriteFile(path.Join(dir, "000000000000000000000nonsense"), []byte("bad"), 0777); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 10; i++ {
+		if err := ioutil.WriteFile(path.Join(dir, fmt.Sprint("000000000000000000000", i)), []byte(fmt.Sprint(i)), 0777); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 19; i >= 10; i-- {
+		if err := ioutil.WriteFile(path.Join(dir, fmt.Sprint("000000000000000000000", i)), []byte(fmt.Sprint(i)), 0777); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for i := 0; i < 20; i++ {
+		rc, err := openSegment(dir, i)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := ioutil.ReadAll(rc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want, have := fmt.Sprint(i), string(body); want != have {
+			t.Fatalf("invalid body read want=%q have=%q", want, have)
+		}
+		if err := rc.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestTailFuzz(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test_tail")
