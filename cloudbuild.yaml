@@ -1,0 +1,29 @@
+# This config is provided for development/testing purposes only.
+# The official Docker image of stackdriver-prometheus-sidecar is not built
+# using this config.
+steps:
+- name: 'mirror.gcr.io/library/golang'
+  entrypoint: make
+  args: ['format']
+- name: 'mirror.gcr.io/library/golang'
+  entrypoint: make
+  args: ['build']
+- name: 'mirror.gcr.io/library/golang'
+  entrypoint: make
+  args: ['test']
+- name: docker
+  args: [
+    'build',
+    '-t', 'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${TAG_NAME}${BRANCH_NAME}',
+    '-t', 'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${TAG_NAME}${BRANCH_NAME}-${SHORT_SHA}',
+    '-t', 'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${SHORT_SHA}',
+    '.'
+  ]
+images: [
+  'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${TAG_NAME}${BRANCH_NAME}',
+  'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${TAG_NAME}${BRANCH_NAME}-${SHORT_SHA}',
+  'gcr.io/$PROJECT_ID/stackdriver-prometheus-sidecar:${SHORT_SHA}'
+]
+options:
+  diskSizeGb: 200
+  machineType: 'N1_HIGHCPU_8'
