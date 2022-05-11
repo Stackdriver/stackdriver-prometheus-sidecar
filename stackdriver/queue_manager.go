@@ -509,7 +509,13 @@ func (s *shardCollection) runShard(i int) {
 
 func (s *shardCollection) sendSamples(client StorageClient, samples []*monitoring_pb.TimeSeries) {
 	begin := time.Now()
-	s.sendSamplesWithBackoff(client, samples)
+	for i := 0; i < len(samples); i += MaxTimeseriesesPerRequest {
+		end := i + MaxTimeseriesesPerRequest
+		if end > len(samples) {
+			end = len(samples)
+		}
+		s.sendSamplesWithBackoff(client, samples[i:end])
+	}
 
 	// These counters are used to calculate the dynamic sharding, and as such
 	// should be maintained irrespective of success or failure.
