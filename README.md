@@ -1,9 +1,18 @@
 # Stackdriver Prometheus sidecar
 
+__IMPORTANT__: The Stackdriver Prometheus sidecar is in maintenance mode and
+will not receive any new feature updates.  Please review the recommendations
+in the [Google Cloud documentation](https://cloud.google.com/stackdriver/docs/solutions/gke/prometheus)
+before proceeding with any new deployments.
+
 This repository contains a sidecar for the Prometheus server that can send
 metrics to Stackdriver. This is based on [this design](docs/design.md).
 
 Custom metrics are a chargeable feature of Stackdriver Monitoring and there could be costs for your custom metrics. For more information on pricing, see [Stackdriver Pricing](https://cloud.google.com/stackdriver/pricing).
+
+The sidecar batches up to
+[200 timeseries per request](https://github.com/Stackdriver/stackdriver-prometheus-sidecar/blob/11096997d11e605190d04fd9f62e323efbfca1c0/stackdriver/client.go#L45)
+(200 is the [limit imposed by the Google Cloud Monitoring API](https://cloud.google.com/monitoring/quotas)).
 
 [![Build Status](https://travis-ci.com/Stackdriver/stackdriver-prometheus-sidecar.svg?branch=master)](https://travis-ci.com/Stackdriver/stackdriver-prometheus-sidecar)
 [![Coverage Status](https://coveralls.io/repos/github/Stackdriver/stackdriver-prometheus-sidecar/badge.svg?branch=master)](https://coveralls.io/github/Stackdriver/stackdriver-prometheus-sidecar?branch=master)
@@ -61,7 +70,7 @@ stackdriver-prometheus-sidecar --include='{__name__!~"cadvisor_.+",job="k8s"}' .
 
 This drops all series which do not have a `job` label `k8s` and all metrics that have a name starting with `cadvisor_`.
 
-For equality filter on metric name you can use the simpler notation, e.g. `--include='metric_name{label="foo"}'`.
+For equality filter on metric name you can use the simpler notation, e.g., `--include='metric_name{label="foo"}'`.
 
 The flag may be repeated to provide several sets of filters, in which case the metric will be forwarded if it matches at least one of them. Please note that inclusion filters only apply to Prometheus metrics proxied directly, and do not apply to [aggregated counters](#counter-aggregator).
 
@@ -85,6 +94,28 @@ static_metadata:
 
   * All `static_metadata` entries must have `type` specified. This specifies the Stackdriver metric type and overrides the metric type chosen by the Prometheus client.
   * If `value_type` is specified, it will override the default value type for counters and gauges. All Prometheus metrics have a default type of double.
+
+#### Dealing with recording rules
+
+The default Prometheus naming format for [recording rules](https://prometheus.io/docs/practices/rules/) is `level:metric:operations`, e.g., `instance:requests_total:sum`, but colons are not allowed in Stackdriver metric descriptor names.  To forward a recorded Prometheus metric to Stackdriver, you must use the `metric_renames` feature to replace the colon characters:
+
+```yaml
+metric_renames:
+  - from: instance:requests_total:sum
+    to: recorded_instance_requests_total_sum
+```
+
+Additionally, the sidecar assumes that any recorded metrics are gauges.  If this is not the case (e.g., for a Prometheus counter metric) you will need to specify that in `static_metadata`:
+
+```yaml
+static_metadata:
+  - metric: recorded_instance_requests_total_sum
+    type: counter
+    value_type: int64
+    help: an arbitrary help string
+```
+
+*Warning:* recorded metrics _must_ have minimally an "instance" and "job" label, otherwise they will not be forwarded.
 
 #### Counter Aggregator
 
@@ -123,6 +154,8 @@ The matrix below lists the versions of Prometheus Server and other dependencies 
 | **0.6.x**       | 2.11                                      | 2.5                                       |
 | **0.7.x**       | 2.10, 2.11, 2.13, 2.15, 2.16, 2.18, 2.19  | 2.5                                       |
 | **0.8.x**       | 2.10, 2.11, 2.13, 2.15, 2.16, 2.18, 2.19  | 2.5                                       |
+| **0.9.x**       | 2.10, 2.11, 2.13, 2.15, 2.16, 2.18, 2.19  | 2.5                                       |
+| **0.10.x**      | 2.10, 2.11, 2.13, 2.15, 2.16, 2.18, 2.19  | 2.5                                       |
 
 ## Alternatives
 
