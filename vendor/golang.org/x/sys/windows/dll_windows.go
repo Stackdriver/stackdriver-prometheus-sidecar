@@ -32,6 +32,8 @@ type DLLError struct {
 
 func (e *DLLError) Error() string { return e.Msg }
 
+func (e *DLLError) Unwrap() error { return e.Err }
+
 // A DLL implements access to a single DLL.
 type DLL struct {
 	Name   string
@@ -41,8 +43,8 @@ type DLL struct {
 // LoadDLL loads DLL file into memory.
 //
 // Warning: using LoadDLL without an absolute path name is subject to
-// DLL preloading attacks. To safely load a system DLL, use LazyDLL
-// with System set to true, or use LoadLibraryEx directly.
+// DLL preloading attacks. To safely load a system DLL, use [NewLazySystemDLL],
+// or use [LoadLibraryEx] directly.
 func LoadDLL(name string) (dll *DLL, err error) {
 	namep, err := UTF16PtrFromString(name)
 	if err != nil {
@@ -63,7 +65,7 @@ func LoadDLL(name string) (dll *DLL, err error) {
 	return d, nil
 }
 
-// MustLoadDLL is like LoadDLL but panics if load operation failes.
+// MustLoadDLL is like LoadDLL but panics if load operation fails.
 func MustLoadDLL(name string) *DLL {
 	d, e := LoadDLL(name)
 	if e != nil {
@@ -104,6 +106,35 @@ func (d *DLL) MustFindProc(name string) *Proc {
 	return p
 }
 
+// FindProcByOrdinal searches DLL d for procedure by ordinal and returns *Proc
+// if found. It returns an error if search fails.
+func (d *DLL) FindProcByOrdinal(ordinal uintptr) (proc *Proc, err error) {
+	a, e := GetProcAddressByOrdinal(d.Handle, ordinal)
+	name := "#" + itoa(int(ordinal))
+	if e != nil {
+		return nil, &DLLError{
+			Err:     e,
+			ObjName: name,
+			Msg:     "Failed to find " + name + " procedure in " + d.Name + ": " + e.Error(),
+		}
+	}
+	p := &Proc{
+		Dll:  d,
+		Name: name,
+		addr: a,
+	}
+	return p, nil
+}
+
+// MustFindProcByOrdinal is like FindProcByOrdinal but panics if search fails.
+func (d *DLL) MustFindProcByOrdinal(ordinal uintptr) *Proc {
+	p, e := d.FindProcByOrdinal(ordinal)
+	if e != nil {
+		panic(e)
+	}
+	return p
+}
+
 // Release unloads DLL d from memory.
 func (d *DLL) Release() (err error) {
 	return FreeLibrary(d.Handle)
@@ -132,42 +163,7 @@ func (p *Proc) Addr() uintptr {
 // (according to the semantics of the specific function being called) before consulting
 // the error. The error will be guaranteed to contain windows.Errno.
 func (p *Proc) Call(a ...uintptr) (r1, r2 uintptr, lastErr error) {
-	switch len(a) {
-	case 0:
-		return syscall.Syscall(p.Addr(), uintptr(len(a)), 0, 0, 0)
-	case 1:
-		return syscall.Syscall(p.Addr(), uintptr(len(a)), a[0], 0, 0)
-	case 2:
-		return syscall.Syscall(p.Addr(), uintptr(len(a)), a[0], a[1], 0)
-	case 3:
-		return syscall.Syscall(p.Addr(), uintptr(len(a)), a[0], a[1], a[2])
-	case 4:
-		return syscall.Syscall6(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], 0, 0)
-	case 5:
-		return syscall.Syscall6(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], 0)
-	case 6:
-		return syscall.Syscall6(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5])
-	case 7:
-		return syscall.Syscall9(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5], a[6], 0, 0)
-	case 8:
-		return syscall.Syscall9(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], 0)
-	case 9:
-		return syscall.Syscall9(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8])
-	case 10:
-		return syscall.Syscall12(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], 0, 0)
-	case 11:
-		return syscall.Syscall12(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], 0)
-	case 12:
-		return syscall.Syscall12(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11])
-	case 13:
-		return syscall.Syscall15(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], 0, 0)
-	case 14:
-		return syscall.Syscall15(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13], 0)
-	case 15:
-		return syscall.Syscall15(p.Addr(), uintptr(len(a)), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13], a[14])
-	default:
-		panic("Call " + p.Name + " with too many arguments " + itoa(len(a)) + ".")
-	}
+	return syscall.SyscallN(p.Addr(), a...)
 }
 
 // A LazyDLL implements access to a single DLL.
@@ -240,6 +236,9 @@ func (d *LazyDLL) NewProc(name string) *LazyProc {
 }
 
 // NewLazyDLL creates new LazyDLL associated with DLL file.
+//
+// Warning: using NewLazyDLL without an absolute path name is subject to
+// DLL preloading attacks. To safely load a system DLL, use [NewLazySystemDLL].
 func NewLazyDLL(name string) *LazyDLL {
 	return &LazyDLL{Name: name}
 }
@@ -360,7 +359,6 @@ func loadLibraryEx(name string, system bool) (*DLL, error) {
 	var flags uintptr
 	if system {
 		if canDoSearchSystem32() {
-			const LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
 			flags = LOAD_LIBRARY_SEARCH_SYSTEM32
 		} else if isBaseName(name) {
 			// WindowsXP or unpatched Windows machine
@@ -380,7 +378,3 @@ func loadLibraryEx(name string, system bool) (*DLL, error) {
 	}
 	return &DLL{Name: name, Handle: h}, nil
 }
-
-type errString string
-
-func (s errString) Error() string { return string(s) }
